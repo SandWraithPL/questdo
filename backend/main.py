@@ -111,9 +111,10 @@ def migrate_schema():
         print(f"Migracja: załadowano {len(gc.EXCLUSIVE_ACHIEVEMENTS)} exclusive achievements")
 
 
-create_tables()
-
 app = FastAPI(title="QuestDo API")
+
+def startup_event():
+    create_tables()
 
 app.add_middleware(
     CORSMiddleware,
