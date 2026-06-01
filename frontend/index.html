@@ -10,7 +10,7 @@
     <meta name="apple-mobile-web-app-title" content="QuestDo" />
     <link rel="manifest" href="/manifest.json" />
     <link rel="apple-touch-icon" href="/favicon.svg" />
-    <title>QuestDo</title>
+    <title>⚔️ QuestDo</title>
   </head>
   <body>
     <div id="root"></div>
@@ -19,13 +19,29 @@
       if ('serviceWorker' in navigator) {
         window.addEventListener('load', () => {
           navigator.serviceWorker.register('/sw.js').then(reg => {
-            console.log('Service Worker registered');
+            console.log('SW registered');
+            
+            // Sprawdzaj aktualizacje co 60 minut
+            setInterval(() => {
+              reg.update();
+            }, 60 * 60 * 1000);
+            
+            // Nasłuchuj na nowego worker'a
             reg.addEventListener('updatefound', () => {
               const newWorker = reg.installing;
+              console.log('New SW found, installing...');
+              
               newWorker.addEventListener('statechange', () => {
                 if (newWorker.state === 'installed' && navigator.serviceWorker.controller) {
-                  console.log('New version available, reloading...');
-                  window.location.reload();
+                  console.log('New version available! Reloading...');
+                  // Pokaż toast o aktualizacji
+                  const toast = document.createElement('div');
+                  toast.className = 'toast-update';
+                  toast.textContent = '🔄 Nowa wersja! Za chwilę odświeżę...';
+                  document.body.appendChild(toast);
+                  setTimeout(() => {
+                    window.location.reload();
+                  }, 2000);
                 }
               });
             });
