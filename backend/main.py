@@ -113,6 +113,7 @@ def migrate_schema():
 
 app = FastAPI(title="QuestDo API")
 
+@app.on_event("startup")
 def startup_event():
     create_tables()
 
