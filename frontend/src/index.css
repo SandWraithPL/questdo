@@ -213,29 +213,30 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .date-picker-icon { font-size: 1.1rem; }
 .date-picker-trigger span:nth-child(2) { flex: 1; }
 .date-picker-chevron { color: #888; font-size: 0.7rem; }
-.date-picker-popup { position: absolute; z-index: 200; left: 0; right: 0; top: calc(100% + 6px); background: #1a1a2e; border: 1px solid #444; border-radius: 12px; padding: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); }
+.date-picker-popup { position: absolute; z-index: 200; left: 0; right: 0; top: calc(100% + 6px); background: #1a1a2e; border: 1px solid #444; border-radius: 12px; padding: 12px; box-shadow: 0 8px 24px rgba(0,0,0,0.45); max-width: 320px; }
 .add-task-meta .date-picker-wrap { grid-column: 1 / -1; margin-bottom: 0; }
 .dp-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; gap: 6px; }
-.dp-nav { background: #0f0e17; border: 1px solid #333; color: #fff; width: 32px; height: 32px; border-radius: 8px; cursor: pointer; flex-shrink: 0; }
+.dp-nav { background: #0f0e17; border: 1px solid #333; color: #fff; width: 28px; height: 28px; border-radius: 6px; cursor: pointer; flex-shrink: 0; font-size: 0.9rem; display: flex; align-items: center; justify-content: center; padding: 0; }
 .dp-nav:hover { border-color: #ff8906; color: #ff8906; }
 .dp-title-group { display: flex; flex-direction: column; align-items: center; gap: 2px; flex: 1; }
-.dp-title { background: none; border: none; color: #ff8906; font-weight: bold; font-size: 0.95rem; cursor: pointer; padding: 2px 8px; border-radius: 6px; }
+.dp-title { background: none; border: none; color: #ff8906; font-weight: bold; font-size: 0.9rem; cursor: pointer; padding: 2px 8px; border-radius: 6px; }
 .dp-title:hover { background: #2a2a3e; }
-.dp-year-title { font-size: 0.85rem; color: #aaa; font-weight: normal; }
+.dp-year-title { font-size: 0.8rem; color: #aaa; font-weight: normal; }
+.dp-title-static { color: #ff8906; font-weight: bold; font-size: 0.9rem; }
 .dp-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 0.7rem; color: #888; margin-bottom: 6px; }
 .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.dp-day { aspect-ratio: 1; min-height: 32px; border: none; border-radius: 8px; background: #0f0e17; color: #fff; font-size: 0.85rem; cursor: pointer; }
+.dp-day { aspect-ratio: 1; min-height: 36px; border: none; border-radius: 6px; background: #0f0e17; color: #fff; font-size: 0.85rem; cursor: pointer; }
 .dp-day.empty { background: transparent; cursor: default; }
 .dp-day:hover:not(.empty) { background: #2a2a3e; }
 .dp-day.today { border: 1px solid #ff8906; }
 .dp-day.selected { background: #ff8906; color: #0f0e17; font-weight: bold; }
-.dp-months { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.dp-month { padding: 10px 6px; border: 1px solid #333; border-radius: 8px; background: #0f0e17; color: #fff; cursor: pointer; font-size: 0.85rem; }
+.dp-months { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.dp-month { padding: 8px 4px; border: 1px solid #333; border-radius: 6px; background: #0f0e17; color: #fff; cursor: pointer; font-size: 0.8rem; }
 .dp-month:hover { border-color: #ff8906; color: #ff8906; }
-.dp-years { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
-.dp-year { padding: 10px; border: 1px solid #333; border-radius: 8px; background: #0f0e17; color: #fff; cursor: pointer; }
+.dp-years { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+.dp-year { padding: 8px; border: 1px solid #333; border-radius: 6px; background: #0f0e17; color: #fff; cursor: pointer; font-size: 0.85rem; }
 .dp-year:hover { background: #ff8906; color: #0f0e17; border-color: #ff8906; }
-.dp-today-btn { width: 100%; margin-top: 10px; padding: 8px; border: none; border-radius: 8px; background: #2a2a3e; color: #ff8906; font-weight: bold; cursor: pointer; }
+.dp-today-btn { width: 100%; margin-top: 10px; padding: 8px; border: none; border-radius: 6px; background: #2a2a3e; color: #ff8906; font-weight: bold; cursor: pointer; font-size: 0.85rem; }
 .dp-today-btn:hover { background: #333; }
 
 @media (max-width: 600px) {
@@ -272,14 +273,15 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   
   /* Calendar */
   .calendar-container { padding: 16px; }
-  .calendar-header { flex-direction: column; align-items: center; gap: 12px; }
-  .calendar-header h2 { font-size: 1rem; }
-  .view-buttons { width: 100%; justify-content: center; }
-  .view-buttons button { padding: 8px 12px; font-size: 0.85rem; }
+  .calendar-header { flex-direction: row; align-items: center; gap: 8px; flex-wrap: nowrap; }
+  .calendar-header h2 { font-size: 1rem; flex: 1; text-align: center; }
+  .calendar-header button { padding: 8px 12px; font-size: 1rem; min-width: 40px; }
+  .view-buttons { width: auto; justify-content: center; margin-top: 8px; }
+  .view-buttons button { padding: 6px 10px; font-size: 0.8rem; }
   .weekday { font-size: 0.75rem; padding: 8px; }
-  .calendar-day { padding: 6px; }
-  .day-number { font-size: 0.8rem; }
-  .day-badge { font-size: 0.65rem; padding: 1px 3px; }
+  .calendar-day { padding: 8px; min-height: 44px; }
+  .day-number { font-size: 0.9rem; }
+  .day-badge { font-size: 0.7rem; padding: 2px 4px; }
   
   /* Week view */
   .week-view { grid-template-columns: 1fr; gap: 12px; }
