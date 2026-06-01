@@ -211,7 +211,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .rare-drop-rare { color: #9b59b6; }
 .rare-drop-epic { color: #3498db; }
 .rare-drop-legendary { color: #f1c40f; text-shadow: 0 0 10px rgba(241, 196, 15, 0.5); }
-.logout-btn { width: 100%; padding: 8px; background: #e74c3c; color: white; border: none; border-radius: 8px; cursor: pointer; }
+.logout-btn { width: 100%; padding: 8px; background: #e74c3c; color: white; border: none; border-radius: 8px; cursor: pointer; margin-top: 8px; }
 .delete-account-btn { width: 100%; margin-top: 8px; padding: 8px; background: transparent; border: 1px solid #e74c3c; color: #e74c3c; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
 .delete-account-form { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .delete-account-form input { padding: 8px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; }
