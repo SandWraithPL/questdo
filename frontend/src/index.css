@@ -198,12 +198,47 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .achievement-item.next { opacity: 0.95; border: 1px dashed #444; border-radius: 8px; padding: 8px; }
 .ach-progress { font-size: 0.75rem; color: #ff8906 !important; margin-top: 4px !important; }
 .achievements-list .muted { color: #666; font-size: 0.85rem; }
+
+/* Rare drops */
+.rare-drops-list { max-height: 200px; overflow-y: auto; margin-bottom: 12px; }
+.rare-drops-list h4 { margin-bottom: 8px; color: #ff8906; }
+.rare-drop-item { display: flex; gap: 8px; padding: 6px 0; font-size: 0.85rem; }
+.rare-drop-item span:first-child { font-size: 1.2rem; }
+.rare-drop-item strong { font-size: 0.85rem; }
+.rare-drop-item p { font-size: 0.7rem; color: #aaa; }
+.rare-drop-count { font-size: 0.7rem; color: #888; margin-top: 2px; }
+.rare-drop-common { color: #aaa; }
+.rare-drop-rare { color: #9b59b6; }
+.rare-drop-epic { color: #3498db; }
+.rare-drop-legendary { color: #f1c40f; text-shadow: 0 0 10px rgba(241, 196, 15, 0.5); }
 .logout-btn { width: 100%; padding: 8px; background: #e74c3c; color: white; border: none; border-radius: 8px; cursor: pointer; }
 .delete-account-btn { width: 100%; margin-top: 8px; padding: 8px; background: transparent; border: 1px solid #e74c3c; color: #e74c3c; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
 .delete-account-form { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .delete-account-form input { padding: 8px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; }
 .delete-account-confirm { padding: 8px; background: #e74c3c; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
 .delete-account-cancel { padding: 8px; background: #333; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
+.admin-btn { width: 100%; margin-top: 8px; padding: 8px; background: #9b59b6; color: white; border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
+
+/* Admin panel */
+.admin-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
+.admin-panel { background: #1a1a2e; border-radius: 12px; padding: 24px; max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto; }
+.admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #333; }
+.admin-header h2 { color: #ff8906; margin: 0; }
+.admin-close { background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+.admin-close:hover { background: #333; }
+.admin-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 24px; }
+.stat-card { background: #0f0e17; border-radius: 8px; padding: 16px; text-align: center; }
+.stat-card h3 { font-size: 0.85rem; color: #aaa; margin: 0 0 8px; }
+.stat-card p { font-size: 1.5rem; font-weight: bold; color: #ff8906; margin: 0; }
+.admin-users-section { margin-top: 20px; }
+.admin-users-section h3 { color: #ff8906; margin-bottom: 12px; }
+.users-list { display: flex; flex-direction: column; gap: 8px; }
+.user-row { display: flex; justify-content: space-between; align-items: center; background: #0f0e17; border-radius: 8px; padding: 12px; }
+.user-info { display: flex; flex-direction: column; gap: 4px; }
+.user-info strong { font-size: 0.95rem; }
+.user-info span { font-size: 0.8rem; color: #aaa; }
+.delete-user-btn { padding: 8px 12px; background: #e74c3c; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
+.delete-user-btn:hover { background: #c0392b; }
 
 /* Date picker */
 .date-picker-wrap { position: relative; width: 100%; margin-bottom: 10px; overflow: visible !important; z-index: 999; }
@@ -337,6 +372,8 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .profile-menu { min-width: 220px; right: -50px; }
   .profile-info-dropdown p { font-size: 0.85rem; }
   .achievement-item { font-size: 0.8rem; }
+  .rare-drop-item { font-size: 0.8rem; }
+  .rare-drop-item span:first-child { font-size: 1rem; }
   
   /* Stats counter */
   .stats-counter { gap: 12px; font-size: 0.8rem; }
@@ -351,6 +388,17 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .task-edit-form { gap: 10px; }
   .input-edit { padding: 10px; font-size: 0.9rem; }
   .edit-actions button { padding: 10px; font-size: 0.9rem; }
+
+  /* Admin panel - mobile */
+  .admin-panel { padding: 16px; width: 95%; max-height: 95vh; }
+  .admin-header h2 { font-size: 1.2rem; }
+  .admin-stats { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat-card { padding: 12px; }
+  .stat-card h3 { font-size: 0.75rem; }
+  .stat-card p { font-size: 1.2rem; }
+  .user-row { flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px; }
+  .user-info { width: 100%; }
+  .delete-user-btn { width: 100%; }
 }
 
 .toast-update {

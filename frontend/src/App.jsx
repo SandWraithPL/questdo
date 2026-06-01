@@ -302,7 +302,7 @@ function LeaderboardPanel({ leaderboard, currentUser }) {
   const [open, setOpen] = useState(false);
   const [rankType, setRankType] = useState("exp");
   const [allRankings, setAllRankings] = useState(null);
-  
+
   const categories = [
     { id: "exp", label: "🏆 EXP" },
     { id: "streak", label: "🔥 Seria" },
@@ -311,7 +311,7 @@ function LeaderboardPanel({ leaderboard, currentUser }) {
     { id: "exclusive", label: "👑 Exclusive" },
     { id: "completed", label: "✅ Ukończone" },
   ];
-  
+
   const fetchRanking = async (type) => {
     try {
       let url = "";
@@ -325,15 +325,24 @@ function LeaderboardPanel({ leaderboard, currentUser }) {
       setAllRankings(prev => ({ ...prev, [type]: res.data }));
     } catch (err) { console.error("Ranking error:", err); }
   };
-  
+
   const getCurrentRanking = () => allRankings?.[rankType] || [];
-  
+
   const toggleOpen = () => {
     if (!open) categories.forEach(cat => fetchRanking(cat.id));
     setOpen(!open);
   };
-  
+
   const handleCategoryChange = (type) => { setRankType(type); if (!allRankings?.[type]) fetchRanking(type); };
+
+  // Auto-refresh rankings every 30 seconds when open
+  useEffect(() => {
+    if (!open) return;
+    const interval = setInterval(() => {
+      fetchRanking(rankType);
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [open, rankType]);
   
   return (
     <div className="leaderboard-panel">
@@ -453,12 +462,88 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
   );
 }
 
-function Profile({ user, onLogout, onDeleteAccount, achievements }) {
+function AdminPanel({ isOpen, onClose, headers }) {
+  const [users, setUsers] = useState([]);
+  const [stats, setStats] = useState(null);
+  const [loading, setLoading] = useState(false);
+
+  const fetchData = async () => {
+    setLoading(true);
+    try {
+      const [usersRes, statsRes] = await Promise.all([
+        axios.get(`${API}/admin/users`, { headers }),
+        axios.get(`${API}/admin/stats`, { headers })
+      ]);
+      setUsers(usersRes.data);
+      setStats(statsRes.data);
+    } catch (err) {
+      console.error("Admin error:", err);
+    }
+    setLoading(false);
+  };
+
+  const deleteUser = async (userId, username) => {
+    if (!window.confirm(`Na pewno usunąć użytkownika "${username}"? Ta operacja jest nieodwracalna.`)) return;
+    try {
+      await axios.delete(`${API}/admin/users/${userId}`, { headers });
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Błąd usuwania użytkownika");
+    }
+  };
+
+  useEffect(() => { if (isOpen) fetchData(); }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  return (
+    <div className="admin-overlay" onClick={onClose}>
+      <div className="admin-panel" onClick={(e) => e.stopPropagation()}>
+        <div className="admin-header">
+          <h2>🔧 Panel Admina</h2>
+          <button type="button" onClick={onClose} className="admin-close">✕</button>
+        </div>
+        {loading ? <p>Ładowanie...</p> : (
+          <>
+            {stats && (
+              <div className="admin-stats">
+                <div className="stat-card"><h3>Użytkownicy</h3><p>{stats.total_users}</p></div>
+                <div className="stat-card"><h3>Zadania</h3><p>{stats.total_tasks}</p></div>
+                <div className="stat-card"><h3>Ukończone</h3><p>{stats.total_completed_tasks}</p></div>
+                <div className="stat-card"><h3>Osiągnięcia</h3><p>{stats.total_achievements_unlocked}</p></div>
+                <div className="stat-card"><h3>Znajdźki</h3><p>{stats.total_rare_drops}</p></div>
+              </div>
+            )}
+            <div className="admin-users-section">
+              <h3>Użytkownicy</h3>
+              <div className="users-list">
+                {users.map(u => (
+                  <div key={u.id} className="user-row">
+                    <div className="user-info">
+                      <strong>{u.username}</strong>
+                      <span>EXP: {u.exp} | Seria: {u.streak} | Zadania: {u.tasks_count} | Osiągnięcia: {u.achievements_count}</span>
+                    </div>
+                    {u.username !== "Igor" && (
+                      <button type="button" className="delete-user-btn" onClick={() => deleteUser(u.id, u.username)}>🗑️ Usuń</button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function Profile({ user, onLogout, onDeleteAccount, achievements, rareDrops, onOpenAdmin }) {
   const [showAchievements, setShowAchievements] = useState(false);
   const [deleteMode, setDeleteMode] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const unlocked = achievements?.unlocked ?? [];
   const nextAch = achievements?.next;
+  const isAdmin = user.username === "Igor";
 
   const submitDelete = () => { if (!deletePassword.trim()) return; onDeleteAccount(deletePassword, () => { setDeleteMode(false); setDeletePassword(""); }); };
 
@@ -472,6 +557,8 @@ function Profile({ user, onLogout, onDeleteAccount, achievements }) {
           <div className="profile-info-dropdown"><p><strong>{user.username}</strong></p><p>Poziom {user.level} - {user.title}</p><p>{user.exp} EXP | 🔥 {user.streak} dni</p></div>
           {nextAch && (<div className="next-achievement"><h4>Następne osiągnięcie 🎯</h4><div className="achievement-item next"><span>{nextAch.icon}</span><div><strong>{nextAch.title}</strong><p>{nextAch.description}</p><p className="ach-progress">Postęp: {nextAch.progress}</p></div></div></div>)}
           <div className="achievements-list"><h4>Odznaczone 🏆 ({unlocked.length})</h4>{unlocked.length === 0 && <p className="muted">Jeszcze brak - pierwszy quest czeka!</p>}{unlocked.map(ach => (<div key={ach.slug || ach.title} className="achievement-item"><span>{ach.icon}</span><div><strong>{ach.title}</strong><p>{ach.description}</p></div></div>))}</div>
+          <div className="rare-drops-list"><h4>Znajdźki ✨ ({rareDrops?.total_items || 0})</h4>{(!rareDrops?.items || rareDrops.items.length === 0) && <p className="muted">Jeszcze brak znajdziek - codziennie masz szansę!</p>}{rareDrops?.items?.map(drop => (<div key={drop.slug} className="rare-drop-item"><span className={`rare-drop-${drop.rarity}`}>{drop.icon}</span><div><strong>{drop.name}</strong><p>{drop.description}</p><p className="rare-drop-count">x{drop.count} · {drop.rarity}</p></div></div>))}</div>
+          {isAdmin && <button type="button" onClick={onOpenAdmin} className="admin-btn">🔧 Panel Admina</button>}
           <button type="button" onClick={onLogout} className="logout-btn">Wyloguj</button>
           {!deleteMode ? <button className="delete-account-btn" onClick={() => setDeleteMode(true)}>Usuń konto</button> : (
             <div className="delete-account-form"><input type="password" placeholder="Hasło do potwierdzenia" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} /><button className="delete-account-confirm" onClick={submitDelete}>Potwierdź usunięcie</button><button className="delete-account-cancel" onClick={() => setDeleteMode(false)}>Anuluj</button></div>
@@ -487,6 +574,7 @@ export default function App() {
   const [user, setUser] = useState(null);
   const [tasks, setTasks] = useState([]);
   const [achievements, setAchievements] = useState({ unlocked: [], next: null });
+  const [rareDrops, setRareDrops] = useState(null);
   const [levelThresholds, setLevelThresholds] = useState(DEFAULT_LEVEL_THRESHOLDS);
   const [challenges, setChallenges] = useState(null);
   const [leaderboard, setLeaderboard] = useState([]);
@@ -498,6 +586,7 @@ export default function App() {
   const [difficulty, setDifficulty] = useState("easy");
   const [category, setCategory] = useState("Inne");
   const [taskDate, setTaskDate] = useState(toDateStr(new Date()));
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   const headers = { Authorization: `Bearer ${token}` };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
@@ -505,9 +594,10 @@ export default function App() {
   const fetchData = async () => {
     if (!token) return;
     try {
-      const [userRes, tasksRes, achRes, chRes, lbRes, levelsRes] = await Promise.all([
+      const [userRes, tasksRes, achRes, chRes, lbRes, levelsRes, rareDropsRes] = await Promise.all([
         axios.get(`${API}/me`, { headers }), axios.get(`${API}/tasks`, { headers }), axios.get(`${API}/achievements`, { headers }),
         axios.get(`${API}/challenges`, { headers }), axios.get(`${API}/leaderboard`, { headers }), axios.get(`${API}/game/levels`, { headers }).catch(() => ({ data: null })),
+        axios.get(`${API}/rare-drops/inventory`, { headers }).catch(() => ({ data: null })),
       ]);
       const oldCount = achievements.unlocked?.length || 0;
       const newUnlocked = achRes.data.unlocked || [];
@@ -515,6 +605,7 @@ export default function App() {
       setUser(userRes.data); setTasks(tasksRes.data); setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
       if (levelsRes.data?.length) setLevelThresholds(levelsRes.data.map(l => l.threshold));
       setChallenges(chRes.data); setLeaderboard(lbRes.data);
+      if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
       try { const rareDropRes = await axios.post(`${API}/rare-drops/claim-daily`, {}, { headers }); if (rareDropRes.data.status === "success") showToast(`✨ ${rareDropRes.data.message}`); } catch (e) {}
     } catch (err) { console.error("Fetch error:", err); localStorage.removeItem("token"); setToken(null); }
   };
@@ -558,7 +649,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <div className="header"><h1>⚔️ QuestDo</h1><Profile user={user} onLogout={logout} onDeleteAccount={deleteAccount} achievements={achievements} /></div>
+      <div className="header"><h1>⚔️ QuestDo</h1><Profile user={user} onLogout={logout} onDeleteAccount={deleteAccount} achievements={achievements} rareDrops={rareDrops} onOpenAdmin={() => setShowAdminPanel(true)} /></div>
       <div className="profile-card">
         <div className="avatar">{user.username[0].toUpperCase()}</div>
         <div className="profile-info"><h2>Poziom {user.level}</h2><div className="title">{user.title}</div><div className="exp-bar-bg"><div className="exp-bar" style={{ width: `${progress}%` }} /></div><div className="exp-text">{user.exp} EXP</div>{user.next_level_title && <div className="level-next-hint">Do "{user.next_level_title}": {user.next_level_exp} EXP</div>}{user.exp_tip && <p className="exp-tip">{user.exp_tip}</p>}</div>
@@ -580,6 +671,7 @@ export default function App() {
       )}
       <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} />
       {toast && <Toast message={toast} />}
+      <AdminPanel isOpen={showAdminPanel} onClose={() => setShowAdminPanel(false)} headers={headers} />
     </div>
   );
 }

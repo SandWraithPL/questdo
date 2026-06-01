@@ -262,6 +262,11 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
         raise HTTPException(status_code=401, detail="User not found")
     return user
 
+def get_current_admin_user(current_user: models.User = Depends(get_current_user)):
+    if current_user.username != "Igor":
+        raise HTTPException(status_code=403, detail="Admin access only")
+    return current_user
+
 # --- Funkcje osiągnięć ---
 def has_achievement(user_id, achievement_name, db):
     achievement = db.query(models.Achievement).filter(models.Achievement.name == achievement_name).first()
@@ -879,6 +884,60 @@ def ranking_all(db: Session = Depends(get_db)):
         "rare_drops": ranking_rare_drops(db),
         "completed_tasks": ranking_completed_tasks(db),
         "exclusive_achievements": ranking_exclusive_achievements(db)
+    }
+
+
+# === ADMIN ENDPOINTS ===
+@app.get("/admin/users")
+def list_all_users(current_user: models.User = Depends(get_current_admin_user), db: Session = Depends(get_db)):
+    users = db.query(models.User).order_by(models.User.id).all()
+    return [{
+        "id": u.id,
+        "username": u.username,
+        "exp": u.exp,
+        "streak": u.streak,
+        "tasks_count": len(u.tasks),
+        "achievements_count": len(u.achievements)
+    } for u in users]
+
+
+@app.delete("/admin/users/{user_id}")
+def delete_user_admin(user_id: int, current_user: models.User = Depends(get_current_admin_user), db: Session = Depends(get_db)):
+    target_user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    if target_user.username == "Igor":
+        raise HTTPException(status_code=403, detail="Cannot delete admin account")
+    
+    username = target_user.username
+    
+    db.query(models.Task).filter(models.Task.owner_id == user_id).delete()
+    db.query(models.UserAchievement).filter(models.UserAchievement.user_id == user_id).delete()
+    db.query(models.DailyQuestAssignment).filter(models.DailyQuestAssignment.user_id == user_id).delete()
+    db.query(models.PlayerRareDrop).filter(models.PlayerRareDrop.user_id == user_id).delete()
+    db.query(models.PlayerExclusiveAchievement).filter(models.PlayerExclusiveAchievement.user_id == user_id).delete()
+    db.query(models.PlayerBadge).filter(models.PlayerBadge.user_id == user_id).delete()
+    db.delete(target_user)
+    db.commit()
+    
+    return {"message": f"User '{username}' deleted successfully"}
+
+
+@app.get("/admin/stats")
+def get_admin_stats(current_user: models.User = Depends(get_current_admin_user), db: Session = Depends(get_db)):
+    total_users = db.query(models.User).count()
+    total_tasks = db.query(models.Task).count()
+    total_completed = db.query(models.Task).filter(models.Task.completed == True).count()
+    total_achievements = db.query(models.UserAchievement).count()
+    total_rare_drops = db.query(models.PlayerRareDrop).count()
+    
+    return {
+        "total_users": total_users,
+        "total_tasks": total_tasks,
+        "total_completed_tasks": total_completed,
+        "total_achievements_unlocked": total_achievements,
+        "total_rare_drops": total_rare_drops
     }
 
 
