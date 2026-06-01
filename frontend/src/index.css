@@ -238,4 +238,103 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .dp-today-btn { width: 100%; margin-top: 10px; padding: 8px; border: none; border-radius: 8px; background: #2a2a3e; color: #ff8906; font-weight: bold; cursor: pointer; }
 .dp-today-btn:hover { background: #333; }
 
-@media (max-width: 600px) { .tasks-header { flex-direction: column; align-items: flex-start; gap: 10px; } }
+@media (max-width: 600px) {
+  .app { padding: 12px; }
+  
+  /* Header */
+  .header { padding: 12px 0; margin-bottom: 16px; }
+  .header h1 { font-size: 1.2rem; }
+  
+  /* Profile card */
+  .profile-card { padding: 16px; gap: 12px; flex-direction: column; text-align: center; }
+  .avatar { width: 50px; height: 50px; font-size: 1.5rem; }
+  .profile-info h2 { font-size: 1rem; }
+  .exp-bar-bg { width: 100%; }
+  .streak { margin-left: 0; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .streak .flame { font-size: 1.5rem; }
+  .streak .count { font-size: 1rem; }
+  
+  /* Tasks header */
+  .tasks-header { flex-direction: column; align-items: flex-start; gap: 10px; }
+  .tasks-header h3 { font-size: 1rem; }
+  .filter-group { width: 100%; justify-content: space-between; }
+  .filter-btn { flex: 1; text-align: center; padding: 8px 8px; font-size: 0.8rem; }
+  
+  /* Task cards */
+  .task-card { padding: 12px; gap: 10px; }
+  .task-check { width: 32px; height: 32px; }
+  .task-info h4 { font-size: 0.95rem; }
+  .task-info p { font-size: 0.8rem; }
+  .badge { font-size: 0.7rem; padding: 2px 6px; }
+  .task-actions { flex-direction: row; }
+  .icon-btn { font-size: 1rem; padding: 6px; }
+  .task-delete { font-size: 1.1rem; padding: 6px; }
+  
+  /* Calendar */
+  .calendar-container { padding: 16px; }
+  .calendar-header { flex-direction: column; align-items: center; gap: 12px; }
+  .calendar-header h2 { font-size: 1rem; }
+  .view-buttons { width: 100%; justify-content: center; }
+  .view-buttons button { padding: 8px 12px; font-size: 0.85rem; }
+  .weekday { font-size: 0.75rem; padding: 8px; }
+  .calendar-day { padding: 6px; }
+  .day-number { font-size: 0.8rem; }
+  .day-badge { font-size: 0.65rem; padding: 1px 3px; }
+  
+  /* Week view */
+  .week-view { grid-template-columns: 1fr; gap: 12px; }
+  .week-day { padding: 16px; }
+  .week-day-header { flex-direction: row; justify-content: space-between; align-items: center; }
+  .week-day-number { font-size: 1rem; }
+  .week-task { font-size: 0.85rem; padding: 8px 0; }
+  
+  /* Day view */
+  .day-view { padding: 12px; }
+  .day-view h3 { font-size: 1rem; }
+  .day-task { padding: 10px; }
+  
+  /* Challenges */
+  .challenges-bar { padding: 12px; }
+  .challenges-bar h4 { font-size: 0.85rem; }
+  .challenge-item { padding: 10px; }
+  .challenge-row-top { gap: 8px; }
+  .challenge-icon { font-size: 1rem; min-width: 20px; }
+  .challenge-label { font-size: 0.85rem; }
+  .challenge-progress-small { width: 60px; }
+  .challenge-description { font-size: 0.7rem; padding-left: 28px; }
+  
+  /* Leaderboard */
+  .leaderboard-panel { padding: 10px 12px; }
+  .leaderboard-toggle { font-size: 0.85rem; }
+  .leaderboard-categories { gap: 4px; }
+  .rank-cat-btn { padding: 4px 8px; font-size: 0.7rem; }
+  .leaderboard-list li { padding: 6px 0; font-size: 0.85rem; }
+  
+  /* Add task */
+  .add-task { padding: 16px; }
+  .add-task h3 { font-size: 1rem; }
+  .add-task input, .add-task select, .add-task textarea { font-size: 0.9rem; padding: 12px; }
+  .add-task-meta { grid-template-columns: 1fr; gap: 8px; }
+  .row { flex-direction: column; }
+  .add-task .row button { width: 100%; }
+  .add-task-btn { padding: 14px; font-size: 0.95rem; }
+  
+  /* Profile dropdown */
+  .profile-menu { min-width: 220px; right: -50px; }
+  .profile-info-dropdown p { font-size: 0.85rem; }
+  .achievement-item { font-size: 0.8rem; }
+  
+  /* Stats counter */
+  .stats-counter { gap: 12px; font-size: 0.8rem; }
+  
+  /* Search input */
+  .search-input { padding: 12px; font-size: 0.9rem; }
+  
+  /* Toast */
+  .toast { bottom: 12px; right: 12px; left: 12px; font-size: 0.85rem; padding: 10px 16px; }
+  
+  /* Edit form */
+  .task-edit-form { gap: 10px; }
+  .input-edit { padding: 10px; font-size: 0.9rem; }
+  .edit-actions button { padding: 10px; font-size: 0.9rem; }
+}

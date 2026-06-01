@@ -299,7 +299,7 @@ function ChallengesBar({ challenges }) {
 }
 
 function LeaderboardPanel({ leaderboard, currentUser }) {
-  const [open, setOpen] = useState(true);
+  const [open, setOpen] = useState(false);
   const [rankType, setRankType] = useState("exp");
   const [allRankings, setAllRankings] = useState(null);
   
