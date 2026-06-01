@@ -131,8 +131,8 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 EXP_REWARDS = {"easy": 10, "medium": 25, "hard": 50}
-EARLY_EXP_MULTIPLIER = 1.5   # ukończenie przed terminem: +50%
-LATE_EXP_MULTIPLIER = 0.5    # po terminie: −50%
+EARLY_EXP_MULTIPLIER = 1.5
+LATE_EXP_MULTIPLIER = 0.5
 MIN_EXP_REWARD = 1
 VALID_DIFFICULTIES = {"easy", "medium", "hard"}
 VALID_CATEGORIES = {
@@ -173,7 +173,6 @@ def task_can_reschedule(task: models.Task) -> bool:
 
 
 def calculate_exp_reward(difficulty: str, due_date: date, completed_on: date) -> tuple[int, str]:
-    """Zwraca (exp, timing): early | ontime | late."""
     base = EXP_REWARDS.get(difficulty, 10)
     if completed_on < due_date:
         amount = max(MIN_EXP_REWARD, round(base * EARLY_EXP_MULTIPLIER))
@@ -218,7 +217,7 @@ class TaskCreate(BaseModel):
     description: Optional[str] = ""
     difficulty: Optional[str] = "easy"
     category: Optional[str] = "Inne"
-    due_date: str  # format "YYYY-MM-DD"
+    due_date: str
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -231,7 +230,6 @@ class TaskUpdate(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
-
 
 class AccountDelete(BaseModel):
     password: str
@@ -273,7 +271,6 @@ def has_achievement(user_id, achievement_name, db):
     ).first() is not None
 
 def _legacy_slug_map() -> dict:
-    """Mapowanie starych slugów na nowe tytuły."""
     return {
         "first_task": ("first_step", "First Step"),
         "ten_tasks": ("scout_badge", "Scout Badge"),
@@ -418,7 +415,6 @@ def get_tasks_by_date(date_str: str, current_user: models.User = Depends(get_cur
 
 @app.get("/calendar-stats/{year_month}")
 def get_calendar_stats(year_month: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Zwraca dni z zadaniami dla danego miesiąca (format YYYY-MM)"""
     year, month_num = map(int, year_month.split('-'))
     tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
     
@@ -652,11 +648,9 @@ def list_levels():
 # === RARE DROPS ENDPOINTS ===
 @app.post("/rare-drops/claim-daily")
 def claim_daily_rare_drop(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Spróbuj zdobyć dzisiejszy rare drop na podstawie szansy procentowej."""
     import random
     today = date.today()
     
-    # Sprawdź czy już ma drop z dzisiaj
     existing = db.query(models.PlayerRareDrop).filter(
         models.PlayerRareDrop.user_id == current_user.id,
         models.PlayerRareDrop.obtained_date == today
@@ -669,13 +663,10 @@ def claim_daily_rare_drop(current_user: models.User = Depends(get_current_user),
             "item": None
         }
     
-    # Ustal seed na dzień + user
     rng = random.Random(f"{current_user.id}-{today.isoformat()}-raredrop")
     
-    # Sprawdź szansę każdego rare drop
     for drop_def in gc.RARE_DROPS:
         if rng.random() * 100 <= drop_def["drop_chance"]:
-            # Zdobył!
             rare_drop = db.query(models.RareDrop).filter(
                 models.RareDrop.slug == drop_def["slug"]
             ).first()
@@ -711,7 +702,6 @@ def claim_daily_rare_drop(current_user: models.User = Depends(get_current_user),
                 }
             }
     
-    # Nie zdobył nic
     return {
         "status": "failed",
         "message": "Dzisiaj brak szczęścia 😢 Spróbuj jutro!",
@@ -721,12 +711,10 @@ def claim_daily_rare_drop(current_user: models.User = Depends(get_current_user),
 
 @app.get("/rare-drops/inventory")
 def get_rare_drops_inventory(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Wyświetl kolekcję rare drops gracza."""
     drops = db.query(models.PlayerRareDrop).filter(
         models.PlayerRareDrop.user_id == current_user.id
     ).all()
     
-    # Grupuj po typie
     by_slug = {}
     for drop in drops:
         slug = drop.rare_drop.slug
@@ -746,7 +734,6 @@ def get_rare_drops_inventory(current_user: models.User = Depends(get_current_use
     items = list(by_slug.values())
     total_count = len(drops)
     
-    # Statystyki
     rarity_counts = {}
     for item in items:
         rarity = item["rarity"]
@@ -763,8 +750,6 @@ def get_rare_drops_inventory(current_user: models.User = Depends(get_current_use
 # === EXCLUSIVE ACHIEVEMENTS ENDPOINTS ===
 @app.get("/exclusive-achievements")
 def get_exclusive_achievements(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    """Wyświetl exclusive achievements gracza."""
-    # Sprawdź nowe
     gc.check_exclusive_achievements(current_user, db, models)
     
     player_achs = db.query(models.PlayerExclusiveAchievement).filter(
@@ -781,7 +766,6 @@ def get_exclusive_achievements(current_user: models.User = Depends(get_current_u
         "unlocked_at": str(pa.unlocked_at)
     } for pa in player_achs]
     
-    # Następne do odblokowania
     locked = [
         {
             "slug": ea["slug"],
@@ -799,14 +783,13 @@ def get_exclusive_achievements(current_user: models.User = Depends(get_current_u
         "unlocked_count": len(unlocked),
         "total_available": len(gc.EXCLUSIVE_ACHIEVEMENTS),
         "unlocked": unlocked,
-        "locked": locked[:5]  # Pokaż 5 kolejnych
+        "locked": locked[:5]
     }
 
 
 # === RANKING ENDPOINTS ===
 @app.get("/rankings/exp")
 def ranking_exp(db: Session = Depends(get_db)):
-    """TOP 10 graczy po EXP."""
     users = db.query(models.User).order_by(models.User.exp.desc()).limit(10).all()
     return [{
         "rank": i + 1,
@@ -819,7 +802,6 @@ def ranking_exp(db: Session = Depends(get_db)):
 
 @app.get("/rankings/streak")
 def ranking_streak(db: Session = Depends(get_db)):
-    """TOP 10 graczy po aktualnej serii."""
     users = db.query(models.User).order_by(models.User.streak.desc()).limit(10).all()
     return [{
         "rank": i + 1,
@@ -830,7 +812,6 @@ def ranking_streak(db: Session = Depends(get_db)):
 
 @app.get("/rankings/rare-drops")
 def ranking_rare_drops(db: Session = Depends(get_db)):
-    """TOP 10 graczy po liczbie rare drops."""
     from sqlalchemy import func
     results = db.query(
         models.PlayerRareDrop.user_id,
@@ -850,7 +831,6 @@ def ranking_rare_drops(db: Session = Depends(get_db)):
 
 @app.get("/rankings/completed-tasks")
 def ranking_completed_tasks(db: Session = Depends(get_db)):
-    """TOP 10 graczy po liczbie ukończonych questów."""
     from sqlalchemy import func
     results = db.query(
         models.Task.owner_id,
@@ -872,7 +852,6 @@ def ranking_completed_tasks(db: Session = Depends(get_db)):
 
 @app.get("/rankings/exclusive-achievements")
 def ranking_exclusive_achievements(db: Session = Depends(get_db)):
-    """TOP 10 graczy po liczbie exclusive achievements."""
     from sqlalchemy import func
     results = db.query(
         models.PlayerExclusiveAchievement.user_id,
@@ -892,7 +871,6 @@ def ranking_exclusive_achievements(db: Session = Depends(get_db)):
 
 @app.get("/rankings/all")
 def ranking_all(db: Session = Depends(get_db)):
-    """Wszystkie rankingi naraz."""
     return {
         "exp": ranking_exp(db),
         "streak": ranking_streak(db),
@@ -900,3 +878,10 @@ def ranking_all(db: Session = Depends(get_db)):
         "completed_tasks": ranking_completed_tasks(db),
         "exclusive_achievements": ranking_exclusive_achievements(db)
     }
+
+
+if __name__ == "__main__":
+    import os
+    import uvicorn
+    port = int(os.environ.get("PORT", 8000))
+    uvicorn.run(app, host="0.0.0.0", port=port)
