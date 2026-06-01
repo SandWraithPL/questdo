@@ -1,4 +1,3 @@
-cat > .github/workflows/deploy.yml << 'EOF'
 name: Build and Deploy to Azure
 
 on:
@@ -36,9 +35,8 @@ jobs:
         docker build ./frontend -t questdoregistry.azurecr.io/questdo-frontend:latest
         docker push questdoregistry.azurecr.io/questdo-frontend:latest
 
-    - name: Deploy to Azure Web App using Compose
+    - name: Deploy to Azure Web App
       uses: azure/webapps-deploy@v3
       with:
         app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
-        images: questdoregistry.azurecr.io/questdo-backend:latest
-EOF
+        images: questdoregistry.azurecr.io/questdo-frontend:latest
