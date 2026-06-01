@@ -3,7 +3,7 @@ import axios from "axios";
 import "./index.css";
 import DatePicker from "./DatePicker";
 
-const API = "https://translations-springfield-ericsson-fewer.trycloudflare.com";
+const API = "https://questdo-backend.onrender.com";
 
 const DEFAULT_LEVEL_THRESHOLDS = [
   0, 80, 180, 320, 480, 660, 860, 1080, 1320, 1600, 1900, 2250, 2650, 3100, 3600,
