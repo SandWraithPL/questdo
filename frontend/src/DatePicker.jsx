@@ -36,9 +36,7 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState("days");
   const [cursor, setCursor] = useState(() => parseValue(value));
-  const [popupPos, setPopupPos] = useState({ top: 0, left: 0 });
   const wrapRef = useRef(null);
-  const triggerRef = useRef(null);
 
   useEffect(() => {
     if (value) setCursor(parseValue(value));
@@ -51,15 +49,6 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
     };
     document.addEventListener("mousedown", onDoc);
     return () => document.removeEventListener("mousedown", onDoc);
-  }, [open]);
-
-  useEffect(() => {
-    if (!open || !triggerRef.current) return;
-    const rect = triggerRef.current.getBoundingClientRect();
-    setPopupPos({
-      top: rect.bottom + 6,
-      left: rect.left,
-    });
   }, [open]);
 
   const openPicker = () => {
@@ -128,22 +117,14 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
   return (
     <div className="date-picker-wrap" ref={wrapRef}>
       {label && <span className="date-picker-label">{label}</span>}
-      <button type="button" ref={triggerRef} className="date-picker-trigger" onClick={openPicker}>
+      <button type="button" className="date-picker-trigger" onClick={openPicker}>
         <span className="date-picker-icon">📅</span>
         <span>{formatDisplay(value)}</span>
         <span className="date-picker-chevron">{open ? "▲" : "▼"}</span>
       </button>
 
       {open && (
-        <div 
-          className="date-picker-popup" 
-          role="dialog" 
-          aria-label="Wybierz datę"
-          style={{
-            top: popupPos.top + 'px',
-            left: popupPos.left + 'px',
-          }}
-        >
+        <div className="date-picker-popup" role="dialog" aria-label="Wybierz datę">
           <div className="dp-header">
             {view === "days" && (
               <>
