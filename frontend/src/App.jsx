@@ -497,6 +497,15 @@ function AdminPanel({ isOpen, onClose, headers }) {
 
   useEffect(() => { if (isOpen) fetchData(); }, [isOpen]);
 
+  // Auto-refresh admin data every 30 seconds when open
+  useEffect(() => {
+    if (!isOpen) return;
+    const interval = setInterval(() => {
+      fetchData();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   return (
