@@ -1,0 +1,17 @@
+{
+  "name": "QuestDo",
+  "short_name": "QuestDo",
+  "description": "Gamifikowana lista zadań w stylu RPG",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#ff8906",
+  "background_color": "#0f0e17",
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

@@ -225,7 +225,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .dp-title-static { color: #ff8906; font-weight: bold; font-size: 0.9rem; }
 .dp-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; font-size: 0.7rem; color: #888; margin-bottom: 6px; }
 .dp-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
-.dp-day { aspect-ratio: 1; min-height: 36px; border: none; border-radius: 6px; background: #0f0e17; color: #fff; font-size: 0.85rem; cursor: pointer; }
+.dp-day { width: 36px; height: 36px; border: none; border-radius: 6px; background: #0f0e17; color: #fff; font-size: 0.85rem; cursor: pointer; }
 .dp-day.empty { background: transparent; cursor: default; }
 .dp-day:hover:not(.empty) { background: #2a2a3e; }
 .dp-day.today { border: 1px solid #ff8906; }
