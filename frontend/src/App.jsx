@@ -466,9 +466,11 @@ function AdminPanel({ isOpen, onClose, headers }) {
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState(null);
 
   const fetchData = async () => {
     setLoading(true);
+    setError(null);
     try {
       const [usersRes, statsRes] = await Promise.all([
         axios.get(`${API}/admin/users`, { headers }),
@@ -478,6 +480,7 @@ function AdminPanel({ isOpen, onClose, headers }) {
       setStats(statsRes.data);
     } catch (err) {
       console.error("Admin error:", err);
+      setError(err.response?.data?.detail || "Błąd ładowania danych admina");
     }
     setLoading(false);
   };
@@ -503,7 +506,7 @@ function AdminPanel({ isOpen, onClose, headers }) {
           <h2>🔧 Panel Admina</h2>
           <button type="button" onClick={onClose} className="admin-close">✕</button>
         </div>
-        {loading ? <p>Ładowanie...</p> : (
+        {loading ? <p>Ładowanie...</p> : error ? <p style={{ color: "#e74c3c" }}>{error}</p> : (
           <>
             {stats && (
               <div className="admin-stats">
@@ -517,7 +520,7 @@ function AdminPanel({ isOpen, onClose, headers }) {
             <div className="admin-users-section">
               <h3>Użytkownicy</h3>
               <div className="users-list">
-                {users.map(u => (
+                {users.length === 0 ? <p className="muted">Brak użytkowników</p> : users.map(u => (
                   <div key={u.id} className="user-row">
                     <div className="user-info">
                       <strong>{u.username}</strong>

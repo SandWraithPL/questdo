@@ -402,6 +402,15 @@ def delete_account(
     db.query(models.DailyQuestAssignment).filter(
         models.DailyQuestAssignment.user_id == current_user.id
     ).delete()
+    db.query(models.PlayerRareDrop).filter(
+        models.PlayerRareDrop.user_id == current_user.id
+    ).delete()
+    db.query(models.PlayerExclusiveAchievement).filter(
+        models.PlayerExclusiveAchievement.user_id == current_user.id
+    ).delete()
+    db.query(models.PlayerBadge).filter(
+        models.PlayerBadge.user_id == current_user.id
+    ).delete()
     db.delete(current_user)
     db.commit()
     return {"message": "Konto zostało usunięte"}
