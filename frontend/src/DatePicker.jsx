@@ -51,10 +51,14 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
     return () => document.removeEventListener("mousedown", onDoc);
   }, [open]);
 
-  const openPicker = () => {
-    setCursor(parseValue(value));
-    setView("days");
-    setOpen(true);
+  const togglePicker = () => {
+    if (open) {
+      setOpen(false);
+    } else {
+      setCursor(parseValue(value));
+      setView("days");
+      setOpen(true);
+    }
   };
 
   const pickDay = (day) => {
@@ -117,7 +121,7 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
   return (
     <div className="date-picker-wrap" ref={wrapRef}>
       {label && <span className="date-picker-label">{label}</span>}
-      <button type="button" className="date-picker-trigger" onClick={openPicker}>
+      <button type="button" className="date-picker-trigger" onClick={togglePicker}>
         <span className="date-picker-icon">📅</span>
         <span>{formatDisplay(value)}</span>
         <span className="date-picker-chevron">{open ? "▲" : "▼"}</span>
