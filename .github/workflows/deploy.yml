@@ -1,0 +1,33 @@
+name: Build and Deploy to Azure
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Login to ACR
+      uses: azure/docker-login@v1
+      with:
+        login-server: questdoregistry.azurecr.io
+        username: ${{ secrets.ACR_USERNAME }}
+        password: ${{ secrets.ACR_PASSWORD }}
+    
+    - name: Build and push images
+      run: |
+        docker build ./backend -t questdoregistry.azurecr.io/questdo-backend:latest
+        docker push questdoregistry.azurecr.io/questdo-backend:latest
+        docker build ./frontend -t questdoregistry.azurecr.io/questdo-frontend:latest
+        docker push questdoregistry.azurecr.io/questdo-frontend:latest
+    
+    - name: Deploy to Azure Web App
+      uses: azure/webapps-deploy@v2
+      with:
+        app-name: ${{ secrets.AZURE_WEBAPP_NAME }}
+        images: |
+          questdoregistry.azurecr.io/questdo-backend:latest
+          questdoregistry.azurecr.io/questdo-frontend:latest
