@@ -47,8 +47,9 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
     const onDoc = (e) => {
       if (!wrapRef.current?.contains(e.target)) setOpen(false);
     };
-    document.addEventListener("mousedown", onDoc);
-    return () => document.removeEventListener("mousedown", onDoc);
+    // Use capture-phase click to avoid ordering issues with button click handlers
+    document.addEventListener("click", onDoc, true);
+    return () => document.removeEventListener("click", onDoc, true);
   }, [open]);
 
   const togglePicker = () => {
