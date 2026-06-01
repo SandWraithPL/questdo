@@ -3,7 +3,7 @@ import axios from "axios";
 import "./index.css";
 import DatePicker from "./DatePicker";
 
-const API = "https://questdo-backend-https.azurewebsites.net";
+const API = "http://74.248.252.175:8000";
 
 const DEFAULT_LEVEL_THRESHOLDS = [
   0, 80, 180, 320, 480, 660, 860, 1080, 1320, 1600, 1900, 2250, 2650, 3100, 3600,
