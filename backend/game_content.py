@@ -45,42 +45,42 @@ def get_level(exp: int) -> tuple[int, str, int | None, str | None]:
 
 # slug, title, description, icon, kind, value
 ACHIEVEMENT_DEFS: list[dict] = [
-    {"slug": "first_step", "title": "First Step", "description": "Ukończ pierwszy quest.", "icon": "🌟", "kind": "tasks", "value": 1},
-    {"slug": "second_bite", "title": "Second Bite", "description": "Ukończ 3 questy.", "icon": "🍖", "kind": "tasks", "value": 3},
-    {"slug": "scout_badge", "title": "Scout Badge", "description": "Ukończ 10 questów.", "icon": "⚔️", "kind": "tasks", "value": 10},
-    {"slug": "veteran_wall", "title": "Veteran", "description": "Ukończ 25 questów.", "icon": "🛡️", "kind": "tasks", "value": 25},
-    {"slug": "hundred_club", "title": "Hundred Club", "description": "Ukończ 50 questów.", "icon": "🏆", "kind": "tasks", "value": 50},
-    {"slug": "mission_archive", "title": "Mission Archive", "description": "Ukończ 100 questów.", "icon": "📜", "kind": "tasks", "value": 100},
-    {"slug": "early_bird", "title": "Early Bird", "description": "Ukończ 5 questów przed terminem.", "icon": "🕊️", "kind": "early", "value": 5},
-    {"slug": "ahead_of_titan", "title": "Ahead", "description": "Ukończ 15 questów przed terminem.", "icon": "🏃", "kind": "early", "value": 15},
-    {"slug": "deadline_ghost", "title": "Deadline Ghost", "description": "Ukończ 5 questów po terminie.", "icon": "👻", "kind": "late", "value": 5},
-    {"slug": "colossal_delay", "title": "Colossal Delay", "description": "Ukończ 15 questów po terminie.", "icon": "🐌", "kind": "late", "value": 15},
-    {"slug": "easy_does_it", "title": "Easy Does It", "description": "Ukończ 20 łatwych questów.", "icon": "🌱", "kind": "easy", "value": 20},
-    {"slug": "medium_rare", "title": "Medium Rare", "description": "Ukończ 15 średnich questów.", "icon": "🔥", "kind": "medium", "value": 15},
-    {"slug": "hard_mode", "title": "Hard Mode", "description": "Ukończ 10 trudnych questów.", "icon": "💀", "kind": "hard", "value": 10},
-    {"slug": "female_titan_run", "title": "Quick Strike", "description": "Ukończ 5 trudnych questów.", "icon": "⚡", "kind": "hard", "value": 5},
-    {"slug": "streak_three", "title": "Three Day Fire", "description": "Seria 3 dni.", "icon": "🔥", "kind": "streak", "value": 3},
-    {"slug": "streak_week", "title": "Week of Walls", "description": "Seria 7 dni.", "icon": "🧱", "kind": "streak", "value": 7},
-    {"slug": "streak_month", "title": "Month Beyond", "description": "Seria 30 dni.", "icon": "💪", "kind": "streak", "value": 30},
-    {"slug": "exp_scout", "title": "Scout EXP", "description": "Zdobądź 250 EXP.", "icon": "📈", "kind": "exp", "value": 250},
-    {"slug": "exp_commander", "title": "Commander EXP", "description": "Zdobądź 1000 EXP.", "icon": "🎖️", "kind": "exp", "value": 1000},
-    {"slug": "exp_founding", "title": "Founding EXP", "description": "Zdobądź 3000 EXP.", "icon": "👑", "kind": "exp", "value": 3000},
-    {"slug": "exp_paths", "title": "Paths Unlocked", "description": "Zdobądź 6000 EXP.", "icon": "✨", "kind": "exp", "value": 6000},
-    {"slug": "studia_hero", "title": "Academy Hero", "description": "Ukończ 10 questów Studia.", "icon": "📚", "kind": "cat_studia", "value": 10},
-    {"slug": "work_shift", "title": "Work Shift", "description": "Ukończ 10 questów Praca.", "icon": "💼", "kind": "cat_praca", "value": 10},
-    {"slug": "home_front", "title": "Home Front", "description": "Ukończ 10 questów Dom.", "icon": "🏠", "kind": "cat_dom", "value": 10},
-    {"slug": "sports_day", "title": "Sports Day", "description": "Ukończ 10 questów Sport.", "icon": "⚽", "kind": "cat_sport", "value": 10},
-    {"slug": "project_titan", "title": "Project Lead", "description": "Ukończ 10 questów Projekt.", "icon": "🛠️", "kind": "cat_projekt", "value": 10},
-    {"slug": "potato_quest", "title": "Potato Day", "description": "Ukończ quest w dniu dodania.", "icon": "🥔", "kind": "same_day", "value": 1},
-    {"slug": "levi_clean", "title": "Clean Sweep", "description": "Ukończ wszystkie questy na dany dzień (min. 3).", "icon": "🧹", "kind": "perfect_day", "value": 1},
-    {"slug": "omni_plan", "title": "Omni Plan", "description": "Dodaj 20 questów do listy.", "icon": "🦸", "kind": "created", "value": 20},
-    {"slug": "star_contract", "title": "Star Contract", "description": "Ukończ 30 questów na czas.", "icon": "⭐", "kind": "ontime", "value": 30},
-    {"slug": "seven_sealed", "title": "Seven Sealed", "description": "Ukończ 7 daily bonusów.", "icon": "7️⃣", "kind": "daily_bonus", "value": 7},
-    {"slug": "rumbling_list", "title": "Rumbling List", "description": "Miej 50 aktywnych questów naraz.", "icon": "🌊", "kind": "active_tasks", "value": 50},
-    {"slug": "invincible_grind", "title": "Invincible Grind", "description": "Ukończ 200 questów.", "icon": "💥", "kind": "tasks", "value": 200},
-    {"slug": "boys_mission", "title": "Corporate Mission", "description": "Ukończ 5 trudnych w tygodniu.", "icon": "🧪", "kind": "hard_week", "value": 5},
-    {"slug": "jedi_patience", "title": "Jedi Patience", "description": "Seria 14 dni.", "icon": "🌌", "kind": "streak", "value": 14},
-    {"slug": "ackerman_focus", "title": "Ackerman Focus", "description": "Zdobądź 5000 EXP.", "icon": "🗡️", "kind": "exp", "value": 5000},
+    {"slug": "first_step", "title": "Pierwszy krok", "description": "Ukończ pierwszy quest.", "icon": "🌟", "kind": "tasks", "value": 1},
+    {"slug": "second_bite", "title": "Dobry początek", "description": "Ukończ 3 questy.", "icon": "🍖", "kind": "tasks", "value": 3},
+    {"slug": "scout_badge", "title": "Dziesiątka zadań", "description": "Ukończ 10 questów.", "icon": "⚔️", "kind": "tasks", "value": 10},
+    {"slug": "veteran_wall", "title": "Stały rytm", "description": "Ukończ 25 questów.", "icon": "🛡️", "kind": "tasks", "value": 25},
+    {"slug": "hundred_club", "title": "Pięćdziesiątka", "description": "Ukończ 50 questów.", "icon": "🏆", "kind": "tasks", "value": 50},
+    {"slug": "mission_archive", "title": "Archiwum zadań", "description": "Ukończ 100 questów.", "icon": "📜", "kind": "tasks", "value": 100},
+    {"slug": "early_bird", "title": "Przed czasem", "description": "Ukończ 5 questów przed terminem.", "icon": "🕊️", "kind": "early", "value": 5},
+    {"slug": "ahead_of_titan", "title": "Zapas czasu", "description": "Ukończ 15 questów przed terminem.", "icon": "🏃", "kind": "early", "value": 15},
+    {"slug": "deadline_ghost", "title": "Po terminie", "description": "Ukończ 5 questów po terminie.", "icon": "👻", "kind": "late", "value": 5},
+    {"slug": "colossal_delay", "title": "Duże opóźnienie", "description": "Ukończ 15 questów po terminie.", "icon": "🐌", "kind": "late", "value": 15},
+    {"slug": "easy_does_it", "title": "Lekkie zadania", "description": "Ukończ 20 łatwych questów.", "icon": "🌱", "kind": "easy", "value": 20},
+    {"slug": "medium_rare", "title": "Średni poziom", "description": "Ukończ 15 średnich questów.", "icon": "🔥", "kind": "medium", "value": 15},
+    {"slug": "hard_mode", "title": "Trudna seria", "description": "Ukończ 10 trudnych questów.", "icon": "💀", "kind": "hard", "value": 10},
+    {"slug": "female_titan_run", "title": "Szybkie uderzenie", "description": "Ukończ 5 trudnych questów.", "icon": "⚡", "kind": "hard", "value": 5},
+    {"slug": "streak_three", "title": "Trzy dni z rzędu", "description": "Seria 3 dni.", "icon": "🔥", "kind": "streak", "value": 3},
+    {"slug": "streak_week", "title": "Tydzień serii", "description": "Seria 7 dni.", "icon": "🧱", "kind": "streak", "value": 7},
+    {"slug": "streak_month", "title": "Miesiąc serii", "description": "Seria 30 dni.", "icon": "💪", "kind": "streak", "value": 30},
+    {"slug": "exp_scout", "title": "250 EXP", "description": "Zdobądź 250 EXP.", "icon": "📈", "kind": "exp", "value": 250},
+    {"slug": "exp_commander", "title": "1000 EXP", "description": "Zdobądź 1000 EXP.", "icon": "🎖️", "kind": "exp", "value": 1000},
+    {"slug": "exp_founding", "title": "3000 EXP", "description": "Zdobądź 3000 EXP.", "icon": "👑", "kind": "exp", "value": 3000},
+    {"slug": "exp_paths", "title": "6000 EXP", "description": "Zdobądź 6000 EXP.", "icon": "✨", "kind": "exp", "value": 6000},
+    {"slug": "studia_hero", "title": "Ogarnianie studiów", "description": "Ukończ 10 questów Studia.", "icon": "📚", "kind": "cat_studia", "value": 10},
+    {"slug": "work_shift", "title": "Sprawy z pracy", "description": "Ukończ 10 questów Praca.", "icon": "💼", "kind": "cat_praca", "value": 10},
+    {"slug": "home_front", "title": "Dom ogarnięty", "description": "Ukończ 10 questów Dom.", "icon": "🏠", "kind": "cat_dom", "value": 10},
+    {"slug": "sports_day", "title": "Ruch w planie", "description": "Ukończ 10 questów Sport.", "icon": "⚽", "kind": "cat_sport", "value": 10},
+    {"slug": "project_titan", "title": "Projekt do przodu", "description": "Ukończ 10 questów Projekt.", "icon": "🛠️", "kind": "cat_projekt", "value": 10},
+    {"slug": "potato_quest", "title": "Zrobione od razu", "description": "Ukończ quest w dniu dodania.", "icon": "🥔", "kind": "same_day", "value": 1},
+    {"slug": "levi_clean", "title": "Czysty dzień", "description": "Ukończ wszystkie questy na dany dzień (min. 3).", "icon": "🧹", "kind": "perfect_day", "value": 1},
+    {"slug": "omni_plan", "title": "Planista", "description": "Dodaj 20 questów do listy.", "icon": "🦸", "kind": "created", "value": 20},
+    {"slug": "star_contract", "title": "Na czas", "description": "Ukończ 30 questów na czas.", "icon": "⭐", "kind": "ontime", "value": 30},
+    {"slug": "seven_sealed", "title": "Siedem bonusów", "description": "Ukończ 7 daily bonusów.", "icon": "7️⃣", "kind": "daily_bonus", "value": 7},
+    {"slug": "rumbling_list", "title": "Pełna lista", "description": "Miej 50 aktywnych questów naraz.", "icon": "🌊", "kind": "active_tasks", "value": 50},
+    {"slug": "invincible_grind", "title": "Dwieście zadań", "description": "Ukończ 200 questów.", "icon": "💥", "kind": "tasks", "value": 200},
+    {"slug": "boys_mission", "title": "Trudny tydzień", "description": "Ukończ 5 trudnych w tygodniu.", "icon": "🧪", "kind": "hard_week", "value": 5},
+    {"slug": "jedi_patience", "title": "Cierpliwość", "description": "Seria 14 dni.", "icon": "🌌", "kind": "streak", "value": 14},
+    {"slug": "ackerman_focus", "title": "Pełne skupienie", "description": "Zdobądź 5000 EXP.", "icon": "🗡️", "kind": "exp", "value": 5000},
 ]
 
 ACHIEVEMENT_BY_SLUG = {a["slug"]: a for a in ACHIEVEMENT_DEFS}
@@ -218,25 +218,25 @@ def get_next_achievement(stats: dict, unlocked_slugs: set) -> dict | None:
 # === RARE DROPS ===
 RARE_DROPS: list[dict] = [
     # Common (15%)
-    {"slug": "bronze_coin", "name": "Moneta Brązu", "description": "Zwykła moneta", "icon": "🪙", "rarity": "common", "drop_chance": 15},
-    {"slug": "crystal_shard", "name": "Odłamek Kryształu", "description": "Błyszczący odłamek", "icon": "💎", "rarity": "common", "drop_chance": 15},
-    {"slug": "scroll_fragment", "name": "Fragment Zwoju", "description": "Strzęp starożytnego papirusu", "icon": "📜", "rarity": "common", "drop_chance": 15},
-    
+    {"slug": "bronze_coin", "name": "Brązowa moneta", "description": "Mała pamiątka za regularność.", "icon": "🪙", "rarity": "common", "drop_chance": 15},
+    {"slug": "crystal_shard", "name": "Kryształowy odłamek", "description": "Drobny znak dobrze domkniętego dnia.", "icon": "💎", "rarity": "common", "drop_chance": 15},
+    {"slug": "scroll_fragment", "name": "Fragment notatki", "description": "Kawałek planu, który warto zachować.", "icon": "📜", "rarity": "common", "drop_chance": 15},
+
     # Rare (8%)
-    {"slug": "silver_coin", "name": "Moneta Srebra", "description": "Srebrna moneta", "icon": "💰", "rarity": "rare", "drop_chance": 8},
-    {"slug": "magic_essence", "name": "Esencja Magii", "description": "Magiczna esencja", "icon": "✨", "rarity": "rare", "drop_chance": 8},
-    {"slug": "enchanted_feather", "name": "Zaklęte Pióro", "description": "Pióro inspiracji", "icon": "🪶", "rarity": "rare", "drop_chance": 8},
-    {"slug": "ancient_tome", "name": "Starożytny Tom", "description": "Księga wiedzy", "icon": "📖", "rarity": "rare", "drop_chance": 8},
-    
+    {"slug": "silver_coin", "name": "Srebrna moneta", "description": "Rzadsza nagroda za konsekwencję.", "icon": "💰", "rarity": "rare", "drop_chance": 8},
+    {"slug": "magic_essence", "name": "Iskra motywacji", "description": "Mały impuls do kolejnego zadania.", "icon": "✨", "rarity": "rare", "drop_chance": 8},
+    {"slug": "enchanted_feather", "name": "Pióro pomysłu", "description": "Pamiątka po dniu, w którym coś ruszyło.", "icon": "🪶", "rarity": "rare", "drop_chance": 8},
+    {"slug": "ancient_tome", "name": "Księga notatek", "description": "Symbol porządku w planach.", "icon": "📖", "rarity": "rare", "drop_chance": 8},
+
     # Epic (3%)
-    {"slug": "gold_coin", "name": "Moneta Złota", "description": "Złota moneta", "icon": "🏆", "rarity": "epic", "drop_chance": 3},
-    {"slug": "titan_mark", "name": "Znak", "description": "Moc tytanów", "icon": "🔱", "rarity": "epic", "drop_chance": 3},
-    {"slug": "warrior_crest", "name": "Herb Wojownika", "description": "Godło wojownika", "icon": "⚔️", "rarity": "epic", "drop_chance": 3},
-    {"slug": "phoenix_feather", "name": "Pióro Feniksa", "description": "Pióro odrodzenia", "icon": "🔥", "rarity": "epic", "drop_chance": 3},
-    
+    {"slug": "gold_coin", "name": "Złota moneta", "description": "Wyjątkowa znajdźka za mocny dzień.", "icon": "🏆", "rarity": "epic", "drop_chance": 3},
+    {"slug": "titan_mark", "name": "Znak wytrwałości", "description": "Dowód, że trudne zadania da się domknąć.", "icon": "🔱", "rarity": "epic", "drop_chance": 3},
+    {"slug": "warrior_crest", "name": "Odznaka działania", "description": "Pamiątka po dobrze wykonanej robocie.", "icon": "⚔️", "rarity": "epic", "drop_chance": 3},
+    {"slug": "phoenix_feather", "name": "Pióro nowego startu", "description": "Symbol powrotu do rytmu.", "icon": "🔥", "rarity": "epic", "drop_chance": 3},
+
     # Legendary (0.5%)
-    {"slug": "founding_titan_core", "name": "Jądro", "description": "Najrzadsza sztuka", "icon": "👑", "rarity": "legendary", "drop_chance": 0.5},
-    {"slug": "infinity_stone", "name": "Kamień", "description": "Niewyobrażalna moc", "icon": "💜", "rarity": "legendary", "drop_chance": 0.5},
+    {"slug": "founding_titan_core", "name": "Korona konsekwencji", "description": "Legendarna nagroda za wyjątkową passę.", "icon": "👑", "rarity": "legendary", "drop_chance": 0.5},
+    {"slug": "infinity_stone", "name": "Kamień skupienia", "description": "Rzadki symbol pełnego skupienia.", "icon": "💜", "rarity": "legendary", "drop_chance": 0.5},
 ]
 
 RARE_DROP_BY_SLUG = {rd["slug"]: rd for rd in RARE_DROPS}
@@ -246,112 +246,112 @@ RARE_DROP_BY_SLUG = {rd["slug"]: rd for rd in RARE_DROPS}
 EXCLUSIVE_ACHIEVEMENTS: list[dict] = [
     {
         "slug": "founding_titan", 
-        "title": "Founding", 
-        "description": "Zdobądź 100+ EXP w jeden dzień", 
+        "title": "Mocny dzień", 
+        "description": "Zdobądź 100+ EXP w jeden dzień.", 
         "icon": "👑",
         "type": "daily_exp_milestone",
         "value": 100
     },
     {
         "slug": "speedrunner", 
-        "title": "Speedrunner", 
-        "description": "Ukończ 5 questów przed 10 AM", 
+        "title": "Poranny sprint", 
+        "description": "Ukończ 5 questów przed 10:00.", 
         "icon": "⚡",
         "type": "morning_quests",
         "value": 5
     },
     {
         "slug": "night_owl", 
-        "title": "Night Owl", 
-        "description": "Ukończ 3 questy po 10 PM", 
+        "title": "Wieczorna zmiana", 
+        "description": "Ukończ 3 questy po 22:00.", 
         "icon": "🦉",
         "type": "night_quests",
         "value": 3
     },
     {
         "slug": "collector_tier_1", 
-        "title": "Collector I", 
-        "description": "Zbierz 5 rare drops", 
+        "title": "Kolekcjoner I", 
+        "description": "Zbierz 5 znajdziek.", 
         "icon": "🎁",
         "type": "rare_drop_count",
         "value": 5
     },
     {
         "slug": "collector_tier_2", 
-        "title": "Collector II", 
-        "description": "Zbierz 15 rare drops", 
+        "title": "Kolekcjoner II", 
+        "description": "Zbierz 15 znajdziek.", 
         "icon": "🎁🎁",
         "type": "rare_drop_count",
         "value": 15
     },
     {
         "slug": "collector_tier_3", 
-        "title": "Collector III", 
-        "description": "Zbierz 30 rare drops", 
+        "title": "Kolekcjoner III", 
+        "description": "Zbierz 30 znajdziek.", 
         "icon": "🎁🎁🎁",
         "type": "rare_drop_count",
         "value": 30
     },
     {
         "slug": "epic_collector", 
-        "title": "Epic Collector", 
-        "description": "Zbierz 5 epic rare drops", 
+        "title": "Łowca epickich", 
+        "description": "Zbierz 5 epickich znajdziek.", 
         "icon": "💎",
         "type": "epic_rare_drops",
         "value": 5
     },
     {
         "slug": "legendary_hunter", 
-        "title": "Legendary Hunter", 
-        "description": "Zbierz 1 legendary rare drop", 
+        "title": "Legendarna znajdźka", 
+        "description": "Zbierz 1 legendarną znajdźkę.", 
         "icon": "🌟",
         "type": "legendary_rare_drops",
         "value": 1
     },
     {
         "slug": "week_warrior", 
-        "title": "Week Warrior", 
-        "description": "Ukończ 20+ questów w tygodniu", 
+        "title": "Mocny tydzień", 
+        "description": "Ukończ 20+ questów w tygodniu.", 
         "icon": "💪",
         "type": "weekly_completion",
         "value": 20
     },
     {
         "slug": "balanced_life", 
-        "title": "Balanced Life", 
-        "description": "Ukończ questy z 5+ kategorii w jeden dzień", 
+        "title": "Równy balans", 
+        "description": "Ukończ questy z 5+ kategorii w jeden dzień.", 
         "icon": "⚖️",
         "type": "category_diversity",
         "value": 5
     },
     {
         "slug": "iron_will", 
-        "title": "Iron Will", 
-        "description": "Seria 50 dni", 
+        "title": "Żelazna seria", 
+        "description": "Seria 50 dni.", 
         "icon": "🔗",
         "type": "streak_milestone",
         "value": 50
     },
     {
         "slug": "legend_500", 
-        "title": "Legend 500", 
-        "description": "Ukończ 500 questów", 
+        "title": "Legenda listy", 
+        "description": "Ukończ 500 questów.", 
         "icon": "🏅",
         "type": "total_completion",
         "value": 500
     },
     {
         "slug": "time_master", 
-        "title": "Time Master", 
-        "description": "Ukończ 50 questów dokładnie na czas", 
+        "title": "Mistrz terminów", 
+        "description": "Ukończ 50 questów dokładnie na czas.", 
         "icon": "⏰",
         "type": "ontime_perfection",
         "value": 50
     },
     {
         "slug": "all_rounder", 
-        "title": "All Rounder", 
-        "description": "Ukończ 25 easy + 25 medium + 25 hard", 
+        "title": "Wszechstronność", 
+        "description": "Ukończ po 25 łatwych, średnich i trudnych questów.", 
         "icon": "🎯",
         "type": "difficulty_balance",
         "value": 25
@@ -487,6 +487,11 @@ def check_exclusive_achievements(user, db, models) -> list[dict]:
                 )
                 db.add(ach)
                 db.flush()
+            else:
+                ach.title = ea_def["title"]
+                ach.description = ea_def["description"]
+                ach.icon = ea_def["icon"]
+                ach.requirement_type = ea_def["type"]
             
             player_ach = db.query(models.PlayerExclusiveAchievement).filter(
                 models.PlayerExclusiveAchievement.user_id == user.id,

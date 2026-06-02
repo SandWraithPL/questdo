@@ -90,6 +90,8 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .badge.timing-early { background: #1b3a1f; color: #4caf50; }
 .badge.timing-ontime { background: #1a1a3e; color: #7986cb; }
 .badge.timing-late { background: #3a2800; color: #ff9800; }
+.badge.reminder { background: #321b2a; color: #ff8fb3; }
+.important-mark { color: #ff8f45; }
 .task-actions { display: flex; flex-direction: column; gap: 4px; }
 .icon-btn { background: transparent; border: none; cursor: pointer; font-size: 1.1rem; padding: 4px; border-radius: 6px; }
 .icon-btn:hover { background: #2a2a3e; }
@@ -103,50 +105,72 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .edit-actions { display: flex; gap: 8px; }
 .btn-save { flex: 1; padding: 8px; border: none; border-radius: 8px; background: #4caf50; color: #fff; font-weight: bold; cursor: pointer; }
 .btn-cancel-edit { flex: 1; padding: 8px; border: none; border-radius: 8px; background: #333; color: #fff; cursor: pointer; }
+.task-options-row { display: grid; grid-template-columns: minmax(120px, auto) 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
+.task-options-row select { margin-bottom: 0; }
+.important-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border: 1px solid #333; border-radius: 8px; background: #0f0e17; color: #fff; cursor: pointer; font-weight: bold; }
+.important-toggle input { width: 18px; height: 18px; margin: 0; accent-color: #ff8906; }
+.important-toggle span { color: #ff8f45; }
 
 /* Toast */
 .toast { position: fixed; bottom: 24px; right: 24px; background: #ff8906; color: #0f0e17; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 0.95rem; animation: slideIn 0.3s ease; }
 @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
 /* Calendar */
-.calendar-container { background: #1a1a2e; border-radius: 12px; padding: 20px; margin-bottom: 24px; }
-.calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-wrap: wrap; gap: 10px; }
-.calendar-header button { padding: 8px 16px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; cursor: pointer; }
-.view-buttons { display: flex; gap: 8px; }
-.view-buttons button.active { background: #ff8906; color: #0f0e17; border-color: #ff8906; }
-.calendar-weekdays { display: grid; grid-template-columns: repeat(7, 1fr); text-align: center; margin-bottom: 10px; }
-.weekday { padding: 10px; font-weight: bold; color: #ff8906; }
-.calendar-days { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
-.calendar-day { aspect-ratio: 1; background: #0f0e17; border-radius: 8px; padding: 8px; cursor: pointer; position: relative; transition: all 0.2s; }
-.calendar-day:hover { background: #2a2a3e; }
-.calendar-day.selected { background: #ff8906; color: #0f0e17; }
-.calendar-day.empty { background: transparent; cursor: default; }
-.day-number { font-size: 0.9rem; font-weight: bold; }
-.day-badge { position: absolute; bottom: 4px; right: 4px; font-size: 0.7rem; background: #ff8906; color: #0f0e17; padding: 2px 4px; border-radius: 10px; }
+.calendar-container { background: #1a1a2e; border-radius: 12px; padding: 16px; margin-bottom: 18px; border: 1px solid #2a2a3e; overflow: hidden; }
+.calendar-header { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; margin-bottom: 14px; }
+.calendar-nav { display: grid; grid-template-columns: 36px minmax(0, 1fr) 36px; align-items: center; gap: 8px; min-width: 0; }
+.calendar-nav h2 { color: #ff8906; text-align: center; font-size: 1rem; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.calendar-header button { min-height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; cursor: pointer; }
+.calendar-header button:hover { border-color: #ff8906; color: #ff8906; }
+.view-buttons { display: inline-grid; grid-template-columns: repeat(3, minmax(62px, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: #0f0e17; border: 1px solid #333; }
+.view-buttons button { border: none; border-radius: 7px; min-height: 30px; padding: 0 10px; font-size: 0.8rem; background: transparent; color: #aaa; }
+.view-buttons button.active { background: #ff8906; color: #0f0e17; font-weight: bold; }
+.calendar-today { color: #ff8906 !important; font-weight: bold; }
+.calendar-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; margin-bottom: 6px; gap: 4px; }
+.weekday { padding: 4px 0; font-size: 0.72rem; font-weight: bold; color: #888; }
+.calendar-days { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 4px; }
+.calendar-day { min-width: 0; aspect-ratio: 1; background: #0f0e17; border: 1px solid transparent; border-radius: 7px; padding: 5px 3px; cursor: pointer; position: relative; transition: border-color 0.2s, background 0.2s; color: #fff; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; }
+.calendar-day:hover { background: #24243a; }
+.calendar-day.today { border-color: #ff8906; }
+.calendar-day.selected { background: #ff8906; color: #0f0e17; font-weight: bold; }
+.calendar-day.empty { background: transparent; cursor: default; pointer-events: none; }
+.day-number { font-size: 0.86rem; line-height: 1; font-weight: 700; }
+.day-badge { min-width: 26px; text-align: center; font-size: 0.62rem; line-height: 1; background: #2a2a3e; color: #ff8906; padding: 3px 4px; border-radius: 999px; }
+.calendar-day.selected .day-badge { background: rgba(15,14,23,0.18); color: #0f0e17; }
+.day-badge.done { color: #4caf50; }
 
 /* Week view */
-.week-view { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; }
-.week-day { background: #0f0e17; border-radius: 8px; padding: 12px; cursor: pointer; }
+.week-view { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
+.week-day { min-width: 0; background: #0f0e17; border: 1px solid #2a2a3e; border-radius: 9px; padding: 10px; cursor: pointer; color: #fff; text-align: left; min-height: 160px; display: flex; flex-direction: column; gap: 10px; }
+.week-day:hover { border-color: #ff8906; }
 .week-day-selected { outline: 2px solid #ff8906; outline-offset: -2px; }
-.week-day-header { text-align: center; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid #333; }
-.week-day-header.today { color: #ff8906; }
-.week-day-number { font-size: 1.2rem; font-weight: bold; }
-.week-day-tasks { max-height: 300px; overflow-y: auto; }
-.week-task { display: flex; align-items: center; gap: 6px; padding: 4px 0; font-size: 0.8rem; }
-.week-task.completed span { text-decoration: line-through; color: #aaa; }
-.week-task button { background: none; border: none; cursor: pointer; font-size: 0.7rem; }
+.week-day-header { display: grid; grid-template-columns: 1fr auto; gap: 4px; align-items: center; padding-bottom: 8px; border-bottom: 1px solid #2a2a3e; }
+.week-day-header span { font-size: 0.72rem; color: #aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.week-day-header strong { font-size: 1.15rem; color: #fff; }
+.week-day-header em { grid-column: 1 / -1; justify-self: start; font-style: normal; font-size: 0.7rem; color: #ff8906; background: #2a1f00; border-radius: 999px; padding: 2px 7px; }
+.week-day-header.today span, .week-day-header.today strong { color: #ff8906; }
+.week-day-tasks { display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
+.week-task { display: grid; grid-template-columns: 8px minmax(0, 1fr); align-items: center; gap: 6px; font-size: 0.76rem; color: #ddd; }
+.week-task span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.week-task-dot { width: 7px; height: 7px; border-radius: 50%; background: #ff8906; }
+.week-task.important .week-task-dot { background: #f44336; }
+.week-task.completed { color: #777; text-decoration: line-through; }
+.week-empty, .week-more { font-size: 0.74rem; color: #666; }
 
 /* Day view */
-.day-view { padding: 16px; }
-.day-view h3 { text-align: center; margin-bottom: 20px; color: #ff8906; }
-.day-task { display: flex; gap: 12px; padding: 12px; background: #0f0e17; border-radius: 8px; margin-bottom: 8px; align-items: flex-start; }
+.day-view { padding: 4px 0 0; }
+.day-view h3 { text-align: center; margin-bottom: 14px; color: #ff8906; font-size: 1rem; text-transform: capitalize; }
+.day-task { display: flex; gap: 12px; padding: 12px; background: #0f0e17; border: 1px solid #2a2a3e; border-radius: 9px; margin-bottom: 8px; align-items: flex-start; }
 .day-task.completed { opacity: 0.6; }
 .day-task.completed strong { text-decoration: line-through; }
-.day-task-info { flex: 1; }
+.day-task-info { flex: 1; min-width: 0; }
 .day-task-info p { font-size: 0.85rem; color: #aaa; margin-top: 4px; }
+.day-task > button:last-child { background: transparent; border: none; color: #777; cursor: pointer; font-size: 1.1rem; }
 
 /* Add task button */
 .add-task-btn { width: 100%; padding: 16px; background: #ff8906; color: #0f0e17; border: none; border-radius: 12px; font-weight: bold; font-size: 1rem; cursor: pointer; margin-bottom: 24px; }
+.notifications-btn { width: 100%; padding: 12px; background: transparent; color: #aaa; border: 1px solid #333; border-radius: 10px; font-weight: bold; cursor: pointer; margin: -8px 0 18px; }
+.notifications-btn.enabled { color: #4caf50; border-color: #1b3a1f; background: #102016; }
 
 /* Challenges */
 .challenges-bar { background: #1a1a2e; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
@@ -307,23 +331,27 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .task-delete { font-size: 1.1rem; padding: 6px; }
   
   /* Calendar */
-  .calendar-container { padding: 16px; }
-  .calendar-header { flex-direction: row; align-items: center; gap: 8px; flex-wrap: nowrap; }
-  .calendar-header h2 { font-size: 1rem; flex: 1; text-align: center; }
-  .calendar-header button { padding: 8px 12px; font-size: 1rem; min-width: 40px; }
-  .view-buttons { width: auto; justify-content: center; margin-top: 8px; }
-  .view-buttons button { padding: 6px 10px; font-size: 0.8rem; }
-  .weekday { font-size: 0.75rem; padding: 8px; }
-  .calendar-day { padding: 8px; min-height: 44px; }
-  .day-number { font-size: 0.9rem; }
-  .day-badge { font-size: 0.7rem; padding: 2px 4px; }
+  .calendar-container { padding: 12px; border-radius: 10px; }
+  .calendar-header { grid-template-columns: 1fr; gap: 8px; }
+  .calendar-nav { grid-template-columns: 34px minmax(0, 1fr) 34px; }
+  .calendar-nav h2 { font-size: 0.95rem; }
+  .calendar-header button { min-height: 32px; padding: 0 8px; font-size: 0.85rem; }
+  .view-buttons { width: 100%; grid-template-columns: repeat(3, 1fr); }
+  .view-buttons button { padding: 0 6px; font-size: 0.78rem; }
+  .calendar-today { width: 100%; }
+  .weekday { font-size: 0.68rem; padding: 3px 0; }
+  .calendar-days { gap: 3px; }
+  .calendar-day { border-radius: 6px; padding: 3px 1px; min-height: 42px; }
+  .day-number { font-size: 0.8rem; }
+  .day-badge { min-width: 22px; font-size: 0.56rem; padding: 2px 3px; }
   
   /* Week view */
-  .week-view { grid-template-columns: 1fr; gap: 12px; }
-  .week-day { padding: 16px; }
-  .week-day-header { flex-direction: row; justify-content: space-between; align-items: center; }
-  .week-day-number { font-size: 1rem; }
-  .week-task { font-size: 0.85rem; padding: 8px 0; }
+  .week-view { grid-template-columns: 1fr; gap: 8px; }
+  .week-day { min-height: auto; padding: 12px; }
+  .week-day-header { grid-template-columns: 1fr auto auto; border-bottom: none; padding-bottom: 0; }
+  .week-day-header em { grid-column: auto; justify-self: end; }
+  .week-day-tasks { margin-top: 2px; }
+  .week-task { font-size: 0.82rem; }
   
   /* Day view */
   .day-view { padding: 12px; }
@@ -352,6 +380,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .add-task h3 { font-size: 1rem; }
   .add-task input, .add-task select, .add-task textarea { font-size: 0.9rem; padding: 12px; }
   .add-task-meta { grid-template-columns: 1fr; gap: 8px; }
+  .task-options-row { grid-template-columns: 1fr; }
   .row { flex-direction: column; }
   .add-task .row button { width: 100%; }
   .add-task-btn { padding: 14px; font-size: 0.95rem; }

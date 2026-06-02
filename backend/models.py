@@ -10,6 +10,7 @@ class User(Base):
     hashed_password = Column(String)
     exp = Column(Integer, default=0)
     streak = Column(Integer, default=0)
+    last_streak_date = Column(Date, nullable=True)
     tasks = relationship("Task", back_populates="owner")
     achievements = relationship("UserAchievement", back_populates="user")
 
@@ -21,6 +22,8 @@ class Task(Base):
     difficulty = Column(String, default="easy")  # easy, medium, hard
     category = Column(String, default="Inne")
     due_date = Column(Date, default=date.today)  # DATA zadania
+    important = Column(Boolean, default=False)
+    reminder_offset_days = Column(Integer, nullable=True)  # ile dni przed terminem przypomnieć
     completed = Column(Boolean, default=False)
     exp_awarded = Column(Boolean, default=False)  # Czy EXP już przyznany
     exp_awarded_amount = Column(Integer, default=0)  # Faktycznie przyznane EXP (z bonusem/karą)

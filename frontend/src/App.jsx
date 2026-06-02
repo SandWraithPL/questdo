@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import "./index.css";
@@ -15,6 +16,15 @@ const EXP_TIMING_LABELS = {
   ontime: { text: "Na czas", className: "timing-ontime" },
   late: { text: "Spóźnione -50%", className: "timing-late" },
 };
+const WEEKDAYS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
+const WEEKDAYS_LONG = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"];
+const REMINDER_OPTIONS = [
+  { value: "", label: "Bez przypomnienia" },
+  { value: "0", label: "W dniu zadania" },
+  { value: "1", label: "Dzień wcześniej" },
+  { value: "3", label: "3 dni wcześniej" },
+  { value: "7", label: "Tydzień wcześniej" },
+];
 
 function getExpPreview(difficulty, dueDateStr) {
   const base = EXP_MAP[difficulty] || 10;
@@ -59,6 +69,15 @@ function getCategoryEmoji(cat) {
   return CATEGORIES.find((c) => c.value === cat)?.emoji || "📦";
 }
 
+function getReminderLabel(value) {
+  const normalized = value === null || value === undefined ? "" : String(value);
+  return REMINDER_OPTIONS.find((o) => o.value === normalized)?.label || "Przypomnienie";
+}
+
+function parseReminderValue(value) {
+  return value === "" ? null : Number(value);
+}
+
 function getExpProgress(exp, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
   let current = 0, next = thresholds[1] || 100;
   for (let i = thresholds.length - 1; i >= 0; i--) {
@@ -74,6 +93,26 @@ function getExpProgress(exp, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
 
 function Toast({ message }) {
   return <div className="toast">{message}</div>;
+}
+
+async function ensureNotificationPermission() {
+  if (!("Notification" in window)) return "unsupported";
+  if (Notification.permission === "default") return Notification.requestPermission();
+  return Notification.permission;
+}
+
+async function showAppNotification(title, body) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return false;
+  const payload = { title, body, icon: "/favicon.svg", badge: "/favicon.svg" };
+  if ("serviceWorker" in navigator) {
+    const reg = await navigator.serviceWorker.getRegistration();
+    if (reg?.showNotification) {
+      await reg.showNotification(title, payload);
+      return true;
+    }
+  }
+  new Notification(title, payload);
+  return true;
 }
 
 function Auth({ onLogin }) {
@@ -128,66 +167,95 @@ function Auth({ onLogin }) {
 }
 
 function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete }) {
-  const [currentMonth, setCurrentMonth] = useState(new Date());
+  const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
   const [view, setView] = useState("month");
   const selectedStr = toDateStr(selectedDate);
   const selectedDateObj = selectedDate instanceof Date ? selectedDate : new Date(selectedStr + "T12:00:00");
 
-  const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-  const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
-  const formatDate = (year, month, day) => `${year}-${String(month + 1).padStart(2, "0")}-${String(day).padStart(2, "0")}`;
   const getTasksForDate = (dateStr) => tasks.filter((t) => t.due_date === dateStr);
+  const taskStats = (dateStr) => {
+    const dayTasks = getTasksForDate(dateStr);
+    return { total: dayTasks.length, done: dayTasks.filter((t) => t.completed).length };
+  };
+
+  const selectDay = (dateStr) => {
+    onDateSelect(dateStr);
+    setCursor(new Date(dateStr + "T12:00:00"));
+  };
+
+  const goToday = () => {
+    const today = new Date();
+    setCursor(today);
+    onDateSelect(toDateStr(today));
+  };
+
+  const shift = (delta) => {
+    if (view === "month") setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1, 12, 0, 0));
+    if (view === "week") {
+      const next = new Date(selectedDateObj);
+      next.setDate(selectedDateObj.getDate() + delta * 7);
+      selectDay(toDateStr(next));
+    }
+    if (view === "day") {
+      const next = new Date(selectedDateObj);
+      next.setDate(selectedDateObj.getDate() + delta);
+      selectDay(toDateStr(next));
+    }
+  };
 
   const renderMonthView = () => {
-    const year = currentMonth.getFullYear();
-    const month = currentMonth.getMonth();
-    const daysInMonth = getDaysInMonth(year, month);
-    const firstDay = getFirstDayOfMonth(year, month);
+    const year = cursor.getFullYear();
+    const month = cursor.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
     const days = [];
-    for (let i = 0; i < firstDay; i++) days.push(<div key={`empty-${i}`} className="calendar-day empty" />);
+    for (let i = 0; i < firstWeekday; i++) days.push(<div key={`empty-${i}`} className="calendar-day empty" />);
     for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = formatDate(year, month, day);
-      const dayTasks = getTasksForDate(dateStr);
-      const completedCount = dayTasks.filter((t) => t.completed).length;
+      const dateStr = toDateStr(new Date(year, month, day, 12, 0, 0));
+      const stats = taskStats(dateStr);
       const isSelected = selectedStr === dateStr;
+      const isToday = toDateStr(new Date()) === dateStr;
       days.push(
-        <div key={day} className={`calendar-day ${isSelected ? "selected" : ""}`} onClick={() => onDateSelect(dateStr)}>
+        <button key={dateStr} type="button" className={`calendar-day ${isSelected ? "selected" : ""} ${isToday ? "today" : ""}`} onClick={() => selectDay(dateStr)}>
           <span className="day-number">{day}</span>
-          {dayTasks.length > 0 && <div className="day-badge">{completedCount}/{dayTasks.length}</div>}
-        </div>
+          {stats.total > 0 && <span className={`day-badge ${stats.done === stats.total ? "done" : ""}`}>{stats.done}/{stats.total}</span>}
+        </button>
       );
     }
     return days;
   };
 
   const renderWeekView = () => {
-    const today = new Date();
     const startOfWeek = new Date(selectedDateObj);
-    startOfWeek.setDate(selectedDateObj.getDate() - selectedDateObj.getDay());
+    const mondayIndex = (selectedDateObj.getDay() + 6) % 7;
+    startOfWeek.setDate(selectedDateObj.getDate() - mondayIndex);
     const days = [];
     for (let i = 0; i < 7; i++) {
       const d = new Date(startOfWeek);
       d.setDate(startOfWeek.getDate() + i);
       const dateStr = toDateStr(d);
       const dayTasks = getTasksForDate(dateStr);
-      const isToday = d.toDateString() === today.toDateString();
+      const stats = taskStats(dateStr);
+      const isToday = dateStr === toDateStr(new Date());
       const isSelected = selectedStr === dateStr;
       days.push(
-        <div key={i} className={`week-day ${isSelected ? "week-day-selected" : ""}`} onClick={() => onDateSelect(dateStr)}>
+        <button key={dateStr} type="button" className={`week-day ${isSelected ? "week-day-selected" : ""}`} onClick={() => selectDay(dateStr)}>
           <div className={`week-day-header ${isToday ? "today" : ""}`}>
-            <div>{["Nie", "Pon", "Wt", "Śr", "Czw", "Pt", "Sob"][d.getDay()]}</div>
-            <div className="week-day-number">{d.getDate()}</div>
+            <span>{WEEKDAYS_LONG[i]}</span>
+            <strong>{d.getDate()}</strong>
+            <em>{stats.total ? `${stats.done}/${stats.total}` : "0"}</em>
           </div>
           <div className="week-day-tasks">
-            {dayTasks.map(task => (
-              <div key={task.id} className={`week-task ${task.completed ? "completed" : ""}`}>
-                <input type="checkbox" checked={task.completed} disabled={task.completed} onChange={(e) => { e.stopPropagation(); if (!task.completed) onTaskToggle(task); }} />
+            {dayTasks.length === 0 && <span className="week-empty">Brak questów</span>}
+            {dayTasks.slice(0, 4).map(task => (
+              <div key={task.id} className={`week-task ${task.completed ? "completed" : ""} ${task.important ? "important" : ""}`}>
+                <span className="week-task-dot" />
                 <span>{task.title}</span>
-                <button type="button" onClick={(e) => { e.stopPropagation(); onTaskDelete(task); }}>🗑</button>
               </div>
             ))}
+            {dayTasks.length > 4 && <span className="week-more">+{dayTasks.length - 4} więcej</span>}
           </div>
-        </div>
+        </button>
       );
     }
     return days;
@@ -201,13 +269,14 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
         {dayTasks.length === 0 && <p className="empty">Brak zadań na ten dzień</p>}
         {dayTasks.map(task => (
           <div key={task.id} className={`day-task ${task.completed ? "completed" : ""}`}>
-            <input type="checkbox" checked={task.completed} disabled={task.completed} onChange={() => !task.completed && onTaskToggle(task)} />
+            {task.completed ? <div className="task-check checked locked">✓</div> : <button type="button" className="task-check" onClick={() => onTaskToggle(task)} />}
             <div className="day-task-info">
-              <strong>{task.title}</strong>
+              <strong>{task.important ? "Ważne · " : ""}{task.title}</strong>
               {task.description && <p>{task.description}</p>}
               <div className="task-meta">
                 <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>
                 <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>
+                {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
               </div>
             </div>
             <button type="button" onClick={() => onTaskDelete(task)}>🗑</button>
@@ -217,25 +286,38 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
     );
   };
 
-  const changeMonth = (delta) => setCurrentMonth(new Date(currentMonth.getFullYear(), currentMonth.getMonth() + delta, 1));
-  const headerTitle = view === "month" ? currentMonth.toLocaleDateString("pl-PL", { month: "long", year: "numeric" }) : selectedDateObj.toLocaleDateString("pl-PL", { month: "long", year: "numeric" });
+  const weekTitle = (() => {
+    const start = new Date(selectedDateObj);
+    start.setDate(selectedDateObj.getDate() - ((selectedDateObj.getDay() + 6) % 7));
+    const end = new Date(start);
+    end.setDate(start.getDate() + 6);
+    return `${start.toLocaleDateString("pl-PL", { day: "numeric", month: "short" })} - ${end.toLocaleDateString("pl-PL", { day: "numeric", month: "short" })}`;
+  })();
+  const headerTitle = view === "month"
+    ? cursor.toLocaleDateString("pl-PL", { month: "long", year: "numeric" })
+    : view === "week"
+      ? weekTitle
+      : selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" });
 
   return (
     <div className="calendar-container">
       <div className="calendar-header">
-        <button type="button" onClick={() => changeMonth(-1)}>◀</button>
-        <h2>{headerTitle}</h2>
-        <button type="button" onClick={() => changeMonth(1)}>▶</button>
+        <div className="calendar-nav">
+          <button type="button" onClick={() => shift(-1)} aria-label="Poprzedni zakres">◀</button>
+          <h2>{headerTitle}</h2>
+          <button type="button" onClick={() => shift(1)} aria-label="Następny zakres">▶</button>
+        </div>
         <div className="view-buttons">
           <button type="button" onClick={() => setView("month")} className={view === "month" ? "active" : ""}>Miesiąc</button>
           <button type="button" onClick={() => setView("week")} className={view === "week" ? "active" : ""}>Tydzień</button>
           <button type="button" onClick={() => setView("day")} className={view === "day" ? "active" : ""}>Dzień</button>
         </div>
+        {view === "month" && <button type="button" className="calendar-today" onClick={goToday}>Dzisiaj</button>}
       </div>
       <div className="calendar-grid">
         {view === "month" && (
           <>
-            <div className="calendar-weekdays">{["Nie", "Pon", "Wt", "Śr", "Czw", "Pt", "Sob"].map(day => <div key={day} className="weekday">{day}</div>)}</div>
+            <div className="calendar-weekdays">{WEEKDAYS.map(day => <div key={day} className="weekday">{day}</div>)}</div>
             <div className="calendar-days">{renderMonthView()}</div>
           </>
         )}
@@ -251,6 +333,7 @@ function ChallengesBar({ challenges }) {
   const bonusExp = challenges.triple_bonus_exp || 35;
   
   const getChallengeDescription = (goal) => {
+    if (goal.description) return goal.description;
     const label = goal.label;
     const target = goal.target;
     const descMap = {
@@ -298,7 +381,7 @@ function ChallengesBar({ challenges }) {
   );
 }
 
-function LeaderboardPanel({ leaderboard, currentUser }) {
+function LeaderboardPanel({ currentUser }) {
   const [open, setOpen] = useState(false);
   const [rankType, setRankType] = useState("exp");
   const [allRankings, setAllRankings] = useState(null);
@@ -398,12 +481,30 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
   const doneCount = allDay.filter((t) => t.completed).length;
   const percent = allDay.length ? Math.round((doneCount / allDay.length) * 100) : 0;
 
-  const startEdit = (task) => { if (task.completed) return; setEditingId(task.id); setEditForm({ title: task.title, description: task.description || "", difficulty: task.difficulty, category: task.category, due_date: task.due_date }); };
+  const startEdit = (task) => {
+    if (task.completed) return;
+    setEditingId(task.id);
+    setEditForm({
+      title: task.title,
+      description: task.description || "",
+      difficulty: task.difficulty,
+      category: task.category,
+      due_date: task.due_date,
+      important: !!task.important,
+      reminder_offset_days: task.reminder_offset_days ?? "",
+    });
+  };
   const cancelEdit = () => { setEditingId(null); setEditForm({}); };
   const saveEdit = async (task) => {
     if (!editForm.title?.trim()) { onError("Tytuł jest wymagany"); return; }
     try {
-      const payload = { title: editForm.title.trim(), description: editForm.description, ...(task.exp_awarded ? {} : { difficulty: editForm.difficulty, category: editForm.category, due_date: editForm.due_date }) };
+      const payload = {
+        title: editForm.title.trim(),
+        description: editForm.description,
+        important: !!editForm.important,
+        reminder_offset_days: parseReminderValue(editForm.reminder_offset_days),
+        ...(task.exp_awarded ? {} : { difficulty: editForm.difficulty, category: editForm.category, due_date: editForm.due_date }),
+      };
       await onSave(task.id, payload);
       cancelEdit();
     } catch (e) { onError(e.response?.data?.detail || "Błąd zapisu"); }
@@ -435,19 +536,27 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
                 </div>
                 <DatePicker label="Termin" value={editForm.due_date || ""} onChange={(due_date) => setEditForm({ ...editForm, due_date })} />
               </>)}
+              <label className="important-toggle">
+                <input type="checkbox" checked={!!editForm.important} onChange={(e) => setEditForm({ ...editForm, important: e.target.checked, reminder_offset_days: e.target.checked && editForm.reminder_offset_days === "" ? "7" : editForm.reminder_offset_days })} />
+                <span>Ważne</span>
+              </label>
+              <select className="input-edit" value={editForm.reminder_offset_days ?? ""} onChange={(e) => setEditForm({ ...editForm, reminder_offset_days: e.target.value })}>
+                {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+              </select>
               <div className="edit-actions"><button className="btn-save" onClick={() => saveEdit(task)}>✓ Zapisz</button><button className="btn-cancel-edit" onClick={cancelEdit}>✗ Anuluj</button></div>
             </div>
           ) : (
             <>
               {task.completed ? <div className="task-check checked locked" title="Ukończone - tylko usunięcie">✓</div> : <button className="task-check" onClick={() => onToggle(task)}></button>}
               <div className="task-info">
-                <h4 className={task.completed ? "done" : ""}>{task.title}</h4>
+                <h4 className={task.completed ? "done" : ""}>{task.important && <span className="important-mark">Ważne · </span>}{task.title}</h4>
                 {task.description && <p>{task.description}</p>}
                 <div className="task-meta">
                   <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>
                   <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>
                   <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>
                   {!task.exp_awarded && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = EXP_TIMING_LABELS[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
+                  {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
                 </div>
               </div>
               <div className="task-actions">
@@ -589,7 +698,6 @@ export default function App() {
   const [rareDrops, setRareDrops] = useState(null);
   const [levelThresholds, setLevelThresholds] = useState(DEFAULT_LEVEL_THRESHOLDS);
   const [challenges, setChallenges] = useState(null);
-  const [leaderboard, setLeaderboard] = useState([]);
   const [toast, setToast] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showAddTask, setShowAddTask] = useState(false);
@@ -598,27 +706,72 @@ export default function App() {
   const [difficulty, setDifficulty] = useState("easy");
   const [category, setCategory] = useState("Inne");
   const [taskDate, setTaskDate] = useState(toDateStr(new Date()));
+  const [important, setImportant] = useState(false);
+  const [reminderOffset, setReminderOffset] = useState("");
+  const [notificationsEnabled, setNotificationsEnabled] = useState(() => ("Notification" in window ? Notification.permission === "granted" : false));
   const [showAdminPanel, setShowAdminPanel] = useState(false);
 
   const headers = { Authorization: `Bearer ${token}` };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+  const enableNotifications = async () => {
+    const permission = await ensureNotificationPermission();
+    const enabled = permission === "granted";
+    setNotificationsEnabled(enabled);
+    showToast(enabled ? "Powiadomienia są włączone" : permission === "unsupported" ? "Ta przeglądarka nie obsługuje powiadomień" : "Nie włączono powiadomień");
+  };
+
+  useEffect(() => {
+    if (!("serviceWorker" in navigator)) return;
+    navigator.serviceWorker.register("/sw.js").catch((err) => console.error("SW register error:", err));
+  }, []);
+
+  useEffect(() => {
+    if (!notificationsEnabled || !tasks.length) return undefined;
+    const timers = [];
+    const now = Date.now();
+    tasks
+      .filter((task) => !task.completed && task.reminder_offset_days !== null && task.reminder_offset_days !== undefined)
+      .forEach((task) => {
+        const reminderAt = new Date(`${task.due_date}T09:00:00`);
+        reminderAt.setDate(reminderAt.getDate() - Number(task.reminder_offset_days || 0));
+        const delay = reminderAt.getTime() - now;
+        const storageKey = `questdo-reminded-${task.id}-${task.due_date}-${task.reminder_offset_days}`;
+        if (delay < -1000 || delay > 2147483647 || localStorage.getItem(storageKey)) return;
+        const timer = setTimeout(() => {
+          localStorage.setItem(storageKey, "1");
+          showAppNotification(task.important ? "Ważny quest czeka" : "QuestDo przypomina", `${task.title} · termin ${task.due_date}`);
+        }, Math.max(0, delay));
+        timers.push(timer);
+      });
+    return () => timers.forEach(clearTimeout);
+  }, [tasks, notificationsEnabled]);
 
   const fetchData = async () => {
     if (!token) return;
     try {
-      const [userRes, tasksRes, achRes, chRes, lbRes, levelsRes, rareDropsRes] = await Promise.all([
+      const [userRes, tasksRes, achRes, chRes, levelsRes, rareDropsRes] = await Promise.all([
         axios.get(`${API}/me`, { headers }), axios.get(`${API}/tasks`, { headers }), axios.get(`${API}/achievements`, { headers }),
-        axios.get(`${API}/challenges`, { headers }), axios.get(`${API}/leaderboard`, { headers }), axios.get(`${API}/game/levels`, { headers }).catch(() => ({ data: null })),
+        axios.get(`${API}/challenges`, { headers }), axios.get(`${API}/game/levels`, { headers }).catch(() => ({ data: null })),
         axios.get(`${API}/rare-drops/inventory`, { headers }).catch(() => ({ data: null })),
       ]);
       const oldCount = achievements.unlocked?.length || 0;
       const newUnlocked = achRes.data.unlocked || [];
-      if (newUnlocked.length > oldCount) { const newest = newUnlocked[newUnlocked.length - 1]; showToast(`🏆 Odblokowano: ${newest.title}! ${newest.icon}`); }
+      if (newUnlocked.length > oldCount) {
+        const newest = newUnlocked[newUnlocked.length - 1];
+        showToast(`🏆 Odblokowano: ${newest.title}! ${newest.icon}`);
+        showAppNotification("Nowe osiągnięcie", `${newest.title}: ${newest.description}`);
+      }
       setUser(userRes.data); setTasks(tasksRes.data); setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
       if (levelsRes.data?.length) setLevelThresholds(levelsRes.data.map(l => l.threshold));
-      setChallenges(chRes.data); setLeaderboard(lbRes.data);
+      setChallenges(chRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
-      try { const rareDropRes = await axios.post(`${API}/rare-drops/claim-daily`, {}, { headers }); if (rareDropRes.data.status === "success") showToast(`✨ ${rareDropRes.data.message}`); } catch (e) {}
+      try {
+        const rareDropRes = await axios.post(`${API}/rare-drops/claim-daily`, {}, { headers });
+        if (rareDropRes.data.status === "success") {
+          showToast(`✨ ${rareDropRes.data.message}`);
+          showAppNotification("Nowa znajdźka", rareDropRes.data.item ? `${rareDropRes.data.item.name}: ${rareDropRes.data.item.description}` : rareDropRes.data.message);
+        }
+      } catch (err) { console.debug("Rare drop claim skipped:", err); }
     } catch (err) { console.error("Fetch error:", err); localStorage.removeItem("token"); setToken(null); }
   };
 
@@ -628,8 +781,8 @@ export default function App() {
   const addTask = async () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
     try {
-      await axios.post(`${API}/tasks`, { title, description: desc, difficulty, category, due_date: taskDate }, { headers });
-      setTitle(""); setDesc(""); setShowAddTask(false); fetchData(); showToast(`✅ Dodano quest na ${taskDate}`);
+      await axios.post(`${API}/tasks`, { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset) }, { headers });
+      setTitle(""); setDesc(""); setImportant(false); setReminderOffset(""); setShowAddTask(false); fetchData(); showToast(`✅ Dodano quest na ${taskDate}`);
     } catch (err) { showToast(err.response?.data?.detail || "Błąd dodawania"); }
   };
 
@@ -662,14 +815,8 @@ export default function App() {
   return (
     <div className="app">
       <div className="header"><h1>⚔️ QuestDo</h1><Profile user={user} onLogout={logout} onDeleteAccount={deleteAccount} achievements={achievements} rareDrops={rareDrops} onOpenAdmin={() => setShowAdminPanel(true)} /></div>
-      <div className="profile-card">
-        <div className="avatar">{user.username[0].toUpperCase()}</div>
-        <div className="profile-info"><h2>Poziom {user.level}</h2><div className="title">{user.title}</div><div className="exp-bar-bg"><div className="exp-bar" style={{ width: `${progress}%` }} /></div><div className="exp-text">{user.exp} EXP</div>{user.next_level_title && <div className="level-next-hint">Do "{user.next_level_title}": {user.next_level_exp} EXP</div>}{user.exp_tip && <p className="exp-tip">{user.exp_tip}</p>}</div>
-        <div className="streak"><div className="flame">🔥</div><div className="count">{user.streak}</div><div className="label">seria</div></div>
-      </div>
-      <ChallengesBar challenges={challenges} />
-      <LeaderboardPanel leaderboard={leaderboard} currentUser={user.username} />
       <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">
@@ -677,11 +824,29 @@ export default function App() {
             <select value={category} onChange={(e) => setCategory(e.target.value)}>{CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}</select>
             <DatePicker value={taskDate} onChange={setTaskDate} label="Termin" />
           </div>
+          <div className="task-options-row">
+            <label className="important-toggle">
+              <input type="checkbox" checked={important} onChange={(e) => { setImportant(e.target.checked); if (e.target.checked && reminderOffset === "") setReminderOffset("7"); }} />
+              <span>Ważne</span>
+            </label>
+            <select value={reminderOffset} onChange={(e) => setReminderOffset(e.target.value)}>
+              {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </select>
+          </div>
           {(() => { const p = getExpPreview(difficulty, taskDate); const info = EXP_TIMING_LABELS[p.timing]; return <p className="exp-preview-hint">Ukończ dziś: <strong>+{p.amount} EXP</strong> ({info.text})</p>; })()}
           <div className="row"><button onClick={addTask}>Dodaj Quest</button><button onClick={() => setShowAddTask(false)} className="cancel-btn">Anuluj</button></div>
         </div>
       )}
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} />
+      <button type="button" className={`notifications-btn ${notificationsEnabled ? "enabled" : ""}`} onClick={enableNotifications}>
+        {notificationsEnabled ? "Powiadomienia włączone" : "Włącz powiadomienia"}
+      </button>
+      <div className="profile-card">
+        <div className="avatar">{user.username[0].toUpperCase()}</div>
+        <div className="profile-info"><h2>Poziom {user.level}</h2><div className="title">{user.title}</div><div className="exp-bar-bg"><div className="exp-bar" style={{ width: `${progress}%` }} /></div><div className="exp-text">{user.exp} EXP</div>{user.next_level_title && <div className="level-next-hint">Do "{user.next_level_title}": {user.next_level_exp} EXP</div>}{user.exp_tip && <p className="exp-tip">{user.exp_tip}</p>}</div>
+        <div className="streak"><div className="flame">🔥</div><div className="count">{user.streak}</div><div className="label">seria</div></div>
+      </div>
+      <ChallengesBar challenges={challenges} />
+      <LeaderboardPanel currentUser={user.username} />
       {toast && <Toast message={toast} />}
       <AdminPanel isOpen={showAdminPanel} onClose={() => setShowAdminPanel(false)} headers={headers} />
     </div>

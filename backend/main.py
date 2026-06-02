@@ -47,6 +47,12 @@ def migrate_schema():
         if "completed_at" not in cols:
             conn.execute(text("ALTER TABLE tasks ADD COLUMN completed_at TIMESTAMP"))
             print("Migracja: dodano kolumnę completed_at")
+        if "important" not in cols:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN important BOOLEAN DEFAULT FALSE"))
+            print("Migracja: dodano kolumnę important")
+        if "reminder_offset_days" not in cols:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN reminder_offset_days INTEGER"))
+            print("Migracja: dodano kolumnę reminder_offset_days")
     if "daily_quest_assignments" not in insp.get_table_names():
         models.DailyQuestAssignment.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę daily_quest_assignments")
@@ -56,7 +62,15 @@ def migrate_schema():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE achievements ADD COLUMN title VARCHAR"))
             print("Migracja: dodano kolumnę achievements.title")
-    
+
+    # Users - last_streak_date for proper streak tracking
+    if "users" in insp.get_table_names():
+        user_cols = {c["name"] for c in insp.get_columns("users")}
+        if "last_streak_date" not in user_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN last_streak_date DATE"))
+            print("Migracja: dodano kolumnę users.last_streak_date")
+
     # Rare Drops
     if "rare_drops" not in insp.get_table_names():
         models.RareDrop.__table__.create(bind=engine)
@@ -64,7 +78,7 @@ def migrate_schema():
     if "player_rare_drops" not in insp.get_table_names():
         models.PlayerRareDrop.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę player_rare_drops")
-    
+
     # Exclusive Achievements
     if "exclusive_achievements" not in insp.get_table_names():
         models.ExclusiveAchievement.__table__.create(bind=engine)
@@ -94,6 +108,16 @@ def migrate_schema():
             db.add(rare_drop)
         db.commit()
         print(f"Migracja: załadowano {len(gc.RARE_DROPS)} rare drops")
+    else:
+        for drop_def in gc.RARE_DROPS:
+            rare_drop = db.query(models.RareDrop).filter(models.RareDrop.slug == drop_def["slug"]).first()
+            if rare_drop:
+                rare_drop.name = drop_def["name"]
+                rare_drop.description = drop_def["description"]
+                rare_drop.icon = drop_def["icon"]
+                rare_drop.rarity = drop_def["rarity"]
+                rare_drop.drop_chance_percent = drop_def["drop_chance"]
+        db.commit()
     
     # Seed exclusive achievements
     exclusive_ach_count = db.query(models.ExclusiveAchievement).count()
@@ -109,6 +133,17 @@ def migrate_schema():
             db.add(exclusive_ach)
         db.commit()
         print(f"Migracja: załadowano {len(gc.EXCLUSIVE_ACHIEVEMENTS)} exclusive achievements")
+    else:
+        for ea_def in gc.EXCLUSIVE_ACHIEVEMENTS:
+            exclusive_ach = db.query(models.ExclusiveAchievement).filter(
+                models.ExclusiveAchievement.slug == ea_def["slug"]
+            ).first()
+            if exclusive_ach:
+                exclusive_ach.title = ea_def["title"]
+                exclusive_ach.description = ea_def["description"]
+                exclusive_ach.icon = ea_def["icon"]
+                exclusive_ach.requirement_type = ea_def["type"]
+        db.commit()
 
 
 app = FastAPI(title="QuestDo API")
@@ -170,6 +205,14 @@ def validate_category(category: str) -> str:
     return category
 
 
+def validate_reminder_offset(value: Optional[int]) -> Optional[int]:
+    if value is None:
+        return None
+    if value not in {0, 1, 3, 7}:
+        raise HTTPException(status_code=400, detail="Nieprawidłowy termin przypomnienia")
+    return value
+
+
 def task_can_reschedule(task: models.Task) -> bool:
     return not task.completed and not task.exp_awarded
 
@@ -177,15 +220,26 @@ def task_can_reschedule(task: models.Task) -> bool:
 def calculate_exp_reward(difficulty: str, due_date: date, completed_on: date) -> tuple[int, str]:
     base = EXP_REWARDS.get(difficulty, 10)
     if completed_on < due_date:
+        # Early completion - bonus
         amount = max(MIN_EXP_REWARD, round(base * EARLY_EXP_MULTIPLIER))
         timing = "early"
     elif completed_on > due_date:
+        # Late completion - penalty
         amount = max(MIN_EXP_REWARD, round(base * LATE_EXP_MULTIPLIER))
         timing = "late"
     else:
+        # On time - no bonus, no penalty
         amount = base
         timing = "ontime"
     return amount, timing
+
+
+def normalize_streak(user: models.User) -> bool:
+    today = date.today()
+    if user.streak and user.last_streak_date and user.last_streak_date < today - timedelta(days=1):
+        user.streak = 0
+        return True
+    return False
 
 
 def task_to_dict(t: models.Task) -> dict:
@@ -198,6 +252,8 @@ def task_to_dict(t: models.Task) -> dict:
         "completed": t.completed,
         "exp_awarded": t.exp_awarded,
         "exp_awarded_amount": t.exp_awarded_amount or 0,
+        "important": bool(t.important),
+        "reminder_offset_days": t.reminder_offset_days,
         "due_date": str(t.due_date),
         "created_at": str(t.created_at),
     }
@@ -220,6 +276,8 @@ class TaskCreate(BaseModel):
     difficulty: Optional[str] = "easy"
     category: Optional[str] = "Inne"
     due_date: str
+    important: Optional[bool] = False
+    reminder_offset_days: Optional[int] = None
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -228,6 +286,8 @@ class TaskUpdate(BaseModel):
     category: Optional[str] = None
     completed: Optional[bool] = None
     due_date: Optional[str] = None
+    important: Optional[bool] = None
+    reminder_offset_days: Optional[int] = None
 
 class Token(BaseModel):
     access_token: str
@@ -318,8 +378,9 @@ def unlock_achievement(user_id: int, ach_def: dict, db: Session) -> bool:
         db.add(achievement)
         db.flush()
     else:
-        if not achievement.title:
-            achievement.title = ach_def["title"]
+        achievement.title = ach_def["title"]
+        achievement.description = ach_def["description"]
+        achievement.icon = ach_def["icon"]
 
     if not db.query(models.UserAchievement).filter(
         models.UserAchievement.user_id == user_id,
@@ -373,6 +434,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 
 @app.get("/me")
 def get_me(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if normalize_streak(current_user):
+        db.commit()
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
         "username": current_user.username,
@@ -454,6 +517,8 @@ def create_task(task: TaskCreate, current_user: models.User = Depends(get_curren
         difficulty=validate_difficulty(task.difficulty or "easy"),
         category=validate_category(task.category or "Inne"),
         due_date=due,
+        important=bool(task.important),
+        reminder_offset_days=validate_reminder_offset(task.reminder_offset_days),
         owner_id=current_user.id
     )
     db.add(new_task)
@@ -471,6 +536,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
     was_completed = task.completed
     exp_gained = 0
     exp_timing = None
+    fields_set = getattr(task_update, "model_fields_set", getattr(task_update, "__fields_set__", set()))
 
     if task_update.due_date is not None:
         if not task_can_reschedule(task):
@@ -484,6 +550,10 @@ def update_task(task_id: int, task_update: TaskUpdate,
         task.title = validate_title(task_update.title)
     if task_update.description is not None:
         task.description = task_update.description.strip()[:1000]
+    if task_update.important is not None:
+        task.important = bool(task_update.important)
+    if "reminder_offset_days" in fields_set:
+        task.reminder_offset_days = validate_reminder_offset(task_update.reminder_offset_days)
 
     if task.exp_awarded:
         if task_update.difficulty is not None or task_update.category is not None:
@@ -513,7 +583,15 @@ def update_task(task_id: int, task_update: TaskUpdate,
                 current_user.exp += exp_gained
                 task.exp_awarded = True
                 task.exp_awarded_amount = exp_gained
-                current_user.streak += 1
+
+                # Streak: only increment once per day
+                today = date.today()
+                if current_user.last_streak_date != today:
+                    if current_user.last_streak_date == today - timedelta(days=1):
+                        current_user.streak += 1
+                    else:
+                        current_user.streak = 1
+                    current_user.last_streak_date = today
                 check_achievements(current_user, db)
 
     db.commit()
@@ -819,6 +897,12 @@ def ranking_exp(db: Session = Depends(get_db)):
 @app.get("/rankings/streak")
 def ranking_streak(db: Session = Depends(get_db)):
     users = db.query(models.User).order_by(models.User.streak.desc()).limit(10).all()
+    changed = False
+    for u in users:
+        changed = normalize_streak(u) or changed
+    if changed:
+        db.commit()
+        users = db.query(models.User).order_by(models.User.streak.desc()).limit(10).all()
     return [{
         "rank": i + 1,
         "username": u.username,
@@ -830,11 +914,13 @@ def ranking_streak(db: Session = Depends(get_db)):
 def ranking_rare_drops(db: Session = Depends(get_db)):
     from sqlalchemy import func
     results = db.query(
-        models.PlayerRareDrop.user_id,
         models.User.username,
-        func.count(models.PlayerRareDrop.id).label("count")
-    ).join(models.User).group_by(
-        models.PlayerRareDrop.user_id,
+        func.count(models.PlayerRareDrop.id).label("count"),
+    ).outerjoin(
+        models.PlayerRareDrop,
+        models.PlayerRareDrop.user_id == models.User.id,
+    ).group_by(
+        models.User.id,
         models.User.username
     ).order_by(func.count(models.PlayerRareDrop.id).desc()).limit(10).all()
     
@@ -849,13 +935,13 @@ def ranking_rare_drops(db: Session = Depends(get_db)):
 def ranking_completed_tasks(db: Session = Depends(get_db)):
     from sqlalchemy import func
     results = db.query(
-        models.Task.owner_id,
         models.User.username,
         func.count(models.Task.id).label("count")
-    ).filter(models.Task.completed == True).join(
-        models.User, models.Task.owner_id == models.User.id
+    ).outerjoin(
+        models.Task,
+        (models.Task.owner_id == models.User.id) & (models.Task.completed == True)
     ).group_by(
-        models.Task.owner_id,
+        models.User.id,
         models.User.username
     ).order_by(func.count(models.Task.id).desc()).limit(10).all()
     
@@ -866,18 +952,41 @@ def ranking_completed_tasks(db: Session = Depends(get_db)):
     } for i, r in enumerate(results)]
 
 
+@app.get("/rankings/achievements")
+def ranking_achievements(db: Session = Depends(get_db)):
+    from sqlalchemy import func
+    results = db.query(
+        models.User.username,
+        func.count(models.UserAchievement.id).label("count")
+    ).outerjoin(
+        models.UserAchievement,
+        models.UserAchievement.user_id == models.User.id,
+    ).group_by(
+        models.User.id,
+        models.User.username
+    ).order_by(func.count(models.UserAchievement.id).desc()).limit(10).all()
+
+    return [{
+        "rank": i + 1,
+        "username": r.username,
+        "achievements": r.count
+    } for i, r in enumerate(results)]
+
+
 @app.get("/rankings/exclusive-achievements")
 def ranking_exclusive_achievements(db: Session = Depends(get_db)):
     from sqlalchemy import func
     results = db.query(
-        models.PlayerExclusiveAchievement.user_id,
         models.User.username,
         func.count(models.PlayerExclusiveAchievement.id).label("count")
-    ).join(models.User).group_by(
-        models.PlayerExclusiveAchievement.user_id,
+    ).outerjoin(
+        models.PlayerExclusiveAchievement,
+        models.PlayerExclusiveAchievement.user_id == models.User.id,
+    ).group_by(
+        models.User.id,
         models.User.username
     ).order_by(func.count(models.PlayerExclusiveAchievement.id).desc()).limit(10).all()
-    
+
     return [{
         "rank": i + 1,
         "username": r.username,
@@ -890,6 +999,7 @@ def ranking_all(db: Session = Depends(get_db)):
     return {
         "exp": ranking_exp(db),
         "streak": ranking_streak(db),
+        "achievements": ranking_achievements(db),
         "rare_drops": ranking_rare_drops(db),
         "completed_tasks": ranking_completed_tasks(db),
         "exclusive_achievements": ranking_exclusive_achievements(db)

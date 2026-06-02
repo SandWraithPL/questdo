@@ -1,7 +1,8 @@
+/* global clients */
 const CACHE_NAME = 'questdo-v3';
 
 // Przy instalacji - otwórz cache
-self.addEventListener('install', (event) => {
+self.addEventListener('install', () => {
     console.log('SW installing...');
     self.skipWaiting(); // Wymusza aktywację nowego SW
 });
@@ -39,6 +40,19 @@ self.addEventListener('fetch', (event) => {
         .catch(() => {
             // Offline - zwróć z cache
             return caches.match(event.request);
+        })
+    );
+});
+
+self.addEventListener('notificationclick', (event) => {
+    event.notification.close();
+    event.waitUntil(
+        clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+            for (const client of clientList) {
+                if ('focus' in client) return client.focus();
+            }
+            if (clients.openWindow) return clients.openWindow('/');
+            return undefined;
         })
     );
 });
