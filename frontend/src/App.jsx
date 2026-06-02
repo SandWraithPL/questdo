@@ -920,21 +920,61 @@ export default function App() {
     }
   };
 
+  const refreshUserData = async () => {
+    if (!token) return;
+    
+    try {
+      const [userRes, achRes, rareDropsRes, historyRes] = await Promise.all([
+        axios.get(`${API}/me`, { headers }),
+        axios.get(`${API}/achievements`, { headers }),
+        axios.get(`${API}/rare-drops/inventory`, { headers }).catch(() => ({ data: null })),
+        axios.get(`${API}/history`, { headers }).catch(() => ({ data: [] })),
+      ]);
+      
+      const newUnlocked = achRes.data.unlocked || [];
+      
+      setUser(userRes.data);
+      setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
+      if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
+      setHistory(historyRes.data || []);
+    } catch (err) {
+      console.error("Refresh user data error:", err);
+    }
+  };
+
   useEffect(() => { if (token) fetchData(); }, [token]);
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
 
   const addTask = async () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
     
+    const tempId = `temp-${Date.now()}`;
+    const tempTask = {
+      id: tempId,
+      title,
+      description: desc,
+      difficulty,
+      category,
+      due_date: taskDate,
+      important,
+      reminder_offset_days: parseReminderValue(reminderOffset),
+      completed: false,
+    };
+    
     const apiPayload = { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset) };
     setTitle(""); setDesc(""); setImportant(false); setReminderOffset(""); setShowAddTask(false);
     
+    setTasks(prev => [...prev, tempTask]);
+    
     try {
       const res = await axios.post(`${API}/tasks`, apiPayload, { headers });
+      const serverTask = res.data;
       showToast(`✅ Dodano quest na ${taskDate}`);
-      await fetchData();
+      
+      setTasks(prev => prev.map(t => t.id === tempId ? { ...tempTask, id: serverTask.id } : t));
     } catch (err) {
       console.error('[addTask] API error:', err);
+      setTasks(prev => prev.filter(t => t.id !== tempId));
       showToast(err.response?.data?.detail || "Błąd dodawania");
     }
   };
@@ -970,8 +1010,8 @@ export default function App() {
         showAppNotification("Nowe osiągnięcie", `${freshAchievement.title}: ${freshAchievement.description}`);
       }
       
-      // Refresh data in background (don't block UI)
-      fetchData();
+      // Refresh user data in background (don't block UI, don't overwrite tasks)
+      refreshUserData();
     } catch (err) {
       console.error('[toggleTask] API error:', err);
       // Rollback on error
@@ -987,7 +1027,6 @@ export default function App() {
     try {
       await axios.patch(`${API}/tasks/${id}`, updates, { headers });
       showToast("💾 Zapisano zmiany");
-      fetchData();
     } catch (err) {
       // Rollback
       setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
@@ -1019,7 +1058,7 @@ export default function App() {
     try {
       const res = await axios.delete(`${API}/tasks/${task.id}`, { headers });
       showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
-      fetchData();
+      refreshUserData();
     } catch (err) {
       console.error('[deleteTask] API error:', err);
       if (err.response?.status === 404) {
