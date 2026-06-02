@@ -147,7 +147,7 @@ async function registerServiceWorkerForUpdates() {
   navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
   navigator.serviceWorker.addEventListener("message", onMessage);
 
-  const registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
+  const registration = await navigator.serviceWorker.register("/sw.js?v=questdo-v7", { updateViaCache: "none" });
   sessionStorage.removeItem("questdo-sw-reloading");
 
   const activateWaitingWorker = () => {
