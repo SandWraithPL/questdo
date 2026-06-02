@@ -127,27 +127,43 @@ async function saveToIndexedDB({ tasks, user, achievements, rareDrops }) {
     await db.transaction('rw', db.tasks, db.user, db.achievements, db.rare_drops, async () => {
       if (tasks) {
         const existingTasks = await db.tasks.toArray();
-        const mergedTasks = resolveConflicts(existingTasks, tasks, 'id');
-        await db.tasks.clear().then(() => db.tasks.bulkAdd(mergedTasks.map(t => ({ ...t, updated_at: t.updated_at || new Date().toISOString(), version: t.version || 1 }))));
+        const pendingTasks = existingTasks.filter(t => t.sync_status === 'pending');
+        const syncedTasks = existingTasks.filter(t => t.sync_status !== 'pending');
+        
+        const mergedSyncedTasks = resolveConflicts(syncedTasks, tasks, 'id');
+        const finalTasks = [...mergedSyncedTasks, ...pendingTasks];
+        
+        await db.tasks.clear().then(() => db.tasks.bulkAdd(finalTasks.map(t => ({ ...t, updated_at: t.updated_at || new Date().toISOString(), version: t.version || 1, sync_status: t.sync_status || 'synced' }))));
+        console.log('[saveToIndexedDB] Saved tasks, preserved pending:', pendingTasks.length);
       }
       if (user) {
         const existingUser = await db.user.toArray();
         const mergedUser = existingUser.length > 0 ? resolveConflicts([existingUser[0]], [user], 'username')[0] : user;
-        await db.user.clear().then(() => db.user.add({ ...mergedUser, updated_at: mergedUser.updated_at || new Date().toISOString(), version: mergedUser.version || 1 }));
+        await db.user.clear().then(() => db.user.add({ ...mergedUser, updated_at: mergedUser.updated_at || new Date().toISOString(), version: mergedUser.version || 1, sync_status: 'synced' }));
       }
       if (achievements?.unlocked) {
         const existingAchievements = await db.achievements.toArray();
-        const mergedAchievements = resolveConflicts(existingAchievements, achievements.unlocked.map(a => ({ ...a, userId: user?.username })), 'id');
-        await db.achievements.clear().then(() => db.achievements.bulkAdd(mergedAchievements.map(a => ({ ...a, userId: user?.username, unlocked_at: a.unlocked_at || new Date().toISOString(), version: a.version || 1 }))));
+        const pendingAchievements = existingAchievements.filter(a => a.sync_status === 'pending');
+        const syncedAchievements = existingAchievements.filter(a => a.sync_status !== 'pending');
+        
+        const mergedSyncedAchievements = resolveConflicts(syncedAchievements, achievements.unlocked.map(a => ({ ...a, userId: user?.username })), 'id');
+        const finalAchievements = [...mergedSyncedAchievements, ...pendingAchievements];
+        
+        await db.achievements.clear().then(() => db.achievements.bulkAdd(finalAchievements.map(a => ({ ...a, userId: user?.username, unlocked_at: a.unlocked_at || new Date().toISOString(), version: a.version || 1, sync_status: a.sync_status || 'synced' }))));
       }
       if (rareDrops?.items) {
         const existingDrops = await db.rare_drops.toArray();
-        const mergedDrops = resolveConflicts(existingDrops, rareDrops.items.map(d => ({ ...d, userId: user?.username })), 'id');
-        await db.rare_drops.clear().then(() => db.rare_drops.bulkAdd(mergedDrops.map(d => ({ ...d, userId: user?.username, obtained_at: d.obtained_at || new Date().toISOString(), version: d.version || 1 }))));
+        const pendingDrops = existingDrops.filter(d => d.sync_status === 'pending');
+        const syncedDrops = existingDrops.filter(d => d.sync_status !== 'pending');
+        
+        const mergedSyncedDrops = resolveConflicts(syncedDrops, rareDrops.items.map(d => ({ ...d, userId: user?.username })), 'id');
+        const finalDrops = [...mergedSyncedDrops, ...pendingDrops];
+        
+        await db.rare_drops.clear().then(() => db.rare_drops.bulkAdd(finalDrops.map(d => ({ ...d, userId: user?.username, obtained_at: d.obtained_at || new Date().toISOString(), version: d.version || 1, sync_status: d.sync_status || 'synced' }))));
       }
     });
   } catch (err) {
-    console.error("IndexedDB save error:", err);
+    console.error('[saveToIndexedDB] IndexedDB save error:', err);
   }
 }
 
@@ -185,6 +201,29 @@ function resolveConflicts(localData, serverData, keyField) {
 
 async function addToSyncQueue(endpoint, method, payload, headers) {
   try {
+    const existingItems = await db.syncQueue.where('status').equals('pending').toArray();
+    
+    const isDuplicate = existingItems.some(item => {
+      if (item.endpoint !== endpoint || item.method !== method) return false;
+      
+      if (method === 'POST' && payload.temp_id) {
+        return item.payload.temp_id === payload.temp_id;
+      }
+      
+      if (method === 'PATCH' || method === 'DELETE') {
+        const taskId = endpoint.split('/').pop();
+        const existingTaskId = item.endpoint.split('/').pop();
+        return taskId === existingTaskId && item.method === method;
+      }
+      
+      return false;
+    });
+    
+    if (isDuplicate) {
+      console.log('[addToSyncQueue] Duplicate request detected, skipping:', endpoint, method);
+      return;
+    }
+    
     await db.syncQueue.add({
       endpoint,
       method,
@@ -193,60 +232,91 @@ async function addToSyncQueue(endpoint, method, payload, headers) {
       status: 'pending',
       created_at: new Date().toISOString(),
     });
+    console.log('[addToSyncQueue] Added to sync queue:', endpoint, method);
+    
     if ('serviceWorker' in navigator && 'sync' in ServiceWorkerRegistration.prototype) {
       const reg = await navigator.serviceWorker.ready;
       await reg.sync.register(SYNC_QUEUE_NAME);
     }
   } catch (err) {
-    console.error("Sync queue error:", err);
+    console.error('[addToSyncQueue] Sync queue error:', err);
   }
 }
 
 async function processSyncQueue() {
   try {
     const pendingItems = await db.syncQueue.where('status').equals('pending').toArray();
+    console.log('[processSyncQueue] Pending items:', pendingItems.length);
+    
     for (const item of pendingItems) {
       try {
+        console.log('[processSyncQueue] Processing item:', item.id, item.method, item.endpoint, item.payload);
         let response;
         if (item.method === 'POST') {
           const existingTask = await db.tasks.where('temp_id').equals(item.payload.temp_id).first();
+          console.log('[processSyncQueue] POST - existingTask from IndexedDB:', existingTask);
           if (existingTask && existingTask.sync_status === 'synced') {
+            console.log('[processSyncQueue] POST - already synced, skipping');
             await db.syncQueue.update(item.id, { status: 'completed' });
             continue;
           }
-          response = await axios.post(`${API}${item.endpoint}`, item.payload, { headers: item.headers });
+          
+          const freshPayload = existingTask ? { 
+            title: existingTask.title, 
+            description: existingTask.description, 
+            difficulty: existingTask.difficulty, 
+            category: existingTask.category, 
+            due_date: existingTask.due_date, 
+            important: existingTask.important, 
+            reminder_offset_days: existingTask.reminder_offset_days,
+            temp_id: existingTask.temp_id
+          } : item.payload;
+          console.log('[processSyncQueue] POST - sending fresh payload:', freshPayload);
+          
+          response = await axios.post(`${API}${item.endpoint}`, freshPayload, { headers: item.headers });
           const serverTask = response.data;
+          console.log('[processSyncQueue] POST - API response:', serverTask);
           if (item.payload.temp_id) {
             await db.tasks.where('temp_id').equals(item.payload.temp_id).delete();
             await db.tasks.add({ ...serverTask, userId: item.headers.Authorization?.replace('Bearer ', ''), sync_status: 'synced', updated_at: new Date().toISOString() });
+            console.log('[processSyncQueue] POST - replaced temp task with server data');
           }
         } else if (item.method === 'PATCH') {
           const taskId = item.endpoint.split('/').pop();
           const existingTask = await db.tasks.get(parseInt(taskId));
+          console.log('[processSyncQueue] PATCH - existingTask from IndexedDB:', existingTask);
           if (existingTask && existingTask.sync_status === 'synced') {
+            console.log('[processSyncQueue] PATCH - already synced, skipping');
             await db.syncQueue.update(item.id, { status: 'completed' });
             continue;
           }
           response = await axios.patch(`${API}${item.endpoint}`, item.payload, { headers: item.headers });
+          console.log('[processSyncQueue] PATCH - API response:', response.data);
           await db.tasks.update(parseInt(taskId), { sync_status: 'synced' });
+          console.log('[processSyncQueue] PATCH - marked as synced');
         } else if (item.method === 'DELETE') {
           const taskId = item.endpoint.split('/').pop();
           const existingTask = await db.tasks.get(parseInt(taskId));
+          console.log('[processSyncQueue] DELETE - existingTask from IndexedDB:', existingTask);
           if (!existingTask) {
+            console.log('[processSyncQueue] DELETE - task already deleted, skipping');
             await db.syncQueue.update(item.id, { status: 'completed' });
             continue;
           }
           response = await axios.delete(`${API}${item.endpoint}`, { headers: item.headers });
+          console.log('[processSyncQueue] DELETE - API response:', response.data);
         }
         await db.syncQueue.update(item.id, { status: 'completed' });
+        console.log('[processSyncQueue] Item marked as completed');
       } catch (err) {
-        console.error("Sync item error:", err);
+        console.error('[processSyncQueue] Sync item error:', err);
         await db.syncQueue.update(item.id, { status: 'failed' });
       }
     }
     await db.syncQueue.where('status').equals('completed').delete();
+    console.log('[processSyncQueue] Cleaned up completed items');
   } catch (err) {
-    console.error("Process sync queue error:", err);
+    console.error('[processSyncQueue] Process sync queue error:', err);
   }
 }
 
@@ -1096,23 +1166,34 @@ export default function App() {
       sync_status: 'pending',
     };
     
+    console.log('[addTask] Adding task to IndexedDB:', newTask);
+    
     setTasks(prev => [...prev, { ...newTask, id: tempId }]);
     setTitle(""); setDesc(""); setImportant(false); setReminderOffset(""); setShowAddTask(false);
     
     try {
       await db.tasks.add({ ...newTask, userId: user.username });
-      const res = await axios.post(`${API}/tasks`, { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset) }, { headers });
+      console.log('[addTask] Saved to IndexedDB successfully');
+      
+      const apiPayload = { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset) };
+      console.log('[addTask] Sending to API:', apiPayload);
+      
+      const res = await axios.post(`${API}/tasks`, apiPayload, { headers });
       const serverTask = res.data;
+      console.log('[addTask] API response:', serverTask);
       
       await db.tasks.where('temp_id').equals(tempId).delete();
       await db.tasks.add({ ...serverTask, userId: user.username, sync_status: 'synced', updated_at: new Date().toISOString() });
+      console.log('[addTask] Updated IndexedDB with server data');
       
       setTasks(prev => prev.map(t => t.id === tempId ? { ...serverTask, sync_status: 'synced' } : t));
       showToast(`✅ Dodano quest na ${taskDate}`);
     } catch (err) {
+      console.error('[addTask] API error:', err);
       setTasks(prev => prev.filter(t => t.id !== tempId));
       await db.tasks.where('temp_id').equals(tempId).delete();
-      await addToSyncQueue('/tasks', 'POST', { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset) }, headers);
+      console.log('[addTask] Rolled back IndexedDB and UI');
+      await addToSyncQueue('/tasks', 'POST', { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset), temp_id: tempId }, headers);
       showToast(err.response?.data?.detail || "Błąd dodawania - zapisano w kolejce");
     }
   };
@@ -1120,16 +1201,22 @@ export default function App() {
   const toggleTask = async (task) => {
     if (task.completed) return;
     
-    const previousState = { ...task };
     const optimisticTask = { ...task, completed: true, updated_at: new Date().toISOString(), sync_status: 'pending' };
+    
+    console.log('[toggleTask] Toggling task:', task.id, optimisticTask);
+    
     setTasks(prev => prev.map(t => t.id === task.id ? optimisticTask : t));
     
     try {
       await db.tasks.update(task.id, optimisticTask);
+      console.log('[toggleTask] Updated IndexedDB with optimistic change');
+      
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
+      console.log('[toggleTask] API response:', res.data);
       const { exp_gained, daily_bonus, exp_timing, new_achievements, new_exclusive_achievements, earned_drop } = res.data;
       
       await db.tasks.update(task.id, { sync_status: 'synced' });
+      console.log('[toggleTask] Marked as synced in IndexedDB');
       
       if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
       else if (exp_gained > 0) showToast(`✅ Quest ukończony! +${exp_gained} EXP${expToastSuffix(exp_timing)}`);
@@ -1147,18 +1234,19 @@ export default function App() {
       
       fetchData();
     } catch (err) {
-      setTasks(prev => prev.map(t => t.id === task.id ? previousState : t));
-      await db.tasks.update(task.id, { completed: false, sync_status: 'synced' });
+      console.error('[toggleTask] API error:', err);
+      const previousTask = await db.tasks.get(task.id);
+      if (previousTask) {
+        setTasks(prev => prev.map(t => t.id === task.id ? previousTask : t));
+        await db.tasks.update(task.id, { completed: previousTask.completed, sync_status: 'synced' });
+        console.log('[toggleTask] Rolled back to IndexedDB state:', previousTask);
+      }
       await addToSyncQueue(`/tasks/${task.id}`, 'PATCH', { completed: true }, headers);
       showToast(err.response?.data?.detail || "Błąd aktualizacji - zapisano w kolejce");
     }
   };
 
   const saveTask = async (id, updates) => {
-    const previousTask = tasks.find(t => t.id === id);
-    if (!previousTask) return;
-    
-    const previousState = { ...previousTask };
     const optimisticUpdates = { ...updates, updated_at: new Date().toISOString(), sync_status: 'pending' };
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...optimisticUpdates } : t));
     
@@ -1169,8 +1257,12 @@ export default function App() {
       showToast("💾 Zapisano zmiany");
       fetchData();
     } catch (err) {
-      setTasks(prev => prev.map(t => t.id === id ? previousState : t));
-      await db.tasks.update(id, { ...previousState, sync_status: 'synced' });
+      const previousTask = await db.tasks.get(id);
+      if (previousTask) {
+        setTasks(prev => prev.map(t => t.id === id ? previousTask : t));
+        await db.tasks.update(id, { ...previousTask, sync_status: 'synced' });
+        console.log('[saveTask] Rolled back to IndexedDB state:', previousTask);
+      }
       await addToSyncQueue(`/tasks/${id}`, 'PATCH', updates, headers);
       showToast(err.response?.data?.detail || "Błąd zapisu - zapisano w kolejce");
     }
@@ -1180,18 +1272,25 @@ export default function App() {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
     
-    const previousState = { ...task };
+    console.log('[deleteTask] Deleting task:', task.id, task);
+    
     setTasks(prev => prev.filter(t => t.id !== task.id));
     
     try {
       await db.tasks.update(task.id, { sync_status: 'pending' });
       await db.tasks.delete(task.id);
+      console.log('[deleteTask] Deleted from IndexedDB');
+      
       const res = await axios.delete(`${API}/tasks/${task.id}`, { headers });
+      console.log('[deleteTask] API response:', res.data);
+      
       showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
       fetchData();
     } catch (err) {
-      setTasks(prev => [...prev, previousState]);
-      await db.tasks.add({ ...previousState, sync_status: 'synced' });
+      console.error('[deleteTask] API error:', err);
+      await db.tasks.add({ ...task, sync_status: 'synced' });
+      setTasks(prev => [...prev, task]);
+      console.log('[deleteTask] Rolled back - restored task to IndexedDB');
       await addToSyncQueue(`/tasks/${task.id}`, 'DELETE', null, headers);
       showToast(err.response?.data?.detail || "Błąd usuwania - zapisano w kolejce");
     }
