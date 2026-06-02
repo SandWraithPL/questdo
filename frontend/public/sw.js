@@ -1,5 +1,5 @@
 /* global clients */
-const CACHE_NAME = 'questdo-v6';
+const CACHE_NAME = 'questdo-v7';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -51,7 +51,15 @@ self.addEventListener('fetch', (event) => {
       requestUrl.pathname.includes('/challenges') ||
       requestUrl.pathname.includes('/history') ||
       requestUrl.pathname.includes('/rare-drops')) {
-    event.respondWith(fetch(event.request));
+    event.respondWith(
+      fetch(event.request, {
+        cache: 'no-store',
+        headers: {
+          'Cache-Control': 'no-cache',
+          'Pragma': 'no-cache'
+        }
+      })
+    );
     return;
   }
   

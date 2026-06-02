@@ -893,15 +893,21 @@ export default function App() {
   const fetchData = async () => {
     if (!token) return;
     
+    const noCacheHeaders = {
+      ...headers,
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    };
+    
     try {
       const [userRes, tasksRes, achRes, chRes, levelsRes, rareDropsRes, historyRes] = await Promise.all([
-        axios.get(`${API}/me`, { headers }),
-        axios.get(`${API}/tasks`, { headers }),
-        axios.get(`${API}/achievements`, { headers }),
-        axios.get(`${API}/challenges`, { headers }),
-        axios.get(`${API}/game/levels`, { headers }).catch(() => ({ data: null })),
-        axios.get(`${API}/rare-drops/inventory`, { headers }).catch(() => ({ data: null })),
-        axios.get(`${API}/history`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/me`, { headers: noCacheHeaders }),
+        axios.get(`${API}/tasks`, { headers: noCacheHeaders }),
+        axios.get(`${API}/achievements`, { headers: noCacheHeaders }),
+        axios.get(`${API}/challenges`, { headers: noCacheHeaders }),
+        axios.get(`${API}/game/levels`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
+        axios.get(`${API}/rare-drops/inventory`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
+        axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
       ]);
       
       const newUnlocked = achRes.data.unlocked || [];
@@ -923,12 +929,18 @@ export default function App() {
   const refreshUserData = async () => {
     if (!token) return;
     
+    const noCacheHeaders = {
+      ...headers,
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    };
+    
     try {
       const [userRes, achRes, rareDropsRes, historyRes] = await Promise.all([
-        axios.get(`${API}/me`, { headers }),
-        axios.get(`${API}/achievements`, { headers }),
-        axios.get(`${API}/rare-drops/inventory`, { headers }).catch(() => ({ data: null })),
-        axios.get(`${API}/history`, { headers }).catch(() => ({ data: [] })),
+        axios.get(`${API}/me`, { headers: noCacheHeaders }),
+        axios.get(`${API}/achievements`, { headers: noCacheHeaders }),
+        axios.get(`${API}/rare-drops/inventory`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
+        axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
       ]);
       
       const newUnlocked = achRes.data.unlocked || [];
