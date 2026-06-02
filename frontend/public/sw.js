@@ -135,11 +135,15 @@ function getAllPendingSyncItems(db) {
 
 function openIndexedDB() {
     return new Promise((resolve, reject) => {
-        const request = indexedDB.open('QuestDoDB', 1);
+        const request = indexedDB.open('QuestDoDB');
         request.onerror = () => reject(request.error);
-        request.onsuccess = () => resolve(request.result);
+        request.onsuccess = () => {
+            console.log('[SW] IndexedDB opened successfully, version:', request.result.version);
+            resolve(request.result);
+        };
         request.onupgradeneeded = (event) => {
             const db = event.target.result;
+            console.log('[SW] IndexedDB upgrade needed, new version:', event.newVersion);
             if (!db.objectStoreNames.contains('syncQueue')) {
                 const store = db.createObjectStore('syncQueue', { keyPath: 'id', autoIncrement: true });
                 store.createIndex('status', 'status', { unique: false });

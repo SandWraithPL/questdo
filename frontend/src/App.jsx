@@ -104,12 +104,14 @@ function getExpProgress(exp, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
 
 async function loadFromIndexedDB() {
   try {
+    console.log('[loadFromIndexedDB] Loading from IndexedDB, DB version:', db.verno);
     const [tasks, user, achievements, rareDrops] = await Promise.all([
       db.tasks.toArray(),
       db.user.toArray(),
       db.achievements.toArray(),
       db.rare_drops.toArray(),
     ]);
+    console.log('[loadFromIndexedDB] Loaded:', { tasks: tasks.length, user: user.length, achievements: achievements.length, rareDrops: rareDrops.length });
     return {
       tasks: tasks || [],
       user: user?.[0] || null,
@@ -117,7 +119,7 @@ async function loadFromIndexedDB() {
       rareDrops: rareDrops || [],
     };
   } catch (err) {
-    console.error("IndexedDB load error:", err);
+    console.error("[loadFromIndexedDB] IndexedDB load error:", err);
     return { tasks: [], user: null, achievements: { unlocked: [], next: null }, rareDrops: [] };
   }
 }
@@ -1273,6 +1275,7 @@ export default function App() {
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
     
     console.log('[deleteTask] Deleting task:', task.id, task);
+    console.log('[deleteTask] Call stack:', new Error().stack);
     
     setTasks(prev => prev.filter(t => t.id !== task.id));
     
@@ -1288,6 +1291,11 @@ export default function App() {
       fetchData();
     } catch (err) {
       console.error('[deleteTask] API error:', err);
+      if (err.response?.status === 404) {
+        console.log('[deleteTask] Task not found in API (404), keeping it deleted from IndexedDB');
+        showToast("Zadanie już nie istnieje");
+        return;
+      }
       await db.tasks.add({ ...task, sync_status: 'synced' });
       setTasks(prev => [...prev, task]);
       console.log('[deleteTask] Rolled back - restored task to IndexedDB');
