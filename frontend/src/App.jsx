@@ -713,6 +713,17 @@ function AdminPanel({ isOpen, onClose, headers }) {
     }
   };
 
+  const resetAllProgress = async () => {
+    if (!window.confirm("Zresetować osiągnięcia, znajdźki i serie WSZYSTKIM użytkownikom? Tej operacji nie da się cofnąć.")) return;
+    try {
+      const res = await axios.post(`${API}/admin/reset-all-progress`, {}, { headers });
+      alert(res.data?.message || "Reset wykonany");
+      fetchData();
+    } catch (err) {
+      alert(err.response?.data?.detail || "Błąd resetowania progresu");
+    }
+  };
+
   useEffect(() => { if (isOpen) fetchData(); }, [isOpen]);
 
   // Auto-refresh admin data every 30 seconds when open
@@ -744,6 +755,9 @@ function AdminPanel({ isOpen, onClose, headers }) {
                 <div className="stat-card"><h3>Znajdźki</h3><p>{stats.total_rare_drops}</p></div>
               </div>
             )}
+            <div className="admin-danger-zone">
+              <button type="button" className="reset-progress-btn" onClick={resetAllProgress}>Reset osiągnięć, znajdziek i serii</button>
+            </div>
             <div className="admin-users-section">
               <h3>Użytkownicy</h3>
               <div className="users-list">

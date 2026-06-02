@@ -267,6 +267,9 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .stat-card p { font-size: 1.5rem; font-weight: bold; color: #ff8906; margin: 0; }
 .admin-users-section { margin-top: 20px; }
 .admin-users-section h3 { color: #ff8906; margin-bottom: 12px; }
+.admin-danger-zone { margin: 0 0 20px; padding: 12px; border: 1px solid #e74c3c; border-radius: 8px; background: rgba(231, 76, 60, 0.08); }
+.reset-progress-btn { width: 100%; padding: 10px 12px; background: #e74c3c; color: white; border: none; border-radius: 6px; cursor: pointer; font-weight: bold; }
+.reset-progress-btn:hover { background: #c0392b; }
 .users-list { display: flex; flex-direction: column; gap: 8px; }
 .user-row { display: flex; justify-content: space-between; align-items: center; background: #0f0e17; border-radius: 8px; padding: 12px; }
 .user-info { display: flex; flex-direction: column; gap: 4px; }

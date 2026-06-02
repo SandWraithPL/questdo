@@ -1233,10 +1233,9 @@ def reset_all_progress(current_user: models.User = Depends(get_current_admin_use
 
     db.query(models.UserAchievement).delete()
     db.query(models.PlayerExclusiveAchievement).delete()
+    db.query(models.PlayerRareDrop).delete()
     db.query(models.PlayerBadge).delete()
-    db.query(models.PlayerHistory).filter(
-        models.PlayerHistory.event_type.in_(["achievement", "level"])
-    ).delete(synchronize_session=False)
+    db.query(models.PlayerHistory).delete()
 
     for user in users:
         user.streak = 0
@@ -1246,7 +1245,7 @@ def reset_all_progress(current_user: models.User = Depends(get_current_admin_use
 
     db.commit()
     return {
-        "message": "Zresetowano osiągnięcia i serie wszystkim użytkownikom",
+        "message": "Zresetowano osiągnięcia, znajdźki, serie i historię wszystkim użytkownikom",
         "users_reset": len(users),
         "reset_at": str(reset_at),
     }
