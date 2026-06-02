@@ -522,7 +522,6 @@ function LeaderboardPanel({ currentUser }) {
 
   const handleCategoryChange = (type) => setRankType(type);
 
-  // Auto-refresh rankings every 30 seconds when open
   useEffect(() => {
     if (!open) return;
     const interval = setInterval(() => {
@@ -730,7 +729,6 @@ function AdminPanel({ isOpen, onClose, headers }) {
 
   useEffect(() => { if (isOpen) fetchData(); }, [isOpen]);
 
-  // Auto-refresh admin data every 30 seconds when open
   useEffect(() => {
     if (!isOpen) return;
     const interval = setInterval(() => {
@@ -907,19 +905,8 @@ export default function App() {
       setChallenges(chRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
       setHistory(historyRes.data || []);
-      try {
-        const rareDropRes = await axios.post(`${API}/rare-drops/claim-daily`, {}, { headers });
-        if (rareDropRes.data.status === "success") {
-          showToast(`✨ ${rareDropRes.data.message}`);
-          showAppNotification("Nowa znajdźka", rareDropRes.data.item ? `${rareDropRes.data.item.name}: ${rareDropRes.data.item.description}` : rareDropRes.data.message);
-          const [updatedDrops, updatedHistory] = await Promise.all([
-            axios.get(`${API}/rare-drops/inventory`, { headers }).catch(() => ({ data: null })),
-            axios.get(`${API}/history`, { headers }).catch(() => ({ data: [] })),
-          ]);
-          if (updatedDrops.data) setRareDrops(updatedDrops.data);
-          setHistory(updatedHistory.data || []);
-        }
-      } catch (err) { console.debug("Rare drop claim skipped:", err); }
+      // UWAGA: Usunąłem automatyczne claimowanie dropu przy każdym odświeżeniu.
+      // Drop jest przyznawany TYLKO po ukończeniu zadania (w toggleTask).
     } catch (err) { console.error("Fetch error:", err); localStorage.removeItem("token"); setToken(null); }
   };
 
@@ -938,9 +925,16 @@ export default function App() {
     if (task.completed) return;
     try {
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-      const { exp_gained, daily_bonus, exp_timing, new_achievements, new_exclusive_achievements } = res.data;
+      const { exp_gained, daily_bonus, exp_timing, new_achievements, new_exclusive_achievements, earned_drop } = res.data;
       if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
       else if (exp_gained > 0) showToast(`✅ Quest ukończony! +${exp_gained} EXP${expToastSuffix(exp_timing)}`);
+      
+      // Jeśli przyznano drop po ukończeniu zadania
+      if (earned_drop) {
+        showToast(`✨ Zdobyto ${earned_drop.icon} ${earned_drop.name}! ${earned_drop.description}`);
+        showAppNotification("Nowa znajdźka", `${earned_drop.name}: ${earned_drop.description}`);
+      }
+      
       const freshAchievement = [...(new_achievements || []), ...(new_exclusive_achievements || [])][0];
       if (freshAchievement) {
         showToast(`🏆 Odblokowano: ${freshAchievement.title}! ${freshAchievement.icon}`);

@@ -14,6 +14,7 @@ from sqlalchemy import inspect, text
 import daily_quests as dq
 import game_content as gc
 import time
+import random
 
 def create_tables():
     for i in range(10):
@@ -517,6 +518,63 @@ def achievement_display(ach: models.Achievement) -> str:
         return gc.ACHIEVEMENT_BY_SLUG[ach.name]["title"]
     return ach.name.replace("_", " ").title()
 
+# --- Funkcja przyznająca drop po ukończeniu zadania ---
+def award_rare_drop_on_completion(user: models.User, task: models.Task, db: Session) -> Optional[dict]:
+    """Przyznaje losowy drop po ukończeniu zadania (szansa zależna od rzadkości)."""
+    # Użyj deterministycznego randoma na podstawie user_id + dnia + task_id
+    today = date.today()
+    rng = random.Random(f"{user.id}-{today.isoformat()}-{task.id}")
+    
+    # Wszystkie dostępne dropy
+    all_drops = gc.RARE_DROPS
+    
+    # Losuj czy w ogóle drop wypadnie (sprawdzamy szanse po kolei)
+    for drop_def in all_drops:
+        if rng.random() * 100 <= drop_def["drop_chance"]:
+            rare_drop = db.query(models.RareDrop).filter(
+                models.RareDrop.slug == drop_def["slug"]
+            ).first()
+            if not rare_drop:
+                rare_drop = models.RareDrop(
+                    slug=drop_def["slug"],
+                    name=drop_def["name"],
+                    description=drop_def["description"],
+                    icon=drop_def["icon"],
+                    rarity=drop_def["rarity"],
+                    drop_chance_percent=drop_def["drop_chance"]
+                )
+                db.add(rare_drop)
+                db.flush()
+            
+            player_drop = models.PlayerRareDrop(
+                user_id=user.id,
+                rare_drop_id=rare_drop.id,
+                obtained_date=today
+            )
+            db.add(player_drop)
+            db.flush()
+            
+            add_history_event(
+                user.id,
+                "rare_drop",
+                f"user:{user.id}:rare-drop:{player_drop.id}",
+                f"Znaleziono przedmiot '{drop_def['name']}' za ukończenie zadania '{task.title}'",
+                db,
+                player_drop.obtained_at,
+            )
+            db.commit()
+            
+            return {
+                "slug": drop_def["slug"],
+                "name": drop_def["name"],
+                "description": drop_def["description"],
+                "icon": drop_def["icon"],
+                "rarity": drop_def["rarity"]
+            }
+    
+    return None
+
+
 # --- Endpointy ---
 @app.post("/register")
 def register(user: UserCreate, db: Session = Depends(get_db)):
@@ -648,6 +706,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
     exp_timing = None
     new_rewards = {"achievements": [], "exclusive_achievements": []}
     level_ups = []
+    earned_drop = None
     fields_set = getattr(task_update, "model_fields_set", getattr(task_update, "__fields_set__", set()))
 
     if task_update.due_date is not None:
@@ -707,6 +766,9 @@ def update_task(task_id: int, task_update: TaskUpdate,
                         current_user.streak = 1
                     current_user.last_streak_date = today
                 new_rewards = refresh_player_rewards(current_user, db)
+                
+                # Przyznaj drop ZA UKOŃCZENIE zadania (nie za utworzenie)
+                earned_drop = award_rare_drop_on_completion(current_user, task, db)
 
     db.commit()
     db.refresh(task)
@@ -732,6 +794,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
         "new_achievements": new_rewards["achievements"],
         "new_exclusive_achievements": new_rewards["exclusive_achievements"],
         "level_ups": level_ups,
+        "earned_drop": earned_drop,
     }
 
 
@@ -863,86 +926,8 @@ def list_levels():
 
 
 # === RARE DROPS ENDPOINTS ===
-@app.post("/rare-drops/claim-daily")
-def claim_daily_rare_drop(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    import random
-    today = date.today()
-    
-    existing = db.query(models.PlayerRareDrop).filter(
-        models.PlayerRareDrop.user_id == current_user.id,
-        models.PlayerRareDrop.obtained_date == today
-    ).first()
-    
-    if existing:
-        return {
-            "status": "already_claimed",
-            "message": "Już zdobyłeś dzisiaj rare drop!",
-            "item": None
-        }
-    
-    rng = random.Random(f"{current_user.id}-{today.isoformat()}-raredrop")
-    
-    for drop_def in gc.RARE_DROPS:
-        if rng.random() * 100 <= drop_def["drop_chance"]:
-            rare_drop = db.query(models.RareDrop).filter(
-                models.RareDrop.slug == drop_def["slug"]
-            ).first()
-            if not rare_drop:
-                rare_drop = models.RareDrop(
-                    slug=drop_def["slug"],
-                    name=drop_def["name"],
-                    description=drop_def["description"],
-                    icon=drop_def["icon"],
-                    rarity=drop_def["rarity"],
-                    drop_chance_percent=drop_def["drop_chance"]
-                )
-                db.add(rare_drop)
-                db.flush()
-            
-            player_drop = models.PlayerRareDrop(
-                user_id=current_user.id,
-                rare_drop_id=rare_drop.id,
-                obtained_date=today
-            )
-            db.add(player_drop)
-            db.flush()
-            source_task = db.query(models.Task).filter(
-                models.Task.owner_id == current_user.id,
-                models.Task.completed == True,
-                models.Task.completed_at != None,
-            ).order_by(models.Task.completed_at.desc()).first()
-            if source_task and source_task.completed_at.date() == today:
-                source = f"za wykonanie zadania '{source_task.title}'"
-            else:
-                source = "za dzienną znajdźkę"
-            add_history_event(
-                current_user.id,
-                "rare_drop",
-                f"user:{current_user.id}:rare-drop:{player_drop.id}",
-                f"Znaleziono przedmiot '{drop_def['name']}' {source}",
-                db,
-                player_drop.obtained_at,
-            )
-            db.commit()
-            refresh_player_rewards(current_user, db)
-            
-            return {
-                "status": "success",
-                "message": f"🎉 Zdobyłeś {drop_def['icon']} {drop_def['name']}!",
-                "item": {
-                    "slug": drop_def["slug"],
-                    "name": drop_def["name"],
-                    "description": drop_def["description"],
-                    "icon": drop_def["icon"],
-                    "rarity": drop_def["rarity"]
-                }
-            }
-    
-    return {
-        "status": "failed",
-        "message": "Dzisiaj brak szczęścia 😢 Spróbuj jutro!",
-        "item": None
-    }
+# UWAGA: Usunąłem automatyczne claimowanie dropu przy ładowaniu strony.
+# Drop jest teraz przyznawany TYLKO po ukończeniu zadania (w endpointcie PATCH /tasks/{task_id}).
 
 
 @app.get("/rare-drops/inventory")
