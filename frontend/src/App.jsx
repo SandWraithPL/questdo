@@ -3,8 +3,11 @@ import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import "./index.css";
 import DatePicker from "./DatePicker";
+import db from "./db";
 
 const API = "https://questdo-backend.onrender.com";
+
+const SYNC_QUEUE_NAME = 'questdo-sync-queue';
 
 const DEFAULT_LEVEL_THRESHOLDS = [
   0, 80, 180, 320, 480, 660, 860, 1080, 1320, 1600, 1900, 2250, 2650, 3100, 3600,
@@ -97,6 +100,126 @@ function getExpProgress(exp, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
   }
   const progress = next === current ? 100 : ((exp - current) / (next - current)) * 100;
   return { progress, current, next };
+}
+
+async function loadFromIndexedDB() {
+  try {
+    const [tasks, user, achievements, rareDrops] = await Promise.all([
+      db.tasks.toArray(),
+      db.user.toArray(),
+      db.achievements.toArray(),
+      db.rare_drops.toArray(),
+    ]);
+    return {
+      tasks: tasks || [],
+      user: user?.[0] || null,
+      achievements: { unlocked: achievements || [], next: null },
+      rareDrops: rareDrops || [],
+    };
+  } catch (err) {
+    console.error("IndexedDB load error:", err);
+    return { tasks: [], user: null, achievements: { unlocked: [], next: null }, rareDrops: [] };
+  }
+}
+
+async function saveToIndexedDB({ tasks, user, achievements, rareDrops }) {
+  try {
+    await db.transaction('rw', db.tasks, db.user, db.achievements, db.rare_drops, async () => {
+      if (tasks) {
+        const existingTasks = await db.tasks.toArray();
+        const mergedTasks = resolveConflicts(existingTasks, tasks, 'id');
+        await db.tasks.clear().then(() => db.tasks.bulkAdd(mergedTasks.map(t => ({ ...t, updated_at: t.updated_at || new Date().toISOString(), version: t.version || 1 }))));
+      }
+      if (user) {
+        const existingUser = await db.user.toArray();
+        const mergedUser = existingUser.length > 0 ? resolveConflicts([existingUser[0]], [user], 'username')[0] : user;
+        await db.user.clear().then(() => db.user.add({ ...mergedUser, updated_at: mergedUser.updated_at || new Date().toISOString(), version: mergedUser.version || 1 }));
+      }
+      if (achievements?.unlocked) {
+        const existingAchievements = await db.achievements.toArray();
+        const mergedAchievements = resolveConflicts(existingAchievements, achievements.unlocked.map(a => ({ ...a, userId: user?.username })), 'id');
+        await db.achievements.clear().then(() => db.achievements.bulkAdd(mergedAchievements.map(a => ({ ...a, userId: user?.username, unlocked_at: a.unlocked_at || new Date().toISOString(), version: a.version || 1 }))));
+      }
+      if (rareDrops?.items) {
+        const existingDrops = await db.rare_drops.toArray();
+        const mergedDrops = resolveConflicts(existingDrops, rareDrops.items.map(d => ({ ...d, userId: user?.username })), 'id');
+        await db.rare_drops.clear().then(() => db.rare_drops.bulkAdd(mergedDrops.map(d => ({ ...d, userId: user?.username, obtained_at: d.obtained_at || new Date().toISOString(), version: d.version || 1 }))));
+      }
+    });
+  } catch (err) {
+    console.error("IndexedDB save error:", err);
+  }
+}
+
+function resolveConflicts(localData, serverData, keyField) {
+  const merged = [...localData];
+  const serverMap = new Map(serverData.map(item => [item[keyField], item]));
+  
+  for (const localItem of localData) {
+    const serverItem = serverMap.get(localItem[keyField]);
+    if (serverItem) {
+      const localTime = new Date(localItem.updated_at || 0).getTime();
+      const serverTime = new Date(serverItem.updated_at || 0).getTime();
+      
+      if (serverTime > localTime) {
+        const index = merged.findIndex(item => item[keyField] === localItem[keyField]);
+        if (index !== -1) {
+          merged[index] = { ...serverItem, version: (serverItem.version || 0) + 1 };
+        }
+      }
+      serverMap.delete(localItem[keyField]);
+    }
+  }
+  
+  for (const serverItem of serverMap.values()) {
+    merged.push({ ...serverItem, version: (serverItem.version || 0) + 1 });
+  }
+  
+  return merged;
+}
+
+async function addToSyncQueue(endpoint, method, payload, headers) {
+  try {
+    await db.syncQueue.add({
+      endpoint,
+      method,
+      payload,
+      headers,
+      status: 'pending',
+      created_at: new Date().toISOString(),
+    });
+    if ('serviceWorker' in navigator && 'sync' in ServiceWorkerRegistration.prototype) {
+      const reg = await navigator.serviceWorker.ready;
+      await reg.sync.register(SYNC_QUEUE_NAME);
+    }
+  } catch (err) {
+    console.error("Sync queue error:", err);
+  }
+}
+
+async function processSyncQueue() {
+  try {
+    const pendingItems = await db.syncQueue.where('status').equals('pending').toArray();
+    for (const item of pendingItems) {
+      try {
+        let response;
+        if (item.method === 'POST') {
+          response = await axios.post(`${API}${item.endpoint}`, item.payload, { headers: item.headers });
+        } else if (item.method === 'PATCH') {
+          response = await axios.patch(`${API}${item.endpoint}`, item.payload, { headers: item.headers });
+        } else if (item.method === 'DELETE') {
+          response = await axios.delete(`${API}${item.endpoint}`, { headers: item.headers });
+        }
+        await db.syncQueue.update(item.id, { status: 'completed' });
+      } catch (err) {
+        console.error("Sync item error:", err);
+        await db.syncQueue.update(item.id, { status: 'failed' });
+      }
+    }
+    await db.syncQueue.where('status').equals('completed').delete();
+  } catch (err) {
+    console.error("Process sync queue error:", err);
+  }
 }
 
 function Toast({ message }) {
@@ -892,6 +1015,13 @@ export default function App() {
 
   const fetchData = async () => {
     if (!token) return;
+    
+    const localData = await loadFromIndexedDB();
+    if (localData.user) setUser(localData.user);
+    if (localData.tasks.length > 0) setTasks(localData.tasks);
+    if (localData.achievements.unlocked.length > 0) setAchievements(localData.achievements);
+    if (localData.rareDrops.length > 0) setRareDrops({ items: localData.rareDrops, total_items: localData.rareDrops.length });
+    
     try {
       const [userRes, tasksRes, achRes, chRes, levelsRes, rareDropsRes, historyRes] = await Promise.all([
         axios.get(`${API}/me`, { headers }), axios.get(`${API}/tasks`, { headers }), axios.get(`${API}/achievements`, { headers }),
@@ -905,8 +1035,15 @@ export default function App() {
       setChallenges(chRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
       setHistory(historyRes.data || []);
-      // UWAGA: Usunąłem automatyczne claimowanie dropu przy każdym odświeżeniu.
-      // Drop jest przyznawany TYLKO po ukończeniu zadania (w toggleTask).
+      
+      await saveToIndexedDB({
+        tasks: tasksRes.data,
+        user: userRes.data,
+        achievements: achRes.data,
+        rareDrops: rareDropsRes.data,
+      });
+      
+      await processSyncQueue();
     } catch (err) { console.error("Fetch error:", err); localStorage.removeItem("token"); setToken(null); }
   };
 
@@ -915,21 +1052,57 @@ export default function App() {
 
   const addTask = async () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
+    
+    const newTask = {
+      title,
+      description: desc,
+      difficulty,
+      category,
+      due_date: taskDate,
+      important,
+      reminder_offset_days: parseReminderValue(reminderOffset),
+      completed: false,
+      updated_at: new Date().toISOString(),
+    };
+    
+    const tempId = `temp-${Date.now()}`;
+    const optimisticTask = { ...newTask, id: tempId };
+    
+    setTasks(prev => [...prev, optimisticTask]);
+    setTitle(""); setDesc(""); setImportant(false); setReminderOffset(""); setShowAddTask(false);
+    
     try {
-      await axios.post(`${API}/tasks`, { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset) }, { headers });
-      setTitle(""); setDesc(""); setImportant(false); setReminderOffset(""); setShowAddTask(false); fetchData(); showToast(`✅ Dodano quest na ${taskDate}`);
-    } catch (err) { showToast(err.response?.data?.detail || "Błąd dodawania"); }
+      await db.tasks.add({ ...optimisticTask, userId: user.username });
+      const res = await axios.post(`${API}/tasks`, newTask, { headers });
+      const serverTask = res.data;
+      
+      await db.tasks.delete(tempId);
+      await db.tasks.add({ ...serverTask, userId: user.username, updated_at: new Date().toISOString() });
+      
+      setTasks(prev => prev.map(t => t.id === tempId ? serverTask : t));
+      showToast(`✅ Dodano quest na ${taskDate}`);
+    } catch (err) {
+      setTasks(prev => prev.filter(t => t.id !== tempId));
+      await db.tasks.delete(tempId);
+      await addToSyncQueue('/tasks', 'POST', newTask, headers);
+      showToast(err.response?.data?.detail || "Błąd dodawania - zapisano w kolejce");
+    }
   };
 
   const toggleTask = async (task) => {
     if (task.completed) return;
+    
+    const optimisticTask = { ...task, completed: true, updated_at: new Date().toISOString() };
+    setTasks(prev => prev.map(t => t.id === task.id ? optimisticTask : t));
+    
     try {
+      await db.tasks.update(task.id, optimisticTask);
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
       const { exp_gained, daily_bonus, exp_timing, new_achievements, new_exclusive_achievements, earned_drop } = res.data;
+      
       if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
       else if (exp_gained > 0) showToast(`✅ Quest ukończony! +${exp_gained} EXP${expToastSuffix(exp_timing)}`);
       
-      // Jeśli przyznano drop po ukończeniu zadania
       if (earned_drop) {
         showToast(`✨ Zdobyto ${earned_drop.icon} ${earned_drop.name}! ${earned_drop.description}`);
         showAppNotification("Nowa znajdźka", `${earned_drop.name}: ${earned_drop.description}`);
@@ -940,16 +1113,48 @@ export default function App() {
         showToast(`🏆 Odblokowano: ${freshAchievement.title}! ${freshAchievement.icon}`);
         showAppNotification("Nowe osiągnięcie", `${freshAchievement.title}: ${freshAchievement.description}`);
       }
+      
       fetchData();
-    } catch (err) { showToast(err.response?.data?.detail || "Błąd aktualizacji"); }
+    } catch (err) {
+      setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+      await db.tasks.update(task.id, { completed: false });
+      await addToSyncQueue(`/tasks/${task.id}`, 'PATCH', { completed: true }, headers);
+      showToast(err.response?.data?.detail || "Błąd aktualizacji - zapisano w kolejce");
+    }
   };
 
-  const saveTask = async (id, updates) => { await axios.patch(`${API}/tasks/${id}`, updates, { headers }); showToast("💾 Zapisano zmiany"); fetchData(); };
+  const saveTask = async (id, updates) => {
+    const optimisticUpdates = { ...updates, updated_at: new Date().toISOString() };
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...optimisticUpdates } : t));
+    
+    try {
+      await db.tasks.update(id, optimisticUpdates);
+      await axios.patch(`${API}/tasks/${id}`, updates, { headers });
+      showToast("💾 Zapisano zmiany");
+      fetchData();
+    } catch (err) {
+      await addToSyncQueue(`/tasks/${id}`, 'PATCH', updates, headers);
+      showToast(err.response?.data?.detail || "Błąd zapisu - zapisano w kolejce");
+    }
+  };
   const deleteAccount = async (password, onDone) => { if (!window.confirm("Na pewno usunąć konto?")) return; try { await axios.delete(`${API}/me`, { headers, data: { password } }); localStorage.removeItem("token"); setToken(null); setUser(null); showToast("Konto usunięte"); onDone?.(); } catch (err) { showToast(err.response?.data?.detail || "Nie udało się usunąć konta"); } };
   const deleteTask = async (task) => {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
-    try { const res = await axios.delete(`${API}/tasks/${task.id}`, { headers }); showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest"); fetchData(); } catch (err) { showToast(err.response?.data?.detail || "Błąd usuwania"); }
+    
+    setTasks(prev => prev.filter(t => t.id !== task.id));
+    
+    try {
+      await db.tasks.delete(task.id);
+      const res = await axios.delete(`${API}/tasks/${task.id}`, { headers });
+      showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
+      fetchData();
+    } catch (err) {
+      setTasks(prev => [...prev, task]);
+      await db.tasks.add(task);
+      await addToSyncQueue(`/tasks/${task.id}`, 'DELETE', null, headers);
+      showToast(err.response?.data?.detail || "Błąd usuwania - zapisano w kolejce");
+    }
   };
   const logout = () => { localStorage.removeItem("token"); setToken(null); setUser(null); };
   const handleLogin = () => { const newToken = localStorage.getItem("token"); setToken(newToken); if (newToken) setTimeout(fetchData, 100); };
