@@ -1116,12 +1116,6 @@ export default function App() {
   const fetchData = async () => {
     if (!token) return;
     
-    const localData = await loadFromIndexedDB();
-    if (localData.user) setUser(localData.user);
-    if (localData.tasks.length > 0) setTasks(localData.tasks);
-    if (localData.achievements.unlocked.length > 0) setAchievements(localData.achievements);
-    if (localData.rareDrops.length > 0) setRareDrops({ items: localData.rareDrops, total_items: localData.rareDrops.length });
-    
     try {
       const [userRes, tasksRes, achRes, chRes, levelsRes, rareDropsRes, historyRes] = await Promise.all([
         axios.get(`${API}/me`, { headers }), axios.get(`${API}/tasks`, { headers }), axios.get(`${API}/achievements`, { headers }),
@@ -1131,33 +1125,20 @@ export default function App() {
       ]);
       const newUnlocked = achRes.data.unlocked || [];
       
-      const localTasksMap = new Map(localData.tasks.map(t => [t.id, t]));
-      const mergedTasks = tasksRes.data.map(serverTask => {
-        const localTask = localTasksMap.get(serverTask.id);
-        if (localTask) {
-          const localTime = new Date(localTask.updated_at || 0).getTime();
-          const serverTime = new Date(serverTask.updated_at || 0).getTime();
-          if (localTime > serverTime && localTask.sync_status === 'pending') {
-            return localTask;
-          }
-        }
-        return serverTask;
-      });
-      
-      setUser(userRes.data); setTasks(mergedTasks); setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
+      setUser(userRes.data); setTasks(tasksRes.data); setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
       if (levelsRes.data?.length) setLevelThresholds(levelsRes.data.map(l => l.threshold));
       setChallenges(chRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
       setHistory(historyRes.data || []);
       
-      await saveToIndexedDB({
-        tasks: mergedTasks,
-        user: userRes.data,
-        achievements: achRes.data,
-        rareDrops: rareDropsRes.data,
-      });
+      // await saveToIndexedDB({
+      //   tasks: tasksRes.data,
+      //   user: userRes.data,
+      //   achievements: achRes.data,
+      //   rareDrops: rareDropsRes.data,
+      // });
       
-      await processSyncQueue();
+      // await processSyncQueue();
     } catch (err) { console.error("Fetch error:", err); localStorage.removeItem("token"); setToken(null); }
   };
 
@@ -1167,75 +1148,36 @@ export default function App() {
   const addTask = async () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
     
-    const tempId = `temp-${Date.now()}`;
-    const newTask = {
-      title,
-      description: desc,
-      difficulty,
-      category,
-      due_date: taskDate,
-      important,
-      reminder_offset_days: parseReminderValue(reminderOffset),
-      completed: false,
-      updated_at: new Date().toISOString(),
-      temp_id: tempId,
-      sync_status: 'pending',
-    };
-    
-    console.log('[addTask] Adding task to IndexedDB:', newTask);
-    
-    setTasks(prev => [...prev, { ...newTask, id: tempId }]);
+    const apiPayload = { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset) };
     setTitle(""); setDesc(""); setImportant(false); setReminderOffset(""); setShowAddTask(false);
     
     try {
-      await db.tasks.add({ ...newTask, userId: user.username });
-      console.log('[addTask] Saved to IndexedDB successfully');
-      
-      const apiPayload = { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset) };
-      console.log('[addTask] Sending to API:', apiPayload);
-      
       const res = await axios.post(`${API}/tasks`, apiPayload, { headers });
-      const serverTask = res.data;
-      console.log('[addTask] API response:', serverTask);
-      
-      await db.tasks.where('temp_id').equals(tempId).delete();
-      await db.tasks.add({ ...newTask, id: serverTask.id, userId: user.username, sync_status: 'synced', updated_at: new Date().toISOString() });
-      console.log('[addTask] Updated IndexedDB with server data');
-      
-      setTasks(prev => prev.map(t => t.id === tempId ? { ...newTask, id: serverTask.id, sync_status: 'synced' } : t));
+      console.log('[addTask] API response:', res.data);
       showToast(`✅ Dodano quest na ${taskDate}`);
+      fetchData();
     } catch (err) {
       console.error('[addTask] API error:', err);
-      setTasks(prev => prev.filter(t => t.id !== tempId));
-      await db.tasks.where('temp_id').equals(tempId).delete();
-      console.log('[addTask] Rolled back IndexedDB and UI');
-      await addToSyncQueue('/tasks', 'POST', { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset), temp_id: tempId }, headers);
-      showToast(err.response?.data?.detail || "Błąd dodawania - zapisano w kolejce");
+      showToast(err.response?.data?.detail || "Błąd dodawania");
     }
   };
 
   const toggleTask = async (task) => {
     if (task.completed) return;
     
-    const optimisticTask = { ...task, completed: true, updated_at: new Date().toISOString(), sync_status: 'pending' };
+    const expPreview = getExpPreview(task.difficulty, task.due_date);
+    const today = toDateStr(new Date());
+    const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
     
-    console.log('[toggleTask] Toggling task:', task.id, optimisticTask);
-    
-    setTasks(prev => prev.map(t => t.id === task.id ? optimisticTask : t));
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true } : t));
+    showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
     
     try {
-      await db.tasks.update(task.id, optimisticTask);
-      console.log('[toggleTask] Updated IndexedDB with optimistic change');
-      
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
       console.log('[toggleTask] API response:', res.data);
-      const { exp_gained, daily_bonus, exp_timing, new_achievements, new_exclusive_achievements, earned_drop } = res.data;
-      
-      await db.tasks.update(task.id, { sync_status: 'synced' });
-      console.log('[toggleTask] Marked as synced in IndexedDB');
+      const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop } = res.data;
       
       if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
-      else if (exp_gained > 0) showToast(`✅ Quest ukończony! +${exp_gained} EXP${expToastSuffix(exp_timing)}`);
       
       if (earned_drop) {
         showToast(`✨ Zdobyto ${earned_drop.icon} ${earned_drop.name}! ${earned_drop.description}`);
@@ -1247,37 +1189,25 @@ export default function App() {
         showToast(`🏆 Odblokowano: ${freshAchievement.title}! ${freshAchievement.icon}`);
         showAppNotification("Nowe osiągnięcie", `${freshAchievement.title}: ${freshAchievement.description}`);
       }
+      
+      fetchData();
     } catch (err) {
       console.error('[toggleTask] API error:', err);
-      const previousTask = await db.tasks.get(task.id);
-      if (previousTask) {
-        setTasks(prev => prev.map(t => t.id === task.id ? previousTask : t));
-        await db.tasks.update(task.id, { completed: previousTask.completed, sync_status: 'synced' });
-        console.log('[toggleTask] Rolled back to IndexedDB state:', previousTask);
-      }
-      await addToSyncQueue(`/tasks/${task.id}`, 'PATCH', { completed: true }, headers);
-      showToast(err.response?.data?.detail || "Błąd aktualizacji - zapisano w kolejce");
+      setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+      showToast(err.response?.data?.detail || "Błąd aktualizacji");
     }
   };
 
   const saveTask = async (id, updates) => {
-    const optimisticUpdates = { ...updates, updated_at: new Date().toISOString(), sync_status: 'pending' };
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...optimisticUpdates } : t));
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
     
     try {
-      await db.tasks.update(id, optimisticUpdates);
       await axios.patch(`${API}/tasks/${id}`, updates, { headers });
-      await db.tasks.update(id, { sync_status: 'synced' });
       showToast("💾 Zapisano zmiany");
+      fetchData();
     } catch (err) {
-      const previousTask = await db.tasks.get(id);
-      if (previousTask) {
-        setTasks(prev => prev.map(t => t.id === id ? previousTask : t));
-        await db.tasks.update(id, { ...previousTask, sync_status: 'synced' });
-        console.log('[saveTask] Rolled back to IndexedDB state:', previousTask);
-      }
-      await addToSyncQueue(`/tasks/${id}`, 'PATCH', updates, headers);
-      showToast(err.response?.data?.detail || "Błąd zapisu - zapisano w kolejce");
+      setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+      showToast(err.response?.data?.detail || "Błąd zapisu");
     }
   };
   const deleteAccount = async (password, onDone) => { if (!window.confirm("Na pewno usunąć konto?")) return; try { await axios.delete(`${API}/me`, { headers, data: { password } }); localStorage.removeItem("token"); setToken(null); setUser(null); showToast("Konto usunięte"); onDone?.(); } catch (err) { showToast(err.response?.data?.detail || "Nie udało się usunąć konta"); } };
@@ -1285,32 +1215,21 @@ export default function App() {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
     
-    console.log('[deleteTask] Deleting task:', task.id, task);
-    console.log('[deleteTask] Call stack:', new Error().stack);
-    
     setTasks(prev => prev.filter(t => t.id !== task.id));
     
     try {
-      await db.tasks.update(task.id, { sync_status: 'pending' });
-      await db.tasks.delete(task.id);
-      console.log('[deleteTask] Deleted from IndexedDB');
-      
       const res = await axios.delete(`${API}/tasks/${task.id}`, { headers });
       console.log('[deleteTask] API response:', res.data);
-      
       showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
+      fetchData();
     } catch (err) {
       console.error('[deleteTask] API error:', err);
       if (err.response?.status === 404) {
-        console.log('[deleteTask] Task not found in API (404), keeping it deleted from IndexedDB');
         showToast("Zadanie już nie istnieje");
         return;
       }
-      await db.tasks.add({ ...task, sync_status: 'synced' });
       setTasks(prev => [...prev, task]);
-      console.log('[deleteTask] Rolled back - restored task to IndexedDB');
-      await addToSyncQueue(`/tasks/${task.id}`, 'DELETE', null, headers);
-      showToast(err.response?.data?.detail || "Błąd usuwania - zapisano w kolejce");
+      showToast(err.response?.data?.detail || "Błąd usuwania");
     }
   };
   const logout = () => { localStorage.removeItem("token"); setToken(null); setUser(null); };
