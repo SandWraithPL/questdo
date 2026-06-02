@@ -161,10 +161,15 @@ function resolveConflicts(localData, serverData, keyField) {
       const localTime = new Date(localItem.updated_at || 0).getTime();
       const serverTime = new Date(serverItem.updated_at || 0).getTime();
       
+      if (localItem.sync_status === 'pending') {
+        serverMap.delete(localItem[keyField]);
+        continue;
+      }
+      
       if (serverTime > localTime) {
         const index = merged.findIndex(item => item[keyField] === localItem[keyField]);
         if (index !== -1) {
-          merged[index] = { ...serverItem, version: (serverItem.version || 0) + 1 };
+          merged[index] = { ...serverItem, version: (serverItem.version || 0) + 1, sync_status: 'synced' };
         }
       }
       serverMap.delete(localItem[keyField]);
@@ -172,7 +177,7 @@ function resolveConflicts(localData, serverData, keyField) {
   }
   
   for (const serverItem of serverMap.values()) {
-    merged.push({ ...serverItem, version: (serverItem.version || 0) + 1 });
+    merged.push({ ...serverItem, version: (serverItem.version || 0) + 1, sync_status: 'synced' });
   }
   
   return merged;
@@ -204,10 +209,33 @@ async function processSyncQueue() {
       try {
         let response;
         if (item.method === 'POST') {
+          const existingTask = await db.tasks.where('temp_id').equals(item.payload.temp_id).first();
+          if (existingTask && existingTask.sync_status === 'synced') {
+            await db.syncQueue.update(item.id, { status: 'completed' });
+            continue;
+          }
           response = await axios.post(`${API}${item.endpoint}`, item.payload, { headers: item.headers });
+          const serverTask = response.data;
+          if (item.payload.temp_id) {
+            await db.tasks.where('temp_id').equals(item.payload.temp_id).delete();
+            await db.tasks.add({ ...serverTask, userId: item.headers.Authorization?.replace('Bearer ', ''), sync_status: 'synced', updated_at: new Date().toISOString() });
+          }
         } else if (item.method === 'PATCH') {
+          const taskId = item.endpoint.split('/').pop();
+          const existingTask = await db.tasks.get(parseInt(taskId));
+          if (existingTask && existingTask.sync_status === 'synced') {
+            await db.syncQueue.update(item.id, { status: 'completed' });
+            continue;
+          }
           response = await axios.patch(`${API}${item.endpoint}`, item.payload, { headers: item.headers });
+          await db.tasks.update(parseInt(taskId), { sync_status: 'synced' });
         } else if (item.method === 'DELETE') {
+          const taskId = item.endpoint.split('/').pop();
+          const existingTask = await db.tasks.get(parseInt(taskId));
+          if (!existingTask) {
+            await db.syncQueue.update(item.id, { status: 'completed' });
+            continue;
+          }
           response = await axios.delete(`${API}${item.endpoint}`, { headers: item.headers });
         }
         await db.syncQueue.update(item.id, { status: 'completed' });
@@ -1053,6 +1081,7 @@ export default function App() {
   const addTask = async () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
     
+    const tempId = `temp-${Date.now()}`;
     const newTask = {
       title,
       description: desc,
@@ -1063,28 +1092,27 @@ export default function App() {
       reminder_offset_days: parseReminderValue(reminderOffset),
       completed: false,
       updated_at: new Date().toISOString(),
+      temp_id: tempId,
+      sync_status: 'pending',
     };
     
-    const tempId = `temp-${Date.now()}`;
-    const optimisticTask = { ...newTask, id: tempId };
-    
-    setTasks(prev => [...prev, optimisticTask]);
+    setTasks(prev => [...prev, { ...newTask, id: tempId }]);
     setTitle(""); setDesc(""); setImportant(false); setReminderOffset(""); setShowAddTask(false);
     
     try {
-      await db.tasks.add({ ...optimisticTask, userId: user.username });
-      const res = await axios.post(`${API}/tasks`, newTask, { headers });
+      await db.tasks.add({ ...newTask, userId: user.username });
+      const res = await axios.post(`${API}/tasks`, { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset) }, { headers });
       const serverTask = res.data;
       
-      await db.tasks.delete(tempId);
-      await db.tasks.add({ ...serverTask, userId: user.username, updated_at: new Date().toISOString() });
+      await db.tasks.where('temp_id').equals(tempId).delete();
+      await db.tasks.add({ ...serverTask, userId: user.username, sync_status: 'synced', updated_at: new Date().toISOString() });
       
-      setTasks(prev => prev.map(t => t.id === tempId ? serverTask : t));
+      setTasks(prev => prev.map(t => t.id === tempId ? { ...serverTask, sync_status: 'synced' } : t));
       showToast(`✅ Dodano quest na ${taskDate}`);
     } catch (err) {
       setTasks(prev => prev.filter(t => t.id !== tempId));
-      await db.tasks.delete(tempId);
-      await addToSyncQueue('/tasks', 'POST', newTask, headers);
+      await db.tasks.where('temp_id').equals(tempId).delete();
+      await addToSyncQueue('/tasks', 'POST', { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset) }, headers);
       showToast(err.response?.data?.detail || "Błąd dodawania - zapisano w kolejce");
     }
   };
@@ -1092,13 +1120,16 @@ export default function App() {
   const toggleTask = async (task) => {
     if (task.completed) return;
     
-    const optimisticTask = { ...task, completed: true, updated_at: new Date().toISOString() };
+    const previousState = { ...task };
+    const optimisticTask = { ...task, completed: true, updated_at: new Date().toISOString(), sync_status: 'pending' };
     setTasks(prev => prev.map(t => t.id === task.id ? optimisticTask : t));
     
     try {
       await db.tasks.update(task.id, optimisticTask);
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
       const { exp_gained, daily_bonus, exp_timing, new_achievements, new_exclusive_achievements, earned_drop } = res.data;
+      
+      await db.tasks.update(task.id, { sync_status: 'synced' });
       
       if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
       else if (exp_gained > 0) showToast(`✅ Quest ukończony! +${exp_gained} EXP${expToastSuffix(exp_timing)}`);
@@ -1116,23 +1147,30 @@ export default function App() {
       
       fetchData();
     } catch (err) {
-      setTasks(prev => prev.map(t => t.id === task.id ? task : t));
-      await db.tasks.update(task.id, { completed: false });
+      setTasks(prev => prev.map(t => t.id === task.id ? previousState : t));
+      await db.tasks.update(task.id, { completed: false, sync_status: 'synced' });
       await addToSyncQueue(`/tasks/${task.id}`, 'PATCH', { completed: true }, headers);
       showToast(err.response?.data?.detail || "Błąd aktualizacji - zapisano w kolejce");
     }
   };
 
   const saveTask = async (id, updates) => {
-    const optimisticUpdates = { ...updates, updated_at: new Date().toISOString() };
+    const previousTask = tasks.find(t => t.id === id);
+    if (!previousTask) return;
+    
+    const previousState = { ...previousTask };
+    const optimisticUpdates = { ...updates, updated_at: new Date().toISOString(), sync_status: 'pending' };
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...optimisticUpdates } : t));
     
     try {
       await db.tasks.update(id, optimisticUpdates);
       await axios.patch(`${API}/tasks/${id}`, updates, { headers });
+      await db.tasks.update(id, { sync_status: 'synced' });
       showToast("💾 Zapisano zmiany");
       fetchData();
     } catch (err) {
+      setTasks(prev => prev.map(t => t.id === id ? previousState : t));
+      await db.tasks.update(id, { ...previousState, sync_status: 'synced' });
       await addToSyncQueue(`/tasks/${id}`, 'PATCH', updates, headers);
       showToast(err.response?.data?.detail || "Błąd zapisu - zapisano w kolejce");
     }
@@ -1142,16 +1180,18 @@ export default function App() {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
     
+    const previousState = { ...task };
     setTasks(prev => prev.filter(t => t.id !== task.id));
     
     try {
+      await db.tasks.update(task.id, { sync_status: 'pending' });
       await db.tasks.delete(task.id);
       const res = await axios.delete(`${API}/tasks/${task.id}`, { headers });
       showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
       fetchData();
     } catch (err) {
-      setTasks(prev => [...prev, task]);
-      await db.tasks.add(task);
+      setTasks(prev => [...prev, previousState]);
+      await db.tasks.add({ ...previousState, sync_status: 'synced' });
       await addToSyncQueue(`/tasks/${task.id}`, 'DELETE', null, headers);
       showToast(err.response?.data?.detail || "Błąd usuwania - zapisano w kolejce");
     }
