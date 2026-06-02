@@ -685,6 +685,7 @@ function AdminPanel({ isOpen, onClose, headers }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [resetExp, setResetExp] = useState(false);
 
   const fetchData = async () => {
     setLoading(true);
@@ -714,9 +715,12 @@ function AdminPanel({ isOpen, onClose, headers }) {
   };
 
   const resetAllProgress = async () => {
-    if (!window.confirm("Zresetować osiągnięcia, znajdźki i serie WSZYSTKIM użytkownikom? Tej operacji nie da się cofnąć.")) return;
+    const confirmMsg = resetExp
+      ? "Zresetować osiągnięcia, znajdźki, serie ORAZ EXP WSZYSTKIM użytkownikom? Ta operacja jest nieodwracalna."
+      : "Zresetować osiągnięcia, znajdźki i serie WSZYSTKIM użytkownikom? EXP zostanie zachowane.";
+    if (!window.confirm(confirmMsg)) return;
     try {
-      const res = await axios.post(`${API}/admin/reset-all-progress`, {}, { headers });
+      const res = await axios.post(`${API}/admin/reset-all-progress`, { reset_exp: resetExp }, { headers });
       alert(res.data?.message || "Reset wykonany");
       fetchData();
     } catch (err) {
@@ -756,6 +760,10 @@ function AdminPanel({ isOpen, onClose, headers }) {
               </div>
             )}
             <div className="admin-danger-zone">
+              <label className="reset-exp-toggle">
+                <input type="checkbox" checked={resetExp} onChange={(e) => setResetExp(e.target.checked)} />
+                <span>Resetuj również EXP (wszyscy użytkownicy → 0 EXP)</span>
+              </label>
               <button type="button" className="reset-progress-btn" onClick={resetAllProgress}>Reset osiągnięć, znajdziek i serii</button>
             </div>
             <div className="admin-users-section">
