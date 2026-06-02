@@ -1,5 +1,7 @@
 # ⚔️ QuestDo - Gamifikowana lista zadań
 
+**🌐 Działająca aplikacja:** [https://questdo-app.azurewebsites.net](https://questdo-app.azurewebsites.net)
+
 QuestDo to aplikacja do zarządzania zadaniami w stylu RPG. Ukończaj questy, zdobywaj EXP, odblokowuj osiągnięcia i rywalizuj w rankingach!
 
 ## ✨ Funkcje
