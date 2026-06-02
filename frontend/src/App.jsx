@@ -913,7 +913,16 @@ export default function App() {
       const newUnlocked = achRes.data.unlocked || [];
       
       setUser(userRes.data);
-      setTasks(tasksRes.data);
+      
+      // Sort tasks: uncompleted on top (by date ascending), completed at bottom (by date ascending)
+      const sortedTasks = [...tasksRes.data].sort((a, b) => {
+        if (a.completed !== b.completed) {
+          return a.completed ? 1 : -1; // uncompleted first
+        }
+        return new Date(a.due_date) - new Date(b.due_date); // by date ascending
+      });
+      setTasks(sortedTasks);
+      
       setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
       if (levelsRes.data?.length) setLevelThresholds(levelsRes.data.map(l => l.threshold));
       setChallenges(chRes.data);
@@ -998,15 +1007,24 @@ export default function App() {
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
     
-    // Optimistic UI update
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true } : t));
+    // Optimistic UI update - set exp_awarded immediately and sort
+    setTasks(prev => {
+      const updated = prev.map(t => t.id === task.id ? { ...t, completed: true, exp_awarded: true, exp_awarded_amount: expPreview.amount } : t);
+      // Sort: uncompleted on top (by date ascending), completed at bottom (by date ascending)
+      return updated.sort((a, b) => {
+        if (a.completed !== b.completed) {
+          return a.completed ? 1 : -1; // uncompleted first
+        }
+        return new Date(a.due_date) - new Date(b.due_date); // by date ascending
+      });
+    });
     showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
     
     try {
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
       const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop, exp_gained, exp_timing } = res.data;
       
-      // Update with real data from API
+      // Update with real data from API (if different from optimistic)
       setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true, exp_awarded: true, exp_awarded_amount: exp_gained || expPreview.amount } : t));
       
       if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
