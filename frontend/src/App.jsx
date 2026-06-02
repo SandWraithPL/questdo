@@ -3,11 +3,8 @@ import { useState, useEffect, useMemo } from "react";
 import axios from "axios";
 import "./index.css";
 import DatePicker from "./DatePicker";
-import db from "./db";
 
 const API = "https://questdo-backend.onrender.com";
-
-const SYNC_QUEUE_NAME = 'questdo-sync-queue';
 
 const DEFAULT_LEVEL_THRESHOLDS = [
   0, 80, 180, 320, 480, 660, 860, 1080, 1320, 1600, 1900, 2250, 2650, 3100, 3600,
@@ -100,226 +97,6 @@ function getExpProgress(exp, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
   }
   const progress = next === current ? 100 : ((exp - current) / (next - current)) * 100;
   return { progress, current, next };
-}
-
-async function loadFromIndexedDB() {
-  try {
-    console.log('[loadFromIndexedDB] Loading from IndexedDB, DB version:', db.verno);
-    const [tasks, user, achievements, rareDrops] = await Promise.all([
-      db.tasks.toArray(),
-      db.user.toArray(),
-      db.achievements.toArray(),
-      db.rare_drops.toArray(),
-    ]);
-    console.log('[loadFromIndexedDB] Loaded:', { tasks: tasks.length, user: user.length, achievements: achievements.length, rareDrops: rareDrops.length });
-    return {
-      tasks: tasks || [],
-      user: user?.[0] || null,
-      achievements: { unlocked: achievements || [], next: null },
-      rareDrops: rareDrops || [],
-    };
-  } catch (err) {
-    console.error("[loadFromIndexedDB] IndexedDB load error:", err);
-    return { tasks: [], user: null, achievements: { unlocked: [], next: null }, rareDrops: [] };
-  }
-}
-
-async function saveToIndexedDB({ tasks, user, achievements, rareDrops }) {
-  try {
-    await db.transaction('rw', db.tasks, db.user, db.achievements, db.rare_drops, async () => {
-      if (tasks) {
-        const existingTasks = await db.tasks.toArray();
-        const pendingTasks = existingTasks.filter(t => t.sync_status === 'pending');
-        const syncedTasks = existingTasks.filter(t => t.sync_status !== 'pending');
-        
-        const mergedSyncedTasks = resolveConflicts(syncedTasks, tasks, 'id');
-        const finalTasks = [...mergedSyncedTasks, ...pendingTasks];
-        
-        await db.tasks.clear().then(() => db.tasks.bulkAdd(finalTasks.map(t => ({ ...t, updated_at: t.updated_at || new Date().toISOString(), version: t.version || 1, sync_status: t.sync_status || 'synced' }))));
-        console.log('[saveToIndexedDB] Saved tasks, preserved pending:', pendingTasks.length);
-      }
-      if (user) {
-        const existingUser = await db.user.toArray();
-        const mergedUser = existingUser.length > 0 ? resolveConflicts([existingUser[0]], [user], 'username')[0] : user;
-        await db.user.clear().then(() => db.user.add({ ...mergedUser, updated_at: mergedUser.updated_at || new Date().toISOString(), version: mergedUser.version || 1, sync_status: 'synced' }));
-      }
-      if (achievements?.unlocked) {
-        const existingAchievements = await db.achievements.toArray();
-        const pendingAchievements = existingAchievements.filter(a => a.sync_status === 'pending');
-        const syncedAchievements = existingAchievements.filter(a => a.sync_status !== 'pending');
-        
-        const mergedSyncedAchievements = resolveConflicts(syncedAchievements, achievements.unlocked.map(a => ({ ...a, userId: user?.username })), 'id');
-        const finalAchievements = [...mergedSyncedAchievements, ...pendingAchievements];
-        
-        await db.achievements.clear().then(() => db.achievements.bulkAdd(finalAchievements.map(a => ({ ...a, userId: user?.username, unlocked_at: a.unlocked_at || new Date().toISOString(), version: a.version || 1, sync_status: a.sync_status || 'synced' }))));
-      }
-      if (rareDrops?.items) {
-        const existingDrops = await db.rare_drops.toArray();
-        const pendingDrops = existingDrops.filter(d => d.sync_status === 'pending');
-        const syncedDrops = existingDrops.filter(d => d.sync_status !== 'pending');
-        
-        const mergedSyncedDrops = resolveConflicts(syncedDrops, rareDrops.items.map(d => ({ ...d, userId: user?.username })), 'id');
-        const finalDrops = [...mergedSyncedDrops, ...pendingDrops];
-        
-        await db.rare_drops.clear().then(() => db.rare_drops.bulkAdd(finalDrops.map(d => ({ ...d, userId: user?.username, obtained_at: d.obtained_at || new Date().toISOString(), version: d.version || 1, sync_status: d.sync_status || 'synced' }))));
-      }
-    });
-  } catch (err) {
-    console.error('[saveToIndexedDB] IndexedDB save error:', err);
-  }
-}
-
-function resolveConflicts(localData, serverData, keyField) {
-  const merged = [...localData];
-  const serverMap = new Map(serverData.map(item => [item[keyField], item]));
-  
-  for (const localItem of localData) {
-    const serverItem = serverMap.get(localItem[keyField]);
-    if (serverItem) {
-      const localTime = new Date(localItem.updated_at || 0).getTime();
-      const serverTime = new Date(serverItem.updated_at || 0).getTime();
-      
-      if (localItem.sync_status === 'pending') {
-        serverMap.delete(localItem[keyField]);
-        continue;
-      }
-      
-      if (serverTime > localTime) {
-        const index = merged.findIndex(item => item[keyField] === localItem[keyField]);
-        if (index !== -1) {
-          merged[index] = { ...serverItem, version: (serverItem.version || 0) + 1, sync_status: 'synced' };
-        }
-      }
-      serverMap.delete(localItem[keyField]);
-    }
-  }
-  
-  for (const serverItem of serverMap.values()) {
-    merged.push({ ...serverItem, version: (serverItem.version || 0) + 1, sync_status: 'synced' });
-  }
-  
-  return merged;
-}
-
-async function addToSyncQueue(endpoint, method, payload, headers) {
-  try {
-    const existingItems = await db.syncQueue.where('status').equals('pending').toArray();
-    
-    const isDuplicate = existingItems.some(item => {
-      if (item.endpoint !== endpoint || item.method !== method) return false;
-      
-      if (method === 'POST' && payload.temp_id) {
-        return item.payload.temp_id === payload.temp_id;
-      }
-      
-      if (method === 'PATCH' || method === 'DELETE') {
-        const taskId = endpoint.split('/').pop();
-        const existingTaskId = item.endpoint.split('/').pop();
-        return taskId === existingTaskId && item.method === method;
-      }
-      
-      return false;
-    });
-    
-    if (isDuplicate) {
-      console.log('[addToSyncQueue] Duplicate request detected, skipping:', endpoint, method);
-      return;
-    }
-    
-    await db.syncQueue.add({
-      endpoint,
-      method,
-      payload,
-      headers,
-      status: 'pending',
-      created_at: new Date().toISOString(),
-    });
-    console.log('[addToSyncQueue] Added to sync queue:', endpoint, method);
-    
-    if ('serviceWorker' in navigator && 'sync' in ServiceWorkerRegistration.prototype) {
-      const reg = await navigator.serviceWorker.ready;
-      await reg.sync.register(SYNC_QUEUE_NAME);
-    }
-  } catch (err) {
-    console.error('[addToSyncQueue] Sync queue error:', err);
-  }
-}
-
-async function processSyncQueue() {
-  try {
-    const pendingItems = await db.syncQueue.where('status').equals('pending').toArray();
-    console.log('[processSyncQueue] Pending items:', pendingItems.length);
-    
-    for (const item of pendingItems) {
-      try {
-        console.log('[processSyncQueue] Processing item:', item.id, item.method, item.endpoint, item.payload);
-        let response;
-        if (item.method === 'POST') {
-          const existingTask = await db.tasks.where('temp_id').equals(item.payload.temp_id).first();
-          console.log('[processSyncQueue] POST - existingTask from IndexedDB:', existingTask);
-          if (existingTask && existingTask.sync_status === 'synced') {
-            console.log('[processSyncQueue] POST - already synced, skipping');
-            await db.syncQueue.update(item.id, { status: 'completed' });
-            continue;
-          }
-          
-          const freshPayload = existingTask ? { 
-            title: existingTask.title, 
-            description: existingTask.description, 
-            difficulty: existingTask.difficulty, 
-            category: existingTask.category, 
-            due_date: existingTask.due_date, 
-            important: existingTask.important, 
-            reminder_offset_days: existingTask.reminder_offset_days,
-            temp_id: existingTask.temp_id
-          } : item.payload;
-          console.log('[processSyncQueue] POST - sending fresh payload:', freshPayload);
-          
-          response = await axios.post(`${API}${item.endpoint}`, freshPayload, { headers: item.headers });
-          const serverTask = response.data;
-          console.log('[processSyncQueue] POST - API response:', serverTask);
-          if (item.payload.temp_id) {
-            await db.tasks.where('temp_id').equals(item.payload.temp_id).delete();
-            await db.tasks.add({ ...existingTask, id: serverTask.id, userId: item.headers.Authorization?.replace('Bearer ', ''), sync_status: 'synced', updated_at: new Date().toISOString() });
-            console.log('[processSyncQueue] POST - replaced temp task with server data');
-          }
-        } else if (item.method === 'PATCH') {
-          const taskId = item.endpoint.split('/').pop();
-          const existingTask = await db.tasks.get(parseInt(taskId));
-          console.log('[processSyncQueue] PATCH - existingTask from IndexedDB:', existingTask);
-          if (existingTask && existingTask.sync_status === 'synced') {
-            console.log('[processSyncQueue] PATCH - already synced, skipping');
-            await db.syncQueue.update(item.id, { status: 'completed' });
-            continue;
-          }
-          response = await axios.patch(`${API}${item.endpoint}`, item.payload, { headers: item.headers });
-          console.log('[processSyncQueue] PATCH - API response:', response.data);
-          await db.tasks.update(parseInt(taskId), { sync_status: 'synced' });
-          console.log('[processSyncQueue] PATCH - marked as synced');
-        } else if (item.method === 'DELETE') {
-          const taskId = item.endpoint.split('/').pop();
-          const existingTask = await db.tasks.get(parseInt(taskId));
-          console.log('[processSyncQueue] DELETE - existingTask from IndexedDB:', existingTask);
-          if (!existingTask) {
-            console.log('[processSyncQueue] DELETE - task already deleted, skipping');
-            await db.syncQueue.update(item.id, { status: 'completed' });
-            continue;
-          }
-          response = await axios.delete(`${API}${item.endpoint}`, { headers: item.headers });
-          console.log('[processSyncQueue] DELETE - API response:', response.data);
-        }
-        await db.syncQueue.update(item.id, { status: 'completed' });
-        console.log('[processSyncQueue] Item marked as completed');
-      } catch (err) {
-        console.error('[processSyncQueue] Sync item error:', err);
-        await db.syncQueue.update(item.id, { status: 'failed' });
-      }
-    }
-    await db.syncQueue.where('status').equals('completed').delete();
-    console.log('[processSyncQueue] Cleaned up completed items');
-  } catch (err) {
-    console.error('[processSyncQueue] Process sync queue error:', err);
-  }
 }
 
 function Toast({ message }) {
@@ -1118,28 +895,29 @@ export default function App() {
     
     try {
       const [userRes, tasksRes, achRes, chRes, levelsRes, rareDropsRes, historyRes] = await Promise.all([
-        axios.get(`${API}/me`, { headers }), axios.get(`${API}/tasks`, { headers }), axios.get(`${API}/achievements`, { headers }),
-        axios.get(`${API}/challenges`, { headers }), axios.get(`${API}/game/levels`, { headers }).catch(() => ({ data: null })),
+        axios.get(`${API}/me`, { headers }),
+        axios.get(`${API}/tasks`, { headers }),
+        axios.get(`${API}/achievements`, { headers }),
+        axios.get(`${API}/challenges`, { headers }),
+        axios.get(`${API}/game/levels`, { headers }).catch(() => ({ data: null })),
         axios.get(`${API}/rare-drops/inventory`, { headers }).catch(() => ({ data: null })),
         axios.get(`${API}/history`, { headers }).catch(() => ({ data: [] })),
       ]);
+      
       const newUnlocked = achRes.data.unlocked || [];
       
-      setUser(userRes.data); setTasks(tasksRes.data); setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
+      setUser(userRes.data);
+      setTasks(tasksRes.data);
+      setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
       if (levelsRes.data?.length) setLevelThresholds(levelsRes.data.map(l => l.threshold));
       setChallenges(chRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
       setHistory(historyRes.data || []);
-      
-      // await saveToIndexedDB({
-      //   tasks: tasksRes.data,
-      //   user: userRes.data,
-      //   achievements: achRes.data,
-      //   rareDrops: rareDropsRes.data,
-      // });
-      
-      // await processSyncQueue();
-    } catch (err) { console.error("Fetch error:", err); localStorage.removeItem("token"); setToken(null); }
+    } catch (err) {
+      console.error("Fetch error:", err);
+      localStorage.removeItem("token");
+      setToken(null);
+    }
   };
 
   useEffect(() => { if (token) fetchData(); }, [token]);
@@ -1153,9 +931,8 @@ export default function App() {
     
     try {
       const res = await axios.post(`${API}/tasks`, apiPayload, { headers });
-      console.log('[addTask] API response:', res.data);
       showToast(`✅ Dodano quest na ${taskDate}`);
-      fetchData();
+      await fetchData();
     } catch (err) {
       console.error('[addTask] API error:', err);
       showToast(err.response?.data?.detail || "Błąd dodawania");
@@ -1169,13 +946,16 @@ export default function App() {
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
     
+    // Optimistic UI update
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true } : t));
     showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
     
     try {
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-      console.log('[toggleTask] API response:', res.data);
-      const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop } = res.data;
+      const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop, exp_gained, exp_timing } = res.data;
+      
+      // Update with real data from API
+      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true, exp_awarded: true, exp_awarded_amount: exp_gained || expPreview.amount } : t));
       
       if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
       
@@ -1190,15 +970,18 @@ export default function App() {
         showAppNotification("Nowe osiągnięcie", `${freshAchievement.title}: ${freshAchievement.description}`);
       }
       
+      // Refresh data in background (don't block UI)
       fetchData();
     } catch (err) {
       console.error('[toggleTask] API error:', err);
+      // Rollback on error
       setTasks(prev => prev.map(t => t.id === task.id ? task : t));
       showToast(err.response?.data?.detail || "Błąd aktualizacji");
     }
   };
 
   const saveTask = async (id, updates) => {
+    // Optimistic update
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
     
     try {
@@ -1206,20 +989,35 @@ export default function App() {
       showToast("💾 Zapisano zmiany");
       fetchData();
     } catch (err) {
+      // Rollback
       setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
       showToast(err.response?.data?.detail || "Błąd zapisu");
     }
   };
-  const deleteAccount = async (password, onDone) => { if (!window.confirm("Na pewno usunąć konto?")) return; try { await axios.delete(`${API}/me`, { headers, data: { password } }); localStorage.removeItem("token"); setToken(null); setUser(null); showToast("Konto usunięte"); onDone?.(); } catch (err) { showToast(err.response?.data?.detail || "Nie udało się usunąć konta"); } };
+  
+  const deleteAccount = async (password, onDone) => { 
+    if (!window.confirm("Na pewno usunąć konto?")) return; 
+    try { 
+      await axios.delete(`${API}/me`, { headers, data: { password } }); 
+      localStorage.removeItem("token"); 
+      setToken(null); 
+      setUser(null); 
+      showToast("Konto usunięte"); 
+      onDone?.(); 
+    } catch (err) { 
+      showToast(err.response?.data?.detail || "Nie udało się usunąć konta"); 
+    } 
+  };
+  
   const deleteTask = async (task) => {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
     
+    // Optimistic delete
     setTasks(prev => prev.filter(t => t.id !== task.id));
     
     try {
       const res = await axios.delete(`${API}/tasks/${task.id}`, { headers });
-      console.log('[deleteTask] API response:', res.data);
       showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
       fetchData();
     } catch (err) {
@@ -1228,10 +1026,12 @@ export default function App() {
         showToast("Zadanie już nie istnieje");
         return;
       }
+      // Rollback - restore task
       setTasks(prev => [...prev, task]);
       showToast(err.response?.data?.detail || "Błąd usuwania");
     }
   };
+  
   const logout = () => { localStorage.removeItem("token"); setToken(null); setUser(null); };
   const handleLogin = () => { const newToken = localStorage.getItem("token"); setToken(newToken); if (newToken) setTimeout(fetchData, 100); };
 
