@@ -1,5 +1,5 @@
 /* global clients */
-const CACHE_NAME = 'questdo-v3';
+const CACHE_NAME = 'questdo-v4';
 
 // Przy instalacji - otwórz cache
 self.addEventListener('install', () => {
@@ -11,20 +11,42 @@ self.addEventListener('install', () => {
 self.addEventListener('activate', (event) => {
     console.log('SW activating...');
     event.waitUntil(
-        caches.keys().then(keys => {
-            return Promise.all(
+        caches.keys().then(keys => Promise.all(
                 keys.filter(key => key !== CACHE_NAME).map(key => {
                     console.log('Deleting old cache:', key);
                     return caches.delete(key);
                 })
-            );
+            )
+        ).then(() => clients.claim())
+        .then(() => clients.matchAll({ type: 'window', includeUncontrolled: true }))
+        .then(clientList => {
+            clientList.forEach(client => {
+                client.postMessage({ type: 'QUESTDO_SW_ACTIVATED', cacheName: CACHE_NAME });
+            });
         })
     );
-    event.waitUntil(clients.claim()); // Przejmij kontrolę nad wszystkimi klientami
+});
+
+self.addEventListener('message', (event) => {
+    if (event.data?.type === 'QUESTDO_SKIP_WAITING') {
+        self.skipWaiting();
+    }
 });
 
 // Przy każdym żądaniu - najpierw sieć, potem cache
 self.addEventListener('fetch', (event) => {
+    if (event.request.method !== 'GET') {
+        event.respondWith(fetch(event.request));
+        return;
+    }
+
+    const requestUrl = new URL(event.request.url);
+    const isSameOrigin = requestUrl.origin === self.location.origin;
+    if (!isSameOrigin) {
+        event.respondWith(fetch(event.request));
+        return;
+    }
+
     event.respondWith(
         fetch(event.request)
         .then(response => {
@@ -39,7 +61,11 @@ self.addEventListener('fetch', (event) => {
         })
         .catch(() => {
             // Offline - zwróć z cache
-            return caches.match(event.request);
+            return caches.match(event.request).then(cached => {
+                if (cached) return cached;
+                if (event.request.mode === 'navigate') return caches.match('/');
+                return new Response('', { status: 503, statusText: 'Offline' });
+            });
         })
     );
 });

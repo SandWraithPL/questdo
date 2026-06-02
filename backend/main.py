@@ -70,6 +70,14 @@ def migrate_schema():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE users ADD COLUMN last_streak_date DATE"))
             print("Migracja: dodano kolumnę users.last_streak_date")
+        if "progress_reset_at" not in user_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN progress_reset_at TIMESTAMP"))
+            print("Migracja: dodano kolumnę users.progress_reset_at")
+        if "exp_at_progress_reset" not in user_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN exp_at_progress_reset INTEGER DEFAULT 0"))
+            print("Migracja: dodano kolumnę users.exp_at_progress_reset")
 
     # Rare Drops
     if "rare_drops" not in insp.get_table_names():
@@ -1145,13 +1153,21 @@ def ranking_exclusive_achievements(db: Session = Depends(get_db)):
 
 @app.get("/rankings/all")
 def ranking_all(db: Session = Depends(get_db)):
+    exp = ranking_exp(db)
+    streak = ranking_streak(db)
+    achievements = ranking_achievements(db)
+    rare_drops = ranking_rare_drops(db)
+    completed = ranking_completed_tasks(db)
+    exclusive = ranking_exclusive_achievements(db)
     return {
-        "exp": ranking_exp(db),
-        "streak": ranking_streak(db),
-        "achievements": ranking_achievements(db),
-        "rare_drops": ranking_rare_drops(db),
-        "completed_tasks": ranking_completed_tasks(db),
-        "exclusive_achievements": ranking_exclusive_achievements(db)
+        "exp": exp,
+        "streak": streak,
+        "achievements": achievements,
+        "rare_drops": rare_drops,
+        "completed": completed,
+        "completed_tasks": completed,
+        "exclusive": exclusive,
+        "exclusive_achievements": exclusive,
     }
 
 
@@ -1186,6 +1202,7 @@ def delete_user_admin(user_id: int, current_user: models.User = Depends(get_curr
     db.query(models.PlayerRareDrop).filter(models.PlayerRareDrop.user_id == user_id).delete()
     db.query(models.PlayerExclusiveAchievement).filter(models.PlayerExclusiveAchievement.user_id == user_id).delete()
     db.query(models.PlayerBadge).filter(models.PlayerBadge.user_id == user_id).delete()
+    db.query(models.PlayerHistory).filter(models.PlayerHistory.user_id == user_id).delete()
     db.delete(target_user)
     db.commit()
     
@@ -1206,6 +1223,32 @@ def get_admin_stats(current_user: models.User = Depends(get_current_admin_user),
         "total_completed_tasks": total_completed,
         "total_achievements_unlocked": total_achievements,
         "total_rare_drops": total_rare_drops
+    }
+
+
+@app.post("/admin/reset-all-progress")
+def reset_all_progress(current_user: models.User = Depends(get_current_admin_user), db: Session = Depends(get_db)):
+    reset_at = datetime.utcnow()
+    users = db.query(models.User).all()
+
+    db.query(models.UserAchievement).delete()
+    db.query(models.PlayerExclusiveAchievement).delete()
+    db.query(models.PlayerBadge).delete()
+    db.query(models.PlayerHistory).filter(
+        models.PlayerHistory.event_type.in_(["achievement", "level"])
+    ).delete(synchronize_session=False)
+
+    for user in users:
+        user.streak = 0
+        user.last_streak_date = None
+        user.progress_reset_at = reset_at
+        user.exp_at_progress_reset = user.exp or 0
+
+    db.commit()
+    return {
+        "message": "Zresetowano osiągnięcia i serie wszystkim użytkownikom",
+        "users_reset": len(users),
+        "reset_at": str(reset_at),
     }
 
 

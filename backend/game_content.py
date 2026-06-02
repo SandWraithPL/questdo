@@ -89,7 +89,15 @@ ACHIEVEMENT_BY_SLUG = {a["slug"]: a for a in ACHIEVEMENT_DEFS}
 def gather_user_stats(user, db, models) -> dict:
     from datetime import date, timedelta
 
-    tasks = db.query(models.Task).filter(models.Task.owner_id == user.id).all()
+    reset_at = getattr(user, "progress_reset_at", None)
+    exp_floor = getattr(user, "exp_at_progress_reset", 0) or 0
+    task_query = db.query(models.Task).filter(models.Task.owner_id == user.id)
+    if reset_at:
+        task_query = task_query.filter(
+            ((models.Task.completed_at != None) & (models.Task.completed_at >= reset_at)) |
+            ((models.Task.completed == False) & (models.Task.created_at >= reset_at))
+        )
+    tasks = task_query.all()
     completed = [t for t in tasks if t.completed]
     active = [t for t in tasks if not t.completed]
 
@@ -134,16 +142,19 @@ def gather_user_stats(user, db, models) -> dict:
             by_date[ds]["done"] += 1
     perfect_days = sum(1 for v in by_date.values() if v["total"] >= 3 and v["done"] == v["total"])
 
-    daily_bonus_count = db.query(models.DailyQuestAssignment).filter(
+    daily_bonus_query = db.query(models.DailyQuestAssignment).filter(
         models.DailyQuestAssignment.user_id == user.id,
         models.DailyQuestAssignment.bonus_claimed == True,
-    ).count()
+    )
+    if reset_at:
+        daily_bonus_query = daily_bonus_query.filter(models.DailyQuestAssignment.quest_date >= reset_at.date())
+    daily_bonus_count = daily_bonus_query.count()
 
     return {
         "completed_tasks": len(completed),
         "active_tasks": len(active),
         "streak": user.streak or 0,
-        "exp": user.exp or 0,
+        "exp": max(0, (user.exp or 0) - exp_floor),
         "early": early,
         "late": late,
         "ontime": ontime,
@@ -365,6 +376,7 @@ def check_exclusive_achievements(user, db, models) -> list[dict]:
     """Sprawdza i odblokowuje nowe exclusive achievements."""
     from datetime import datetime, timedelta, date, time
     
+    reset_at = getattr(user, "progress_reset_at", None)
     stats = gather_user_stats(user, db, models)
     unlocked_slugs = {
         ua.exclusive_achievement.slug 
@@ -392,7 +404,7 @@ def check_exclusive_achievements(user, db, models) -> list[dict]:
             ).all()
             today_exp = sum(
                 t.exp_awarded_amount for t in today_tasks
-                if t.completed_at and t.completed_at.date() == today
+                if t.completed_at and t.completed_at.date() == today and (not reset_at or t.completed_at >= reset_at)
             )
             met = today_exp >= value
         
@@ -403,7 +415,7 @@ def check_exclusive_achievements(user, db, models) -> list[dict]:
                 models.Task.owner_id == user.id,
                 models.Task.completed == True,
             ).all():
-                if t.completed_at and t.completed_at.date() == today:
+                if t.completed_at and t.completed_at.date() == today and (not reset_at or t.completed_at >= reset_at):
                     if t.completed_at.time() < time(10, 0):
                         morning_quests += 1
             met = morning_quests >= value
@@ -415,39 +427,51 @@ def check_exclusive_achievements(user, db, models) -> list[dict]:
                 models.Task.owner_id == user.id,
                 models.Task.completed == True,
             ).all():
-                if t.completed_at and t.completed_at.date() == today:
+                if t.completed_at and t.completed_at.date() == today and (not reset_at or t.completed_at >= reset_at):
                     if t.completed_at.time() >= time(22, 0):
                         night_quests += 1
             met = night_quests >= value
         
         elif ea_type == "rare_drop_count":
-            count = db.query(models.PlayerRareDrop).filter(
-                models.PlayerRareDrop.user_id == user.id
-            ).count()
+            drop_query = db.query(models.PlayerRareDrop).filter(
+                models.PlayerRareDrop.user_id == user.id,
+            )
+            if reset_at:
+                drop_query = drop_query.filter(models.PlayerRareDrop.obtained_at >= reset_at)
+            count = drop_query.count()
             met = count >= value
         
         elif ea_type == "epic_rare_drops":
-            count = db.query(models.PlayerRareDrop).join(models.RareDrop).filter(
+            drop_query = db.query(models.PlayerRareDrop).join(models.RareDrop).filter(
                 models.PlayerRareDrop.user_id == user.id,
-                models.RareDrop.rarity == "epic"
-            ).count()
+                models.RareDrop.rarity == "epic",
+            )
+            if reset_at:
+                drop_query = drop_query.filter(models.PlayerRareDrop.obtained_at >= reset_at)
+            count = drop_query.count()
             met = count >= value
         
         elif ea_type == "legendary_rare_drops":
-            count = db.query(models.PlayerRareDrop).join(models.RareDrop).filter(
+            drop_query = db.query(models.PlayerRareDrop).join(models.RareDrop).filter(
                 models.PlayerRareDrop.user_id == user.id,
-                models.RareDrop.rarity == "legendary"
-            ).count()
+                models.RareDrop.rarity == "legendary",
+            )
+            if reset_at:
+                drop_query = drop_query.filter(models.PlayerRareDrop.obtained_at >= reset_at)
+            count = drop_query.count()
             met = count >= value
         
         elif ea_type == "weekly_completion":
             today = date.today()
             week_start = today - timedelta(days=today.weekday())
-            week_completed = db.query(models.Task).filter(
+            week_query = db.query(models.Task).filter(
                 models.Task.owner_id == user.id,
                 models.Task.completed == True,
-                models.Task.completed_at >= datetime.combine(week_start, time.min)
-            ).count()
+                models.Task.completed_at >= datetime.combine(week_start, time.min),
+            )
+            if reset_at:
+                week_query = week_query.filter(models.Task.completed_at >= reset_at)
+            week_completed = week_query.count()
             met = week_completed >= value
         
         elif ea_type == "category_diversity":
@@ -457,7 +481,7 @@ def check_exclusive_achievements(user, db, models) -> list[dict]:
                 models.Task.owner_id == user.id,
                 models.Task.completed == True,
             ).all():
-                if t.completed_at and t.completed_at.date() == today:
+                if t.completed_at and t.completed_at.date() == today and (not reset_at or t.completed_at >= reset_at):
                     categories.add(t.category)
             met = len(categories) >= value
         

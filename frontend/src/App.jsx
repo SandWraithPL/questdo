@@ -123,6 +123,71 @@ async function showAppNotification(title, body) {
   return true;
 }
 
+function reloadForNewServiceWorker() {
+  if (sessionStorage.getItem("questdo-sw-reloading") === "1") return;
+  sessionStorage.setItem("questdo-sw-reloading", "1");
+  window.location.reload();
+}
+
+async function registerServiceWorkerForUpdates() {
+  if (!("serviceWorker" in navigator)) return undefined;
+
+  let refreshing = false;
+  const onControllerChange = () => {
+    if (refreshing) return;
+    refreshing = true;
+    reloadForNewServiceWorker();
+  };
+  const onMessage = (event) => {
+    if (event.data?.type === "QUESTDO_SW_ACTIVATED" && navigator.serviceWorker.controller) {
+      reloadForNewServiceWorker();
+    }
+  };
+
+  navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
+  navigator.serviceWorker.addEventListener("message", onMessage);
+
+  const registration = await navigator.serviceWorker.register("/sw.js", { updateViaCache: "none" });
+  sessionStorage.removeItem("questdo-sw-reloading");
+
+  const activateWaitingWorker = () => {
+    if (registration.waiting && navigator.serviceWorker.controller) {
+      registration.waiting.postMessage({ type: "QUESTDO_SKIP_WAITING" });
+    }
+  };
+
+  registration.addEventListener("updatefound", () => {
+    const worker = registration.installing;
+    if (!worker) return;
+    worker.addEventListener("statechange", () => {
+      if (worker.state === "installed" && navigator.serviceWorker.controller) {
+        worker.postMessage({ type: "QUESTDO_SKIP_WAITING" });
+      }
+    });
+  });
+
+  activateWaitingWorker();
+  registration.update().catch((err) => console.error("SW update error:", err));
+
+  const interval = window.setInterval(() => {
+    registration.update().catch((err) => console.error("SW update error:", err));
+  }, 5 * 60 * 1000);
+
+  const onVisibilityChange = () => {
+    if (document.visibilityState === "visible") {
+      registration.update().catch((err) => console.error("SW update error:", err));
+    }
+  };
+  document.addEventListener("visibilitychange", onVisibilityChange);
+
+  return () => {
+    window.clearInterval(interval);
+    document.removeEventListener("visibilitychange", onVisibilityChange);
+    navigator.serviceWorker.removeEventListener("controllerchange", onControllerChange);
+    navigator.serviceWorker.removeEventListener("message", onMessage);
+  };
+}
+
 function Auth({ onLogin }) {
   const [isRegister, setIsRegister] = useState(false);
   const [username, setUsername] = useState("");
@@ -406,8 +471,9 @@ function ChallengesBar({ challenges }) {
 function LeaderboardPanel({ currentUser }) {
   const [open, setOpen] = useState(false);
   const [rankType, setRankType] = useState("exp");
-  const [allRankings, setAllRankings] = useState(null);
-  const [rankingError, setRankingError] = useState("");
+  const [allRankings, setAllRankings] = useState({});
+  const [rankingLoading, setRankingLoading] = useState(false);
+  const [rankingLoaded, setRankingLoaded] = useState(false);
 
   const categories = [
     { id: "exp", label: "🏆 EXP" },
@@ -418,42 +484,52 @@ function LeaderboardPanel({ currentUser }) {
     { id: "completed", label: "✅ Ukończone" },
   ];
 
-  const fetchRanking = async (type) => {
+  const normalizeRankings = (data) => ({
+    exp: data?.exp || [],
+    streak: data?.streak || [],
+    achievements: data?.achievements || [],
+    rare_drops: data?.rare_drops || [],
+    exclusive: data?.exclusive || data?.exclusive_achievements || [],
+    completed: data?.completed || data?.completed_tasks || [],
+  });
+
+  const fetchAllRankings = async () => {
+    setRankingLoading(true);
     try {
-      setRankingError("");
-      let url = "";
-      if (type === "exp") url = `${API}/rankings/exp`;
-      else if (type === "streak") url = `${API}/rankings/streak`;
-      else if (type === "achievements") url = `${API}/rankings/achievements`;
-      else if (type === "rare_drops") url = `${API}/rankings/rare-drops`;
-      else if (type === "exclusive") url = `${API}/rankings/exclusive-achievements`;
-      else if (type === "completed") url = `${API}/rankings/completed-tasks`;
-      const res = await axios.get(url);
-      setAllRankings(prev => ({ ...prev, [type]: res.data }));
+      const res = await axios.get(`${API}/rankings/all`);
+      setAllRankings(normalizeRankings(res.data));
+      setRankingLoaded(true);
     } catch (err) {
       console.error("Ranking error:", err);
-      setRankingError(err.response?.data?.detail || "Nie udało się pobrać rankingu");
+      if (!rankingLoaded) setAllRankings({});
     }
+    setRankingLoading(false);
   };
 
-  const currentRanking = allRankings?.[rankType] || [];
+  useEffect(() => {
+    fetchAllRankings();
+  }, []);
+
+  const currentRanking = allRankings[rankType] || [];
   const currentCategory = categories.find((cat) => cat.id === rankType);
 
   const toggleOpen = () => {
-    if (!open) categories.forEach(cat => fetchRanking(cat.id));
+    if (!open && !rankingLoaded && !rankingLoading) {
+      fetchAllRankings();
+    }
     setOpen(!open);
   };
 
-  const handleCategoryChange = (type) => { setRankType(type); if (!allRankings?.[type]) fetchRanking(type); };
+  const handleCategoryChange = (type) => setRankType(type);
 
   // Auto-refresh rankings every 30 seconds when open
   useEffect(() => {
     if (!open) return;
     const interval = setInterval(() => {
-      fetchRanking(rankType);
+      fetchAllRankings();
     }, 30000);
     return () => clearInterval(interval);
-  }, [open, rankType]);
+  }, [open]);
   
   return (
     <div className="leaderboard-panel">
@@ -463,24 +539,25 @@ function LeaderboardPanel({ currentUser }) {
           <div className="leaderboard-categories">
             {categories.map(cat => <button key={cat.id} className={`rank-cat-btn ${rankType === cat.id ? "active" : ""}`} onClick={() => handleCategoryChange(cat.id)}>{cat.label}</button>)}
           </div>
-          {rankingError && <p className="leaderboard-error">{rankingError}</p>}
-          <ol className="leaderboard-list">
-            {currentRanking.map((item) => (
-              <li key={item.username} className={item.username === currentUser ? "me" : ""}>
-                <span className="rank">#{item.rank}</span>
-                <span className="name">{item.username}</span>
-                <span className="score">
-                  {rankType === "exp" && `${item.exp} EXP · Lv.${item.level}`}
-                  {rankType === "streak" && `${item.streak} dni 🔥`}
-                  {rankType === "achievements" && `${item.achievements} 🏅`}
-                  {rankType === "rare_drops" && `${item.rare_drops} ✨`}
-                  {rankType === "exclusive" && `${item.exclusive_achievements} 👑`}
-                  {rankType === "completed" && `${item.completed_tasks} ✅`}
-                </span>
-              </li>
-            ))}
-          </ol>
-          {currentRanking.length === 0 && (
+          {!rankingLoaded ? <p className="leaderboard-empty">Ładowanie rankingów...</p> : (
+            <ol className="leaderboard-list">
+              {currentRanking.map((item) => (
+                <li key={item.username} className={item.username === currentUser ? "me" : ""}>
+                  <span className="rank">#{item.rank}</span>
+                  <span className="name">{item.username}</span>
+                  <span className="score">
+                    {rankType === "exp" && `${item.exp} EXP · Lv.${item.level}`}
+                    {rankType === "streak" && `${item.streak} dni 🔥`}
+                    {rankType === "achievements" && `${item.achievements} 🏅`}
+                    {rankType === "rare_drops" && `${item.rare_drops} ✨`}
+                    {rankType === "exclusive" && `${item.exclusive_achievements} 👑`}
+                    {rankType === "completed" && `${item.completed_tasks} ✅`}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          )}
+          {rankingLoaded && currentRanking.length === 0 && (
             <p className="leaderboard-empty">Brak danych dla rankingu: {currentCategory?.label || "ranking"}.</p>
           )}
         </div>
@@ -765,8 +842,11 @@ export default function App() {
   };
 
   useEffect(() => {
-    if (!("serviceWorker" in navigator)) return;
-    navigator.serviceWorker.register("/sw.js").catch((err) => console.error("SW register error:", err));
+    let cleanup;
+    registerServiceWorkerForUpdates()
+      .then((fn) => { cleanup = fn; })
+      .catch((err) => console.error("SW register error:", err));
+    return () => cleanup?.();
   }, []);
 
   useEffect(() => {
