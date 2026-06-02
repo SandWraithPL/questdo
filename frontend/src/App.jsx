@@ -280,7 +280,7 @@ async function processSyncQueue() {
           console.log('[processSyncQueue] POST - API response:', serverTask);
           if (item.payload.temp_id) {
             await db.tasks.where('temp_id').equals(item.payload.temp_id).delete();
-            await db.tasks.add({ ...serverTask, userId: item.headers.Authorization?.replace('Bearer ', ''), sync_status: 'synced', updated_at: new Date().toISOString() });
+            await db.tasks.add({ ...existingTask, id: serverTask.id, userId: item.headers.Authorization?.replace('Bearer ', ''), sync_status: 'synced', updated_at: new Date().toISOString() });
             console.log('[processSyncQueue] POST - replaced temp task with server data');
           }
         } else if (item.method === 'PATCH') {
@@ -1185,10 +1185,10 @@ export default function App() {
       console.log('[addTask] API response:', serverTask);
       
       await db.tasks.where('temp_id').equals(tempId).delete();
-      await db.tasks.add({ ...serverTask, userId: user.username, sync_status: 'synced', updated_at: new Date().toISOString() });
+      await db.tasks.add({ ...newTask, id: serverTask.id, userId: user.username, sync_status: 'synced', updated_at: new Date().toISOString() });
       console.log('[addTask] Updated IndexedDB with server data');
       
-      setTasks(prev => prev.map(t => t.id === tempId ? { ...serverTask, sync_status: 'synced' } : t));
+      setTasks(prev => prev.map(t => t.id === tempId ? { ...newTask, id: serverTask.id, sync_status: 'synced' } : t));
       showToast(`✅ Dodano quest na ${taskDate}`);
     } catch (err) {
       console.error('[addTask] API error:', err);
