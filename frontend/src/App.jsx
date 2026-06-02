@@ -124,13 +124,27 @@ function Auth({ onLogin }) {
 
   const submit = async () => {
     setError("");
+    const cleanUsername = username.trim();
+    const cleanPassword = password.trim();
+    if (!cleanUsername) {
+      setError("Nazwa użytkownika jest wymagana");
+      return;
+    }
+    if (!cleanPassword) {
+      setError("Hasło jest wymagane");
+      return;
+    }
+    if (isRegister && cleanPassword.length < 3) {
+      setError("Hasło musi mieć min. 3 znaki");
+      return;
+    }
     try {
       if (isRegister) {
-        await axios.post(`${API}/register`, { username, password });
+        await axios.post(`${API}/register`, { username: cleanUsername, password: cleanPassword });
       }
       const form = new URLSearchParams();
-      form.append("username", username);
-      form.append("password", password);
+      form.append("username", cleanUsername);
+      form.append("password", cleanPassword);
       const res = await axios.post(`${API}/token`, form);
       localStorage.setItem("token", res.data.access_token);
       onLogin();

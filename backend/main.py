@@ -213,6 +213,20 @@ def validate_reminder_offset(value: Optional[int]) -> Optional[int]:
     return value
 
 
+def validate_account_credentials(username: str, password: str) -> tuple[str, str]:
+    clean_username = (username or "").strip()
+    clean_password = (password or "").strip()
+    if not clean_username:
+        raise HTTPException(status_code=400, detail="Nazwa użytkownika jest wymagana")
+    if not clean_password:
+        raise HTTPException(status_code=400, detail="Hasło jest wymagane")
+    if len(clean_username) > 50:
+        raise HTTPException(status_code=400, detail="Nazwa użytkownika może mieć max 50 znaków")
+    if len(clean_password) < 3:
+        raise HTTPException(status_code=400, detail="Hasło musi mieć min. 3 znaki")
+    return clean_username, clean_password
+
+
 def task_can_reschedule(task: models.Task) -> bool:
     return not task.completed and not task.exp_awarded
 
@@ -414,11 +428,12 @@ def achievement_display(ach: models.Achievement) -> str:
 # --- Endpointy ---
 @app.post("/register")
 def register(user: UserCreate, db: Session = Depends(get_db)):
-    if db.query(models.User).filter(models.User.username == user.username).first():
+    username, password = validate_account_credentials(user.username, user.password)
+    if db.query(models.User).filter(models.User.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
     new_user = models.User(
-        username=user.username,
-        hashed_password=get_password_hash(user.password)
+        username=username,
+        hashed_password=get_password_hash(password)
     )
     db.add(new_user)
     db.commit()
