@@ -862,14 +862,6 @@ export default function App() {
   };
 
   useEffect(() => {
-    let cleanup;
-    registerServiceWorkerForUpdates()
-      .then((fn) => { cleanup = fn; })
-      .catch((err) => console.error("SW register error:", err));
-    return () => cleanup?.();
-  }, []);
-
-  useEffect(() => {
     if (!notificationsEnabled || !tasks.length) return undefined;
     const timers = [];
     const now = Date.now();
