@@ -1130,14 +1130,28 @@ export default function App() {
         axios.get(`${API}/history`, { headers }).catch(() => ({ data: [] })),
       ]);
       const newUnlocked = achRes.data.unlocked || [];
-      setUser(userRes.data); setTasks(tasksRes.data); setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
+      
+      const localTasksMap = new Map(localData.tasks.map(t => [t.id, t]));
+      const mergedTasks = tasksRes.data.map(serverTask => {
+        const localTask = localTasksMap.get(serverTask.id);
+        if (localTask) {
+          const localTime = new Date(localTask.updated_at || 0).getTime();
+          const serverTime = new Date(serverTask.updated_at || 0).getTime();
+          if (localTime > serverTime && localTask.sync_status === 'pending') {
+            return localTask;
+          }
+        }
+        return serverTask;
+      });
+      
+      setUser(userRes.data); setTasks(mergedTasks); setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
       if (levelsRes.data?.length) setLevelThresholds(levelsRes.data.map(l => l.threshold));
       setChallenges(chRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
       setHistory(historyRes.data || []);
       
       await saveToIndexedDB({
-        tasks: tasksRes.data,
+        tasks: mergedTasks,
         user: userRes.data,
         achievements: achRes.data,
         rareDrops: rareDropsRes.data,
@@ -1233,8 +1247,6 @@ export default function App() {
         showToast(`🏆 Odblokowano: ${freshAchievement.title}! ${freshAchievement.icon}`);
         showAppNotification("Nowe osiągnięcie", `${freshAchievement.title}: ${freshAchievement.description}`);
       }
-      
-      fetchData();
     } catch (err) {
       console.error('[toggleTask] API error:', err);
       const previousTask = await db.tasks.get(task.id);
@@ -1257,7 +1269,6 @@ export default function App() {
       await axios.patch(`${API}/tasks/${id}`, updates, { headers });
       await db.tasks.update(id, { sync_status: 'synced' });
       showToast("💾 Zapisano zmiany");
-      fetchData();
     } catch (err) {
       const previousTask = await db.tasks.get(id);
       if (previousTask) {
@@ -1288,7 +1299,6 @@ export default function App() {
       console.log('[deleteTask] API response:', res.data);
       
       showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
-      fetchData();
     } catch (err) {
       console.error('[deleteTask] API error:', err);
       if (err.response?.status === 404) {
