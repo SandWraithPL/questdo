@@ -204,6 +204,8 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .leaderboard-list .rank { min-width: 28px; color: #aaa; }
 .leaderboard-list .name { flex: 1; }
 .leaderboard-list .score { color: #aaa; font-size: 0.8rem; }
+.leaderboard-empty { color: #777; font-size: 0.85rem; padding: 8px 0 2px; text-align: center; }
+.leaderboard-error { color: #f44336; font-size: 0.85rem; padding: 4px 0 8px; }
 
 /* Profile dropdown */
 .profile-dropdown { position: relative; }
@@ -211,6 +213,9 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .avatar-small { width: 32px; height: 32px; border-radius: 50%; background: #ff8906; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #0f0e17; }
 .profile-menu { position: absolute; top: 100%; right: 0; margin-top: 8px; background: #1a1a2e; border-radius: 12px; padding: 16px; min-width: 250px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
 .profile-info-dropdown { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #333; }
+.profile-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
+.profile-tabs button { padding: 7px; border: 1px solid #333; border-radius: 8px; background: #0f0e17; color: #aaa; cursor: pointer; font-size: 0.78rem; }
+.profile-tabs button.active { border-color: #ff8906; color: #ff8906; background: rgba(255,137,6,0.08); }
 .achievements-list { max-height: 200px; overflow-y: auto; margin-bottom: 12px; }
 .achievements-list h4 { margin-bottom: 8px; color: #ff8906; }
 .achievement-item { display: flex; gap: 8px; padding: 6px 0; font-size: 0.85rem; }
@@ -235,6 +240,12 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .rare-drop-rare { color: #9b59b6; }
 .rare-drop-epic { color: #3498db; }
 .rare-drop-legendary { color: #f1c40f; text-shadow: 0 0 10px rgba(241, 196, 15, 0.5); }
+.history-list { max-height: 320px; overflow-y: auto; margin-bottom: 12px; }
+.history-list h4 { margin-bottom: 8px; color: #ff8906; }
+.history-list .muted { color: #666; font-size: 0.85rem; }
+.history-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid #2a2a3e; font-size: 0.8rem; }
+.history-item strong { color: #ff8906; font-size: 0.75rem; }
+.history-item span { color: #ddd; line-height: 1.35; }
 .logout-btn { width: 100%; padding: 8px; background: #e74c3c; color: white; border: none; border-radius: 8px; cursor: pointer; margin-top: 8px; }
 .delete-account-btn { width: 100%; margin-top: 8px; padding: 8px; background: transparent; border: 1px solid #e74c3c; color: #e74c3c; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
 .delete-account-form { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }

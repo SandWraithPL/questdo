@@ -78,6 +78,14 @@ function parseReminderValue(value) {
   return value === "" ? null : Number(value);
 }
 
+function formatHistoryDate(value) {
+  if (!value) return "";
+  const normalized = String(value).replace(" ", "T");
+  const d = new Date(normalized);
+  if (Number.isNaN(d.getTime())) return String(value).slice(0, 10);
+  return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
+}
+
 function getExpProgress(exp, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
   let current = 0, next = thresholds[1] || 100;
   for (let i = thresholds.length - 1; i >= 0; i--) {
@@ -399,18 +407,20 @@ function LeaderboardPanel({ currentUser }) {
   const [open, setOpen] = useState(false);
   const [rankType, setRankType] = useState("exp");
   const [allRankings, setAllRankings] = useState(null);
+  const [rankingError, setRankingError] = useState("");
 
   const categories = [
     { id: "exp", label: "🏆 EXP" },
     { id: "streak", label: "🔥 Seria" },
     { id: "achievements", label: "🏅 Osiągnięcia" },
     { id: "rare_drops", label: "✨ Znajdźki" },
-    { id: "exclusive", label: "👑 Exclusive" },
+    { id: "exclusive", label: "👑 Ekskluzywne" },
     { id: "completed", label: "✅ Ukończone" },
   ];
 
   const fetchRanking = async (type) => {
     try {
+      setRankingError("");
       let url = "";
       if (type === "exp") url = `${API}/rankings/exp`;
       else if (type === "streak") url = `${API}/rankings/streak`;
@@ -420,10 +430,14 @@ function LeaderboardPanel({ currentUser }) {
       else if (type === "completed") url = `${API}/rankings/completed-tasks`;
       const res = await axios.get(url);
       setAllRankings(prev => ({ ...prev, [type]: res.data }));
-    } catch (err) { console.error("Ranking error:", err); }
+    } catch (err) {
+      console.error("Ranking error:", err);
+      setRankingError(err.response?.data?.detail || "Nie udało się pobrać rankingu");
+    }
   };
 
-  const getCurrentRanking = () => allRankings?.[rankType] || [];
+  const currentRanking = allRankings?.[rankType] || [];
+  const currentCategory = categories.find((cat) => cat.id === rankType);
 
   const toggleOpen = () => {
     if (!open) categories.forEach(cat => fetchRanking(cat.id));
@@ -449,8 +463,9 @@ function LeaderboardPanel({ currentUser }) {
           <div className="leaderboard-categories">
             {categories.map(cat => <button key={cat.id} className={`rank-cat-btn ${rankType === cat.id ? "active" : ""}`} onClick={() => handleCategoryChange(cat.id)}>{cat.label}</button>)}
           </div>
+          {rankingError && <p className="leaderboard-error">{rankingError}</p>}
           <ol className="leaderboard-list">
-            {getCurrentRanking().map((item) => (
+            {currentRanking.map((item) => (
               <li key={item.username} className={item.username === currentUser ? "me" : ""}>
                 <span className="rank">#{item.rank}</span>
                 <span className="name">{item.username}</span>
@@ -465,6 +480,9 @@ function LeaderboardPanel({ currentUser }) {
               </li>
             ))}
           </ol>
+          {currentRanking.length === 0 && (
+            <p className="leaderboard-empty">Brak danych dla rankingu: {currentCategory?.label || "ranking"}.</p>
+          )}
         </div>
       )}
     </div>
@@ -672,8 +690,9 @@ function AdminPanel({ isOpen, onClose, headers }) {
   );
 }
 
-function Profile({ user, onLogout, onDeleteAccount, achievements, rareDrops, onOpenAdmin }) {
+function Profile({ user, onLogout, onDeleteAccount, achievements, rareDrops, history, onOpenAdmin }) {
   const [showAchievements, setShowAchievements] = useState(false);
+  const [activeTab, setActiveTab] = useState("achievements");
   const [deleteMode, setDeleteMode] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
   const unlocked = achievements?.unlocked ?? [];
@@ -690,9 +709,19 @@ function Profile({ user, onLogout, onDeleteAccount, achievements, rareDrops, onO
       {showAchievements && (
         <div className="profile-menu">
           <div className="profile-info-dropdown"><p><strong>{user.username}</strong></p><p>Poziom {user.level} - {user.title}</p><p>{user.exp} EXP | 🔥 {user.streak} dni</p></div>
-          {nextAch && (<div className="next-achievement"><h4>Następne osiągnięcie 🎯</h4><div className="achievement-item next"><span>{nextAch.icon}</span><div><strong>{nextAch.title}</strong><p>{nextAch.description}</p><p className="ach-progress">Postęp: {nextAch.progress}</p></div></div></div>)}
-          <div className="achievements-list"><h4>Odznaczone 🏆 ({unlocked.length})</h4>{unlocked.length === 0 && <p className="muted">Jeszcze brak - pierwszy quest czeka!</p>}{unlocked.map(ach => (<div key={ach.slug || ach.title} className="achievement-item"><span>{ach.icon}</span><div><strong>{ach.title}</strong><p>{ach.description}</p></div></div>))}</div>
-          <div className="rare-drops-list"><h4>Znajdźki ✨ ({rareDrops?.total_items || 0})</h4>{(!rareDrops?.items || rareDrops.items.length === 0) && <p className="muted">Jeszcze brak znajdziek - codziennie masz szansę!</p>}{rareDrops?.items?.map(drop => (<div key={drop.slug} className="rare-drop-item"><span className={`rare-drop-${drop.rarity}`}>{drop.icon}</span><div><strong>{drop.name}</strong><p>{drop.description}</p><p className="rare-drop-count">x{drop.count} · {drop.rarity}</p></div></div>))}</div>
+          <div className="profile-tabs">
+            <button type="button" className={activeTab === "achievements" ? "active" : ""} onClick={() => setActiveTab("achievements")}>Osiągnięcia</button>
+            <button type="button" className={activeTab === "history" ? "active" : ""} onClick={() => setActiveTab("history")}>Historia</button>
+          </div>
+          {activeTab === "achievements" ? (
+            <>
+              {nextAch && (<div className="next-achievement"><h4>Następne osiągnięcie 🎯</h4><div className="achievement-item next"><span>{nextAch.icon}</span><div><strong>{nextAch.title}</strong><p>{nextAch.description}</p><p className="ach-progress">Postęp: {nextAch.progress}</p></div></div></div>)}
+              <div className="achievements-list"><h4>Odznaczone 🏆 ({unlocked.length})</h4>{unlocked.length === 0 && <p className="muted">Jeszcze brak - pierwszy quest czeka!</p>}{unlocked.map(ach => (<div key={ach.slug || ach.title} className="achievement-item"><span>{ach.icon}</span><div><strong>{ach.title}</strong><p>{ach.description}</p></div></div>))}</div>
+              <div className="rare-drops-list"><h4>Znajdźki ✨ ({rareDrops?.total_items || 0})</h4>{(!rareDrops?.items || rareDrops.items.length === 0) && <p className="muted">Jeszcze brak znajdziek - codziennie masz szansę!</p>}{rareDrops?.items?.map(drop => (<div key={drop.slug} className="rare-drop-item"><span className={`rare-drop-${drop.rarity}`}>{drop.icon}</span><div><strong>{drop.name}</strong><p>{drop.description}</p><p className="rare-drop-count">x{drop.count} · {drop.rarity}</p></div></div>))}</div>
+            </>
+          ) : (
+            <div className="history-list"><h4>Dziennik zdobyczy</h4>{(!history || history.length === 0) && <p className="muted">Historia pojawi się po zdobyciu nagród.</p>}{history?.map(entry => (<div key={entry.id} className="history-item"><span><strong>{formatHistoryDate(entry.occurred_at)}</strong> - {entry.message}</span></div>))}</div>
+          )}
           {isAdmin && <button type="button" onClick={onOpenAdmin} className="admin-btn">🔧 Panel Admina</button>}
           <button type="button" onClick={onLogout} className="logout-btn">Wyloguj</button>
           {!deleteMode ? <button className="delete-account-btn" onClick={() => setDeleteMode(true)}>Usuń konto</button> : (
@@ -710,6 +739,7 @@ export default function App() {
   const [tasks, setTasks] = useState([]);
   const [achievements, setAchievements] = useState({ unlocked: [], next: null });
   const [rareDrops, setRareDrops] = useState(null);
+  const [history, setHistory] = useState([]);
   const [levelThresholds, setLevelThresholds] = useState(DEFAULT_LEVEL_THRESHOLDS);
   const [challenges, setChallenges] = useState(null);
   const [toast, setToast] = useState(null);
@@ -763,27 +793,29 @@ export default function App() {
   const fetchData = async () => {
     if (!token) return;
     try {
-      const [userRes, tasksRes, achRes, chRes, levelsRes, rareDropsRes] = await Promise.all([
+      const [userRes, tasksRes, achRes, chRes, levelsRes, rareDropsRes, historyRes] = await Promise.all([
         axios.get(`${API}/me`, { headers }), axios.get(`${API}/tasks`, { headers }), axios.get(`${API}/achievements`, { headers }),
         axios.get(`${API}/challenges`, { headers }), axios.get(`${API}/game/levels`, { headers }).catch(() => ({ data: null })),
         axios.get(`${API}/rare-drops/inventory`, { headers }).catch(() => ({ data: null })),
+        axios.get(`${API}/history`, { headers }).catch(() => ({ data: [] })),
       ]);
-      const oldCount = achievements.unlocked?.length || 0;
       const newUnlocked = achRes.data.unlocked || [];
-      if (newUnlocked.length > oldCount) {
-        const newest = newUnlocked[newUnlocked.length - 1];
-        showToast(`🏆 Odblokowano: ${newest.title}! ${newest.icon}`);
-        showAppNotification("Nowe osiągnięcie", `${newest.title}: ${newest.description}`);
-      }
       setUser(userRes.data); setTasks(tasksRes.data); setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
       if (levelsRes.data?.length) setLevelThresholds(levelsRes.data.map(l => l.threshold));
       setChallenges(chRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
+      setHistory(historyRes.data || []);
       try {
         const rareDropRes = await axios.post(`${API}/rare-drops/claim-daily`, {}, { headers });
         if (rareDropRes.data.status === "success") {
           showToast(`✨ ${rareDropRes.data.message}`);
           showAppNotification("Nowa znajdźka", rareDropRes.data.item ? `${rareDropRes.data.item.name}: ${rareDropRes.data.item.description}` : rareDropRes.data.message);
+          const [updatedDrops, updatedHistory] = await Promise.all([
+            axios.get(`${API}/rare-drops/inventory`, { headers }).catch(() => ({ data: null })),
+            axios.get(`${API}/history`, { headers }).catch(() => ({ data: [] })),
+          ]);
+          if (updatedDrops.data) setRareDrops(updatedDrops.data);
+          setHistory(updatedHistory.data || []);
         }
       } catch (err) { console.debug("Rare drop claim skipped:", err); }
     } catch (err) { console.error("Fetch error:", err); localStorage.removeItem("token"); setToken(null); }
@@ -804,9 +836,14 @@ export default function App() {
     if (task.completed) return;
     try {
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-      const { exp_gained, daily_bonus, exp_timing } = res.data;
+      const { exp_gained, daily_bonus, exp_timing, new_achievements, new_exclusive_achievements } = res.data;
       if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
       else if (exp_gained > 0) showToast(`✅ Quest ukończony! +${exp_gained} EXP${expToastSuffix(exp_timing)}`);
+      const freshAchievement = [...(new_achievements || []), ...(new_exclusive_achievements || [])][0];
+      if (freshAchievement) {
+        showToast(`🏆 Odblokowano: ${freshAchievement.title}! ${freshAchievement.icon}`);
+        showAppNotification("Nowe osiągnięcie", `${freshAchievement.title}: ${freshAchievement.description}`);
+      }
       fetchData();
     } catch (err) { showToast(err.response?.data?.detail || "Błąd aktualizacji"); }
   };
@@ -828,7 +865,7 @@ export default function App() {
 
   return (
     <div className="app">
-      <div className="header"><h1>⚔️ QuestDo</h1><Profile user={user} onLogout={logout} onDeleteAccount={deleteAccount} achievements={achievements} rareDrops={rareDrops} onOpenAdmin={() => setShowAdminPanel(true)} /></div>
+      <div className="header"><h1>⚔️ QuestDo</h1><Profile user={user} onLogout={logout} onDeleteAccount={deleteAccount} achievements={achievements} rareDrops={rareDrops} history={history} onOpenAdmin={() => setShowAdminPanel(true)} /></div>
       <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
       <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (

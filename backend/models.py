@@ -117,3 +117,15 @@ class PlayerBadge(Base):
     badge_tier = Column(Integer, default=1)  # 1, 2, 3, 4, 5
     acquired_at = Column(DateTime, default=datetime.utcnow)
     user = relationship("User")
+
+
+class PlayerHistory(Base):
+    """Chronologiczny dziennik rzeczy zdobytych przez gracza."""
+    __tablename__ = "player_history"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    event_type = Column(String, index=True)  # "achievement", "rare_drop", "level"
+    event_key = Column(String, unique=True, index=True)
+    message = Column(String)
+    occurred_at = Column(DateTime, default=datetime.utcnow, index=True)
+    user = relationship("User")

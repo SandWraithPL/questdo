@@ -91,6 +91,11 @@ def migrate_schema():
     if "player_badges" not in insp.get_table_names():
         models.PlayerBadge.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę player_badges")
+
+    # Player history
+    if "player_history" not in insp.get_table_names():
+        models.PlayerHistory.__table__.create(bind=engine)
+        print("Migracja: utworzono tabelę player_history")
     
     # Seed rare drops
     db = next(get_db())
@@ -279,6 +284,42 @@ def task_to_dict(t: models.Task) -> dict:
         data["exp_timing_preview"] = timing
     return data
 
+
+def add_history_event(
+    user_id: int,
+    event_type: str,
+    event_key: str,
+    message: str,
+    db: Session,
+    occurred_at: Optional[datetime] = None,
+) -> bool:
+    if db.query(models.PlayerHistory).filter(models.PlayerHistory.event_key == event_key).first():
+        return False
+    db.add(models.PlayerHistory(
+        user_id=user_id,
+        event_type=event_type,
+        event_key=event_key,
+        message=message,
+        occurred_at=occurred_at or datetime.utcnow(),
+    ))
+    db.flush()
+    return True
+
+
+def record_level_ups(user: models.User, old_exp: int, db: Session) -> list[dict]:
+    old_level = gc.get_level(old_exp)[0]
+    new_level = gc.get_level(user.exp)[0]
+    if new_level <= old_level:
+        return []
+
+    unlocked = []
+    for _, level, title in gc.LEVELS:
+        if old_level < level <= new_level:
+            message = f"Awansowano na poziom {level} - {title}"
+            if add_history_event(user.id, "level", f"user:{user.id}:level:{level}", message, db):
+                unlocked.append({"level": level, "title": title, "message": message})
+    return unlocked
+
 # --- Schematy ---
 class UserCreate(BaseModel):
     username: str
@@ -353,13 +394,13 @@ def has_achievement(user_id, achievement_name, db):
 
 def _legacy_slug_map() -> dict:
     return {
-        "first_task": ("first_step", "First Step"),
-        "ten_tasks": ("scout_badge", "Scout Badge"),
-        "fifty_tasks": ("hundred_club", "Hundred Club"),
-        "weekly_streak": ("streak_week", "Week of Walls"),
-        "monthly_streak": ("streak_month", "Month Beyond"),
-        "exp_500": ("exp_scout", "Scout EXP"),
-        "exp_2000": ("exp_commander", "Commander EXP"),
+        "first_task": ("first_step", "Pierwszy krok"),
+        "ten_tasks": ("scout_badge", "Dziesiątka zadań"),
+        "fifty_tasks": ("hundred_club", "Pięćdziesiątka"),
+        "weekly_streak": ("streak_week", "Tydzień serii"),
+        "monthly_streak": ("streak_month", "Miesiąc serii"),
+        "exp_500": ("exp_scout", "250 EXP"),
+        "exp_2000": ("exp_commander", "1000 EXP"),
     }
 
 
@@ -374,10 +415,10 @@ def get_unlocked_slugs(user_id: int, db: Session) -> set:
     return slugs
 
 
-def unlock_achievement(user_id: int, ach_def: dict, db: Session) -> bool:
+def unlock_achievement(user_id: int, ach_def: dict, db: Session) -> Union[dict, None]:
     slug = ach_def["slug"]
     if slug in get_unlocked_slugs(user_id, db):
-        return False
+        return None
 
     achievement = db.query(models.Achievement).filter(models.Achievement.name == slug).first()
     if not achievement:
@@ -400,19 +441,62 @@ def unlock_achievement(user_id: int, ach_def: dict, db: Session) -> bool:
         models.UserAchievement.user_id == user_id,
         models.UserAchievement.achievement_id == achievement.id,
     ).first():
-        db.add(models.UserAchievement(user_id=user_id, achievement_id=achievement.id))
-        return True
-    return False
+        user_achievement = models.UserAchievement(user_id=user_id, achievement_id=achievement.id)
+        db.add(user_achievement)
+        db.flush()
+        title = achievement_display(achievement)
+        message = f"Zdobyto osiągnięcie '{title}' za {achievement.description}"
+        add_history_event(
+            user_id,
+            "achievement",
+            f"user:{user_id}:achievement:{slug}",
+            message,
+            db,
+            user_achievement.unlocked_at,
+        )
+        return {
+            "slug": slug,
+            "title": title,
+            "description": achievement.description,
+            "icon": achievement.icon,
+            "unlocked_at": str(user_achievement.unlocked_at),
+        }
+    return None
 
 
-def check_achievements(user, db):
+def check_achievements(user, db) -> list[dict]:
     stats = gc.gather_user_stats(user, db, models)
-    unlocked_any = False
+    newly_unlocked = []
     for ach_def in gc.ACHIEVEMENT_DEFS:
-        if gc.achievement_met(stats, ach_def) and unlock_achievement(user.id, ach_def, db):
-            unlocked_any = True
-    if unlocked_any:
+        if gc.achievement_met(stats, ach_def):
+            unlocked = unlock_achievement(user.id, ach_def, db)
+            if unlocked:
+                newly_unlocked.append(unlocked)
+    if newly_unlocked:
         db.commit()
+    return newly_unlocked
+
+
+def refresh_player_rewards(user: models.User, db: Session) -> dict:
+    achievements = check_achievements(user, db)
+    exclusive = gc.check_exclusive_achievements(user, db, models)
+    for ea_def in exclusive:
+        message = f"Zdobyto osiągnięcie '{ea_def['title']}' za {ea_def['description']}"
+        add_history_event(
+            user.id,
+            "achievement",
+            f"user:{user.id}:exclusive-achievement:{ea_def['slug']}",
+            message,
+            db,
+        )
+    if exclusive:
+        db.commit()
+    return {"achievements": achievements, "exclusive_achievements": exclusive}
+
+
+def refresh_all_player_rewards(db: Session) -> None:
+    for user in db.query(models.User).all():
+        refresh_player_rewards(user, db)
 
 
 def achievement_display(ach: models.Achievement) -> str:
@@ -489,6 +573,9 @@ def delete_account(
     db.query(models.PlayerBadge).filter(
         models.PlayerBadge.user_id == current_user.id
     ).delete()
+    db.query(models.PlayerHistory).filter(
+        models.PlayerHistory.user_id == current_user.id
+    ).delete()
     db.delete(current_user)
     db.commit()
     return {"message": "Konto zostało usunięte"}
@@ -551,6 +638,8 @@ def update_task(task_id: int, task_update: TaskUpdate,
     was_completed = task.completed
     exp_gained = 0
     exp_timing = None
+    new_rewards = {"achievements": [], "exclusive_achievements": []}
+    level_ups = []
     fields_set = getattr(task_update, "model_fields_set", getattr(task_update, "__fields_set__", set()))
 
     if task_update.due_date is not None:
@@ -592,12 +681,14 @@ def update_task(task_id: int, task_update: TaskUpdate,
             task.completed = True
             task.completed_at = datetime.utcnow()
             if not task.exp_awarded:
+                old_exp = current_user.exp
                 exp_gained, exp_timing = calculate_exp_reward(
                     task.difficulty, task.due_date, date.today()
                 )
                 current_user.exp += exp_gained
                 task.exp_awarded = True
                 task.exp_awarded_amount = exp_gained
+                level_ups.extend(record_level_ups(current_user, old_exp, db))
 
                 # Streak: only increment once per day
                 today = date.today()
@@ -607,13 +698,17 @@ def update_task(task_id: int, task_update: TaskUpdate,
                     else:
                         current_user.streak = 1
                     current_user.last_streak_date = today
-                check_achievements(current_user, db)
+                new_rewards = refresh_player_rewards(current_user, db)
 
     db.commit()
     db.refresh(task)
-    daily_bonus = try_award_daily_triple_bonus(current_user, db)
+    daily_bonus, daily_bonus_level_ups = try_award_daily_triple_bonus(current_user, db)
+    level_ups.extend(daily_bonus_level_ups)
     if daily_bonus:
         db.refresh(current_user)
+        bonus_rewards = refresh_player_rewards(current_user, db)
+        new_rewards["achievements"].extend(bonus_rewards["achievements"])
+        new_rewards["exclusive_achievements"].extend(bonus_rewards["exclusive_achievements"])
     level, title, _, _ = gc.get_level(current_user.exp)
     return {
         "message": "Updated",
@@ -626,6 +721,9 @@ def update_task(task_id: int, task_update: TaskUpdate,
         "exp_awarded": task.exp_awarded,
         "task": task_to_dict(task),
         "challenges": build_challenges_payload(current_user, db),
+        "new_achievements": new_rewards["achievements"],
+        "new_exclusive_achievements": new_rewards["exclusive_achievements"],
+        "level_ups": level_ups,
     }
 
 
@@ -682,21 +780,23 @@ def build_challenges_payload(user: models.User, db: Session, day: Union[date, No
     }
 
 
-def try_award_daily_triple_bonus(user: models.User, db: Session, day: Union[date, None] = None) -> int:
+def try_award_daily_triple_bonus(user: models.User, db: Session, day: Union[date, None] = None) -> tuple[int, list[dict]]:
     day = day or date.today()
     assignment = get_or_create_daily_assignment(user, db, day)
     if assignment.bonus_claimed:
-        return 0
+        return 0, []
     all_tasks = db.query(models.Task).filter(models.Task.owner_id == user.id).all()
     stats = dq.build_day_stats(user, all_tasks, day)
     quest_ids = [x.strip() for x in assignment.quest_ids.split(",") if x.strip()]
     goals = dq.evaluate_assigned_quests(quest_ids, stats)
     if dq.all_goals_complete(goals):
         assignment.bonus_claimed = True
+        old_exp = user.exp
         user.exp += dq.TRIPLE_BONUS_EXP
+        level_ups = record_level_ups(user, old_exp, db)
         db.commit()
-        return dq.TRIPLE_BONUS_EXP
-    return 0
+        return dq.TRIPLE_BONUS_EXP, level_ups
+    return 0, []
 
 
 @app.get("/challenges")
@@ -727,7 +827,7 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
 
 @app.get("/achievements")
 def get_achievements(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    check_achievements(current_user, db)
+    refresh_player_rewards(current_user, db)
     user_achs = db.query(models.UserAchievement).filter(
         models.UserAchievement.user_id == current_user.id
     ).all()
@@ -797,7 +897,26 @@ def claim_daily_rare_drop(current_user: models.User = Depends(get_current_user),
                 obtained_date=today
             )
             db.add(player_drop)
+            db.flush()
+            source_task = db.query(models.Task).filter(
+                models.Task.owner_id == current_user.id,
+                models.Task.completed == True,
+                models.Task.completed_at != None,
+            ).order_by(models.Task.completed_at.desc()).first()
+            if source_task and source_task.completed_at.date() == today:
+                source = f"za wykonanie zadania '{source_task.title}'"
+            else:
+                source = "za dzienną znajdźkę"
+            add_history_event(
+                current_user.id,
+                "rare_drop",
+                f"user:{current_user.id}:rare-drop:{player_drop.id}",
+                f"Znaleziono przedmiot '{drop_def['name']}' {source}",
+                db,
+                player_drop.obtained_at,
+            )
             db.commit()
+            refresh_player_rewards(current_user, db)
             
             return {
                 "status": "success",
@@ -856,10 +975,23 @@ def get_rare_drops_inventory(current_user: models.User = Depends(get_current_use
     }
 
 
+@app.get("/history")
+def get_player_history(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    entries = db.query(models.PlayerHistory).filter(
+        models.PlayerHistory.user_id == current_user.id
+    ).order_by(models.PlayerHistory.occurred_at.desc()).limit(200).all()
+    return [{
+        "id": entry.id,
+        "type": entry.event_type,
+        "message": entry.message,
+        "occurred_at": str(entry.occurred_at),
+    } for entry in entries]
+
+
 # === EXCLUSIVE ACHIEVEMENTS ENDPOINTS ===
 @app.get("/exclusive-achievements")
 def get_exclusive_achievements(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    gc.check_exclusive_achievements(current_user, db, models)
+    refresh_player_rewards(current_user, db)
     
     player_achs = db.query(models.PlayerExclusiveAchievement).filter(
         models.PlayerExclusiveAchievement.user_id == current_user.id
@@ -970,6 +1102,7 @@ def ranking_completed_tasks(db: Session = Depends(get_db)):
 @app.get("/rankings/achievements")
 def ranking_achievements(db: Session = Depends(get_db)):
     from sqlalchemy import func
+    refresh_all_player_rewards(db)
     results = db.query(
         models.User.username,
         func.count(models.UserAchievement.id).label("count")
@@ -991,6 +1124,7 @@ def ranking_achievements(db: Session = Depends(get_db)):
 @app.get("/rankings/exclusive-achievements")
 def ranking_exclusive_achievements(db: Session = Depends(get_db)):
     from sqlalchemy import func
+    refresh_all_player_rewards(db)
     results = db.query(
         models.User.username,
         func.count(models.PlayerExclusiveAchievement.id).label("count")
