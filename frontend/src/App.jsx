@@ -320,6 +320,42 @@ async function subscribeToWebPush(authHeaders) {
   }
 }
 
+async function unsubscribeFromWebPush(authHeaders) {
+  try {
+    await axios.delete(`${API}/push/subscribe`, { headers: authHeaders });
+  } catch (err) {
+    console.error("[push] backend unsubscribe failed:", err);
+  }
+  try {
+    if ("serviceWorker" in navigator) {
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.getSubscription();
+      if (sub) await sub.unsubscribe();
+    }
+  } catch (err) {
+    console.error("[push] browser unsubscribe failed:", err);
+  }
+}
+
+const PWA_HINT_DISMISSED_KEY = "questdo-pwa-hint-dismissed";
+const PWA_HINT_COLLAPSED_KEY = "questdo-pwa-hint-collapsed";
+
+function readPwaHintDismissed() {
+  try {
+    return localStorage.getItem(PWA_HINT_DISMISSED_KEY) === "1";
+  } catch {
+    return false;
+  }
+}
+
+function readPwaHintCollapsed() {
+  try {
+    return localStorage.getItem(PWA_HINT_COLLAPSED_KEY) === "true";
+  } catch {
+    return false;
+  }
+}
+
 async function ensureNotificationPermission() {
   if (!("Notification" in window)) return "unsupported";
   if (Notification.permission === "default") return Notification.requestPermission();
@@ -1151,6 +1187,87 @@ function AdminPanel({ isOpen, onClose, headers }) {
   );
 }
 
+function PwaInstallBanner({ standalonePwa, onShowToast, onDismissForever }) {
+  const [dismissed, setDismissed] = useState(readPwaHintDismissed);
+  const [collapsed, setCollapsed] = useState(readPwaHintCollapsed);
+  const deferredPromptRef = useRef(null);
+
+  useEffect(() => {
+    const onBeforeInstall = (event) => {
+      event.preventDefault();
+      deferredPromptRef.current = event;
+    };
+    window.addEventListener("beforeinstallprompt", onBeforeInstall);
+    return () => window.removeEventListener("beforeinstallprompt", onBeforeInstall);
+  }, []);
+
+  if (standalonePwa || dismissed) return null;
+
+  const dismissForever = () => {
+    try {
+      localStorage.setItem(PWA_HINT_DISMISSED_KEY, "1");
+    } catch {
+      /* ignore */
+    }
+    setDismissed(true);
+    onDismissForever?.();
+  };
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(PWA_HINT_COLLAPSED_KEY, String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
+  const handleInstall = async () => {
+    const promptEvent = deferredPromptRef.current;
+    if (promptEvent) {
+      promptEvent.prompt();
+      await promptEvent.userChoice;
+      deferredPromptRef.current = null;
+      return;
+    }
+    onShowToast?.("Użyj menu przeglądarki: Dodaj do ekranu głównego / Zainstaluj aplikację");
+  };
+
+  return (
+    <section className={`pwa-install-banner ${collapsed ? "pwa-install-banner--collapsed" : ""}`}>
+      <div className="pwa-install-banner-bar">
+        <button type="button" className="pwa-install-banner-toggle" onClick={toggleCollapsed} aria-expanded={!collapsed}>
+          <span className="pwa-install-banner-title">📲 Zainstaluj QuestDo</span>
+          <span className="pwa-install-banner-chevron" aria-hidden="true">{collapsed ? "▼" : "▲"}</span>
+        </button>
+        {!collapsed && (
+          <button type="button" className="pwa-install-banner-dismiss" onClick={dismissForever} aria-label="Nie pokazuj więcej">
+            ✕
+          </button>
+        )}
+      </div>
+      {!collapsed && (
+        <div className="pwa-install-banner-body">
+          <p>
+            Dodaj aplikację do ekranu głównego, aby otrzymywać przypomnienia o 09:00 także przy zamkniętej aplikacji.
+          </p>
+          <div className="pwa-install-banner-actions">
+            <button type="button" className="pwa-install-banner-install" onClick={handleInstall}>
+              Zainstaluj
+            </button>
+            <button type="button" className="pwa-install-banner-hide" onClick={dismissForever}>
+              OK, nie pokazuj więcej
+            </button>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
 function Profile({
   user,
   onLogout,
@@ -1162,6 +1279,7 @@ function Profile({
   notificationsEnabled,
   notificationsUnsupported,
   isStandalonePwa: standalonePwa,
+  pwaHintDismissed,
   onToggleNotifications,
 }) {
   const [showAchievements, setShowAchievements] = useState(false);
@@ -1189,14 +1307,19 @@ function Profile({
               onClick={onToggleNotifications}
               disabled={notificationsUnsupported}
             >
-              {notificationsEnabled ? "🔔 Powiadomienia włączone" : "🔔 Włącz powiadomienia"}
+              {notificationsEnabled ? "🔕 Wyłącz powiadomienia" : "🔔 Włącz powiadomienia"}
             </button>
-            <p className="profile-notifications-hint">
-              {notificationsUnsupported && "Ta przeglądarka nie obsługuje powiadomień."}
-              {!notificationsUnsupported && notificationsEnabled && standalonePwa && "Przypomnienia o 09:00 — także gdy aplikacja jest zamknięta (push)."}
-              {!notificationsUnsupported && notificationsEnabled && !standalonePwa && "Przypomnienia o 09:00 działają, gdy aplikacja jest otwarta lub w tle. Zainstaluj QuestDo (Dodaj do ekranu głównego), aby otrzymywać powiadomienia także przy zamkniętej aplikacji."}
-              {!notificationsUnsupported && !notificationsEnabled && "Włącz powiadomienia, aby dostawać przypomnienia o questach o 09:00 w wybranym dniu."}
-            </p>
+            {!notificationsUnsupported && (
+              <p className="profile-notifications-hint">
+                {notificationsEnabled && standalonePwa && "Przypomnienia o 09:00 — także gdy aplikacja jest zamknięta."}
+                {notificationsEnabled && !standalonePwa && !pwaHintDismissed && "Przypomnienia lokalne o 09:00 działają w tle. Zainstaluj aplikację — baner na stronie głównej."}
+                {notificationsEnabled && !standalonePwa && pwaHintDismissed && "Przypomnienia o 09:00, gdy aplikacja jest otwarta lub w tle."}
+                {!notificationsEnabled && "Włącz powiadomienia, aby dostawać przypomnienia o questach o 09:00."}
+              </p>
+            )}
+            {notificationsUnsupported && (
+              <p className="profile-notifications-hint">Ta przeglądarka nie obsługuje powiadomień.</p>
+            )}
           </div>
           <div className="profile-tabs">
             <button type="button" className={activeTab === "achievements" ? "active" : ""} onClick={() => setActiveTab("achievements")}>Osiągnięcia</button>
@@ -1319,14 +1442,17 @@ export default function App() {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
+  const [pwaHintDismissed, setPwaHintDismissed] = useState(readPwaHintDismissed);
+
   const enableNotifications = async () => {
     const permission = await ensureNotificationPermission();
     const enabled = permission === "granted";
-    setNotificationsEnabled(enabled);
     if (!enabled) {
+      setNotificationsEnabled(false);
       showToast(permission === "unsupported" ? "Ta przeglądarka nie obsługuje powiadomień" : "Nie włączono powiadomień");
       return;
     }
+    setNotificationsEnabled(true);
     const push = await subscribeToWebPush(headers);
     processMissedTaskReminders(tasks);
     if (push.ok) {
@@ -1337,6 +1463,20 @@ export default function App() {
       showToast("Powiadomienia lokalne włączone (09:00). Push wymaga konfiguracji serwera VAPID.");
     } else {
       showToast("Powiadomienia włączone — przypomnienia o 09:00, gdy aplikacja jest otwarta lub w tle");
+    }
+  };
+
+  const disableNotifications = async () => {
+    await unsubscribeFromWebPush(headers);
+    setNotificationsEnabled(false);
+    showToast("Powiadomienia wyłączone");
+  };
+
+  const toggleNotifications = async () => {
+    if (notificationsEnabled) {
+      await disableNotifications();
+    } else {
+      await enableNotifications();
     }
   };
 
@@ -1725,9 +1865,15 @@ export default function App() {
           notificationsEnabled={notificationsEnabled}
           notificationsUnsupported={notificationsUnsupported}
           isStandalonePwa={standalonePwa}
-          onToggleNotifications={enableNotifications}
+          pwaHintDismissed={pwaHintDismissed}
+          onToggleNotifications={toggleNotifications}
         />
       </div>
+      <PwaInstallBanner
+        standalonePwa={standalonePwa}
+        onShowToast={showToast}
+        onDismissForever={() => setPwaHintDismissed(true)}
+      />
       <PlayerSummary user={user} progress={progress} />
       <ChallengesBar challenges={challenges} />
       <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} processingTaskIds={processingTaskIds} />
