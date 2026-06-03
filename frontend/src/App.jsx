@@ -175,6 +175,59 @@ function countCompletedTasks(tasks) {
   return tasks.filter((t) => t.completed && t.exp_awarded).length;
 }
 
+function computeAchievementsOptimistic(tasks, achievements) {
+  if (!achievements) return achievements;
+  const completedCount = countCompletedTasks(tasks);
+
+  // Achievement definitions for count-based achievements
+  const ACHIEVEMENT_DEFS_TASK = [
+    { slug: "first_step", title: "Pierwszy krok", description: "Ukończ pierwszy quest.", icon: "🌟", value: 1 },
+    { slug: "second_bite", title: "Dobry start", description: "Ukończ 3 questy.", icon: "✨", value: 3 },
+    { slug: "scout_badge", title: "Dziesiątka zadań", description: "Ukończ 10 questów.", icon: "⚔️", value: 10 },
+    { slug: "veteran_wall", title: "Stały rytm", description: "Ukończ 25 questów.", icon: "🛡️", value: 25 },
+    { slug: "hundred_club", title: "Pięćdziesiątka", description: "Ukończ 50 questów.", icon: "🏆", value: 50 },
+    { slug: "mission_archive", title: "Archiwum zadań", description: "Ukończ 100 questów.", icon: "📜", value: 100 },
+    { slug: "invincible_grind", title: "Dwieście zadań", description: "Ukończ 200 questów.", icon: "💥", value: 200 },
+  ];
+
+  // Filter unlocked achievements - only keep count-based ones whose conditions are still met
+  const unlocked = (achievements.unlocked || []).filter((ach) => {
+    const required = TASK_ACHIEVEMENT_REQUIREMENTS[ach.slug];
+    // Keep if it's not a count-based achievement (we can't validate those optimistically)
+    // or if it's count-based and the condition is still met
+    return required == null || completedCount >= required;
+  });
+
+  // Add newly-met task-count achievements that are not yet in unlocked
+  const unlockedSlugs = new Set(unlocked.map((a) => a.slug));
+  for (const def of ACHIEVEMENT_DEFS_TASK) {
+    if (!unlockedSlugs.has(def.slug) && completedCount >= def.value) {
+      unlocked.push({ slug: def.slug, title: def.title, description: def.description, icon: def.icon });
+      unlockedSlugs.add(def.slug);
+    }
+  }
+
+  // Find the next count-based achievement that is not yet unlocked
+  let next = null;
+  for (const def of ACHIEVEMENT_DEFS_TASK) {
+    if (!unlockedSlugs.has(def.slug)) {
+      const current = Math.min(completedCount, def.value);
+      next = {
+        slug: def.slug,
+        title: def.title,
+        description: def.description,
+        icon: def.icon,
+        current,
+        target: def.value,
+        progress: `${current}/${def.value}`,
+      };
+      break;
+    }
+  }
+
+  return { unlocked, next };
+}
+
 function reconcileAchievementsOptimistic(tasks, achievements) {
   if (!achievements) return achievements;
   const completedCount = countCompletedTasks(tasks);
@@ -310,6 +363,110 @@ function applyGamificationResponse(data, { setChallenges, setAchievements, setRa
   if (data.achievements) setAchievements(data.achievements);
   if (data.rare_drops) setRareDrops(data.rare_drops);
   if (data.history) setHistory(data.history);
+}
+
+function computeChallengesOptimistic(tasks, challenges) {
+  if (!challenges?.goals?.length) return challenges;
+
+  const today = toDateStr(new Date());
+
+  // Count tasks completed today (local date)
+  const done_today = tasks.filter((t) => {
+    if (!t.completed || !t.completed_at) return false;
+    const completedDate = new Date(t.completed_at);
+    const completedLocalDate = toDateStr(completedDate);
+    return completedLocalDate === today;
+  }).length;
+
+  // Count tasks due today
+  const total_today = tasks.filter((t) => t.due_date === today).length;
+
+  // Count tasks completed today by difficulty
+  const hard_done = tasks.filter((t) => {
+    if (!t.completed || !t.completed_at) return false;
+    const completedDate = new Date(t.completed_at);
+    const completedLocalDate = toDateStr(completedDate);
+    return completedLocalDate === today && t.difficulty === "hard";
+  }).length;
+
+  const medium_done = tasks.filter((t) => {
+    if (!t.completed || !t.completed_at) return false;
+    const completedDate = new Date(t.completed_at);
+    const completedLocalDate = toDateStr(completedDate);
+    return completedLocalDate === today && t.difficulty === "medium";
+  }).length;
+
+  const easy_done = tasks.filter((t) => {
+    if (!t.completed || !t.completed_at) return false;
+    const completedDate = new Date(t.completed_at);
+    const completedLocalDate = toDateStr(completedDate);
+    return completedLocalDate === today && t.difficulty === "easy";
+  }).length;
+
+  // Count distinct categories of tasks completed today
+  const categories_done = new Set(
+    tasks.filter((t) => {
+      if (!t.completed || !t.completed_at) return false;
+      const completedDate = new Date(t.completed_at);
+      const completedLocalDate = toDateStr(completedDate);
+      return completedLocalDate === today;
+    }).map((t) => t.category)
+  );
+
+  // Count tasks due today that are completed
+  const done_due_today = tasks.filter((t) => t.due_date === today && t.completed).length;
+
+  // Evaluate each goal
+  const goals = challenges.goals.map((goal) => {
+    const qtype = goal.type;
+    const target = goal.target || 1;
+    let current = 0;
+
+    if (qtype === "complete_count") {
+      current = done_today;
+    } else if (qtype === "complete_difficulty") {
+      const diff = goal.difficulty;
+      if (diff === "hard") {
+        current = hard_done;
+      } else if (diff === "medium") {
+        current = medium_done;
+      } else {
+        current = easy_done;
+      }
+    } else if (qtype === "complete_difficulty_any") {
+      current = hard_done + medium_done;
+    } else if (qtype === "complete_category") {
+      const cat = goal.category;
+      current = categories_done.has(cat) ? 1 : 0;
+    } else if (qtype === "complete_all") {
+      current = done_due_today;
+    } else if (qtype === "complete_categories_distinct") {
+      current = categories_done.size;
+    } else {
+      // Skip types we can't compute optimistically: add_tasks, streak_min
+      return goal;
+    }
+
+    const clampedCurrent = Math.min(current, target);
+    const done = clampedCurrent >= target;
+
+    return {
+      ...goal,
+      current: clampedCurrent,
+      done,
+    };
+  });
+
+  const all_complete = goals.length > 0 && goals.every((g) => g.done);
+  const bonus_claimed = all_complete || challenges.bonus_claimed;
+
+  return {
+    ...challenges,
+    today_done: done_today,
+    goals,
+    all_complete,
+    bonus_claimed,
+  };
 }
 
 function adjustChallengesForTask(challenges, task, completed) {
@@ -1835,30 +1992,34 @@ export default function App() {
     const taskKey = task.id;
     const requestId = startTaskRequest(taskKey);
     const gamSeq = beginGamificationUpdate();
-    const snapshot = { task: { ...task }, user: user ? { ...user } : null, challenges: challenges ? { ...challenges } : null };
+    const snapshot = { task: { ...task }, user: user ? { ...user } : null, challenges: challenges ? { ...challenges } : null, achievements: achievements ? { ...achievements } : null };
     const expPreview = getExpPreview(task.difficulty, task.due_date);
     const optimisticExpDelta = expPreview.amount;
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
 
+    // Optimistically update the task
+    const nextTasks = sortTasks(tasks.map((t) => (t.id === task.id ? {
+      ...t,
+      completed: true,
+      exp_awarded: true,
+      exp_awarded_amount: expPreview.amount,
+      completed_at: new Date().toISOString(),
+    } : t)));
+
+    // Compute optimistic challenges and achievements
+    const optimisticChallenges = computeChallengesOptimistic(nextTasks, challenges);
+    const optimisticAchievements = computeAchievementsOptimistic(nextTasks, achievements);
+
     // Check if completing this task would complete all daily challenges (for optimistic daily bonus)
-    const adjustedChallenges = adjustChallengesForTask(challenges, task, true);
-    const willCompleteAllDaily = adjustedChallenges?.goals?.length > 0 && adjustedChallenges.goals.every((g) => g.done || g.current >= g.target);
+    const willCompleteAllDaily = optimisticChallenges?.goals?.length > 0 && optimisticChallenges.goals.every((g) => g.done || g.current >= g.target);
     const dailyBonusExp = challenges?.triple_bonus_exp || 35;
     const optimisticDailyBonus = willCompleteAllDaily && !challenges?.bonus_claimed ? dailyBonusExp : 0;
     const totalOptimisticExp = expPreview.amount + optimisticDailyBonus;
 
-    setTasks((prev) => {
-      const nextTasks = sortTasks(prev.map((t) => (t.id === task.id ? {
-        ...t,
-        completed: true,
-        exp_awarded: true,
-        exp_awarded_amount: expPreview.amount,
-        completed_at: new Date().toISOString(),
-      } : t)));
-      setAchievements((ach) => reconcileAchievementsOptimistic(nextTasks, ach));
-      return nextTasks;
-    });
+    // Single setState for all data to avoid UI flickering
+    setTasks(nextTasks);
+    setAchievements(optimisticAchievements);
     setUser((prev) => {
       if (!prev) return prev;
       const newExp = (prev.exp || 0) + totalOptimisticExp;
@@ -1872,7 +2033,7 @@ export default function App() {
         next_level_title: derived.next_level_title,
       };
     });
-    setChallenges(adjustedChallenges);
+    setChallenges(optimisticChallenges);
     showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}${optimisticDailyBonus > 0 ? ` 🎉 Bonus dzienny +${optimisticDailyBonus} EXP` : ""}`);
 
     enqueueApiJob(async () => {
@@ -1892,6 +2053,7 @@ export default function App() {
           setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? snapshot.task : t))));
           if (snapshot.user) setUser(snapshot.user);
           if (snapshot.challenges) setChallenges(snapshot.challenges);
+          if (snapshot.achievements) setAchievements(snapshot.achievements);
           showToast(err.response?.data?.detail || "Błąd aktualizacji");
         }
       } finally {
@@ -1941,28 +2103,32 @@ export default function App() {
     const taskKey = task.id;
     const requestId = startTaskRequest(taskKey);
     const gamSeq = beginGamificationUpdate();
-    const snapshot = { task: { ...task }, user: user ? { ...user } : null, challenges: challenges ? { ...challenges } : null };
+    const snapshot = { task: { ...task }, user: user ? { ...user } : null, challenges: challenges ? { ...challenges } : null, achievements: achievements ? { ...achievements } : null };
     const expToRevert = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     const optimisticExpDelta = -expToRevert;
 
+    // Optimistically update the task
+    const nextTasks = sortTasks(tasks.map((t) => (t.id === task.id ? {
+      ...t,
+      completed: false,
+      exp_awarded: false,
+      exp_awarded_amount: 0,
+      completed_at: null,
+    } : t)));
+
+    // Compute optimistic challenges and achievements
+    const optimisticChallenges = computeChallengesOptimistic(nextTasks, challenges);
+    const optimisticAchievements = computeAchievementsOptimistic(nextTasks, achievements);
+
     // Check if unchecking this task would revoke the daily bonus
-    const adjustedChallenges = adjustChallengesForTask(challenges, task, false);
-    const willRevokeDailyBonus = challenges?.bonus_claimed && adjustedChallenges?.goals?.length > 0 && !adjustedChallenges.goals.every((g) => g.done || g.current >= g.target);
+    const willRevokeDailyBonus = challenges?.bonus_claimed && optimisticChallenges?.goals?.length > 0 && !optimisticChallenges.goals.every((g) => g.done || g.current >= g.target);
     const dailyBonusExp = challenges?.triple_bonus_exp || 35;
     const optimisticDailyBonusRevert = willRevokeDailyBonus ? dailyBonusExp : 0;
     const totalOptimisticExpRevert = expToRevert + optimisticDailyBonusRevert;
 
-    setTasks((prev) => {
-      const nextTasks = sortTasks(prev.map((t) => (t.id === task.id ? {
-        ...t,
-        completed: false,
-        exp_awarded: false,
-        exp_awarded_amount: 0,
-        completed_at: null,
-      } : t)));
-      setAchievements((ach) => reconcileAchievementsOptimistic(nextTasks, ach));
-      return nextTasks;
-    });
+    // Single setState for all data to avoid UI flickering
+    setTasks(nextTasks);
+    setAchievements(optimisticAchievements);
     setUser((prev) => {
       if (!prev) return prev;
       const newExp = Math.max(0, (prev.exp || 0) - totalOptimisticExpRevert);
@@ -1976,7 +2142,7 @@ export default function App() {
         next_level_title: derived.next_level_title,
       };
     });
-    setChallenges(adjustedChallenges);
+    setChallenges(optimisticChallenges);
     showToast("✅ Cofnięto ukończenie zadania");
     if (optimisticDailyBonusRevert > 0) {
       setTimeout(() => showToast(`⚠️ Bonus dzienny cofnięty (-${optimisticDailyBonusRevert} EXP)`), 500);
@@ -1997,6 +2163,7 @@ export default function App() {
           setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? snapshot.task : t))));
           if (snapshot.user) setUser(snapshot.user);
           if (snapshot.challenges) setChallenges(snapshot.challenges);
+          if (snapshot.achievements) setAchievements(snapshot.achievements);
           showToast(err.response?.data?.detail || "Błąd cofania ukończenia");
         }
       } finally {
@@ -2028,17 +2195,24 @@ export default function App() {
     const taskKey = task.id;
     const requestId = startTaskRequest(taskKey);
     const gamSeq = beginGamificationUpdate();
-    const snapshot = { task: { ...task }, tasks: tasks, user: user ? { ...user } : null };
+    const snapshot = { task: { ...task }, tasks: tasks, user: user ? { ...user } : null, challenges: challenges ? { ...challenges } : null, achievements: achievements ? { ...achievements } : null };
     const optimisticExpDelta = task.exp_awarded ? -(task.exp_awarded_amount || exp) : 0;
 
-    setTasks((prev) => {
-      const nextTasks = prev.filter((t) => t.id !== task.id);
-      if (task.exp_awarded) {
-        setAchievements((ach) => reconcileAchievementsOptimistic(nextTasks, ach));
-      }
-      return nextTasks;
-    });
+    // Optimistically update the task
+    const nextTasks = sortTasks(tasks.filter((t) => t.id !== task.id));
+
+    // Compute optimistic challenges and achievements if task was completed
+    let optimisticChallenges = challenges;
+    let optimisticAchievements = achievements;
     if (task.exp_awarded) {
+      optimisticChallenges = computeChallengesOptimistic(nextTasks, challenges);
+      optimisticAchievements = computeAchievementsOptimistic(nextTasks, achievements);
+    }
+
+    // Single setState for all data to avoid UI flickering
+    setTasks(nextTasks);
+    if (task.exp_awarded) {
+      setAchievements(optimisticAchievements);
       setUser((prev) => {
         if (!prev) return prev;
         const newExp = Math.max(0, (prev.exp || 0) - exp);
@@ -2052,7 +2226,7 @@ export default function App() {
           next_level_title: derived.next_level_title,
         };
       });
-      setChallenges((prev) => adjustChallengesForTask(prev, task, false));
+      setChallenges(optimisticChallenges);
     }
 
     enqueueApiJob(async () => {
@@ -2073,6 +2247,8 @@ export default function App() {
         if (!isStaleRequest(taskKey, requestId)) {
           setTasks(sortTasks(snapshot.tasks));
           if (snapshot.user) setUser(snapshot.user);
+          if (snapshot.challenges) setChallenges(snapshot.challenges);
+          if (snapshot.achievements) setAchievements(snapshot.achievements);
           if (err.response?.status === 404) showToast("Zadanie już nie istnieje");
           else showToast(err.response?.data?.detail || "Błąd usuwania");
         }
