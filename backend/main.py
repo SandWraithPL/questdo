@@ -364,12 +364,15 @@ def task_can_reschedule(task: models.Task) -> bool:
     return not task.completed and not task.exp_awarded
 
 
-def calculate_exp_reward(difficulty: str, due_date: date, completed_on: date) -> tuple[int, str]:
+def calculate_exp_reward(difficulty: str, due_date: date, completed_on: datetime) -> tuple[int, str]:
     base = EXP_REWARDS.get(difficulty, 10)
-    if completed_on < due_date:
+    local_tz = ZoneInfo("Europe/Warsaw")
+    completed_local = completed_on.astimezone(local_tz).date()
+    
+    if completed_local < due_date:
         amount = max(MIN_EXP_REWARD, math.floor(base * EARLY_EXP_MULTIPLIER))
         timing = "early"
-    elif completed_on > due_date:
+    elif completed_local > due_date:
         amount = max(MIN_EXP_REWARD, math.floor(base * LATE_EXP_MULTIPLIER))
         timing = "late"
     else:
@@ -404,7 +407,7 @@ def task_to_dict(t: models.Task) -> dict:
     if t.completed and t.exp_awarded and t.completed_at:
         data["completed_at"] = str(t.completed_at)
     if not t.completed and t.due_date:
-        preview, timing = calculate_exp_reward(t.difficulty, t.due_date, date.today())
+        preview, timing = calculate_exp_reward(t.difficulty, t.due_date, datetime.utcnow())
         data["exp_preview"] = preview
         data["exp_timing_preview"] = timing
     return data
@@ -1215,7 +1218,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
             if not task.exp_awarded:
                 old_exp = current_user.exp
                 exp_gained, exp_timing = calculate_exp_reward(
-                    task.difficulty, task.due_date, date.today()
+                    task.difficulty, task.due_date, task.completed_at
                 )
                 current_user.exp += exp_gained
                 task.exp_awarded = True

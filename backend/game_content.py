@@ -83,6 +83,7 @@ ACHIEVEMENT_BY_SLUG = {a["slug"]: a for a in ACHIEVEMENT_DEFS}
 
 def gather_user_stats(user, db, models) -> dict:
     from datetime import date, timedelta
+    from zoneinfo import ZoneInfo
 
     reset_at = getattr(user, "progress_reset_at", None)
     exp_floor = getattr(user, "exp_at_progress_reset", 0) or 0
@@ -103,6 +104,7 @@ def gather_user_stats(user, db, models) -> dict:
     today = date.today()
     week_start = today - timedelta(days=today.weekday())
     hard_this_week = 0
+    local_tz = ZoneInfo("Europe/Warsaw")
 
     for t in completed:
         if t.difficulty == "easy":
@@ -113,7 +115,7 @@ def gather_user_stats(user, db, models) -> dict:
             hard += 1
         cat_counts[t.category] = cat_counts.get(t.category, 0) + 1
 
-        done_day = t.completed_at.date() if t.completed_at else None
+        done_day = t.completed_at.astimezone(local_tz).date() if t.completed_at else None
         if done_day and t.due_date:
             if done_day < t.due_date:
                 early += 1
@@ -121,7 +123,7 @@ def gather_user_stats(user, db, models) -> dict:
                 late += 1
             else:
                 ontime += 1
-        if t.created_at and done_day and t.created_at <= t.completed_at and t.created_at.date() == done_day:
+        if t.created_at and done_day and t.created_at <= t.completed_at and t.created_at.astimezone(local_tz).date() == done_day:
             same_day += 1
         if t.difficulty == "hard" and done_day and done_day >= week_start:
             hard_this_week += 1

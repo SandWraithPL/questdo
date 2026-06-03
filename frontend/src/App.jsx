@@ -564,7 +564,7 @@ function readCalendarCollapsedPreference() {
   return true;
 }
 
-function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete }) {
+function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete, processingTasks }) {
   const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
   const [view, setView] = useState("month");
   const [collapsed, setCollapsed] = useState(readCalendarCollapsedPreference);
@@ -678,10 +678,12 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
       <div className="day-view">
         <h3>{selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</h3>
         {dayTasks.length === 0 && <p className="empty">Brak zadań na ten dzień</p>}
-        {dayTasks.map(task => (
+        {dayTasks.map(task => {
+          const isProcessing = processingTasks.has(task.id);
+          return (
           <div key={task.id} className={`day-task ${task.completed ? "completed" : ""}`}>
             {task.completed ? <div className="task-check checked locked">✓</div> : (
-              <button type="button" className="task-check" onClick={() => onTaskToggle(task)} />
+              <button type="button" className="task-check" disabled={isProcessing} onClick={() => onTaskToggle(task)} />
             )}
             <div className="day-task-info">
               <strong>{task.important ? "Ważne · " : ""}{task.title}</strong>
@@ -692,9 +694,9 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
                 {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
               </div>
             </div>
-            <button type="button" onClick={() => onTaskDelete(task)}>🗑</button>
+            <button type="button" disabled={isProcessing} onClick={() => onTaskDelete(task)}>🗑</button>
           </div>
-        ))}
+        );})}
       </div>
     );
   };
@@ -972,7 +974,7 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
-function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck }) {
+function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck, processingTasks }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
@@ -1048,6 +1050,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
       {dayTasks.length === 0 && <div className="empty">{allDay.length ? "Brak questów pasujących do filtrów." : "Brak questów na ten dzień. Dodaj pierwszy! ⚔️"}</div>}
       {dayTasks.map((task) => {
         const checkState = getTaskCheckState(task);
+        const isProcessing = processingTasks.has(task.id);
         return (
         <div key={task.id} className={`task-card ${task.difficulty} ${task.completed ? "done" : ""} ${checkState.showUncheckBadge ? "can-uncheck" : ""}`}>
           {editingId === task.id ? (
@@ -1079,7 +1082,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
               <button
                 type="button"
                 className={`task-check ${checkState.className}`}
-                disabled={checkState.disabled}
+                disabled={checkState.disabled || isProcessing}
                 onClick={() => handleToggleClick(task)}
                 title={checkState.title}
                 aria-label={checkState.title}
@@ -1100,8 +1103,8 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
                 </div>
               </div>
               <div className="task-actions">
-                {!task.completed && <button className="icon-btn" onClick={() => startEdit(task)}>✏️</button>}
-                <button className="task-delete" onClick={() => onDelete(task)}>🗑</button>
+                {!task.completed && <button className="icon-btn" disabled={isProcessing} onClick={() => startEdit(task)}>✏️</button>}
+                <button className="task-delete" disabled={isProcessing} onClick={() => onDelete(task)}>🗑</button>
               </div>
             </>
           )}
@@ -1397,6 +1400,7 @@ export default function App() {
   const [standalonePwa, setStandalonePwa] = useState(false);
   const notificationsUnsupported = !("Notification" in window);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [processingTasks, setProcessingTasks] = useState(new Set());
 
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -1574,6 +1578,9 @@ export default function App() {
 
   const toggleTask = async (task) => {
     if (task.completed) return;
+    if (processingTasks.has(task.id)) return;
+
+    setProcessingTasks(prev => new Set([...prev, task.id]));
 
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
@@ -1586,6 +1593,12 @@ export default function App() {
     } catch (err) {
       console.error("[toggleTask] API error:", err);
       showToast(err.response?.data?.detail || "Błąd aktualizacji");
+    } finally {
+      setProcessingTasks(prev => {
+        const next = new Set(prev);
+        next.delete(task.id);
+        return next;
+      });
     }
   };
 
@@ -1604,6 +1617,9 @@ export default function App() {
       showToast("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
       return;
     }
+    if (processingTasks.has(task.id)) return;
+
+    setProcessingTasks(prev => new Set([...prev, task.id]));
 
     try {
       await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
@@ -1612,6 +1628,12 @@ export default function App() {
     } catch (err) {
       console.error("[uncheckTask] API error:", err);
       showToast(err.response?.data?.detail || "Błąd cofania ukończenia");
+    } finally {
+      setProcessingTasks(prev => {
+        const next = new Set(prev);
+        next.delete(task.id);
+        return next;
+      });
     }
   };
   
@@ -1630,8 +1652,12 @@ export default function App() {
   };
   
   const deleteTask = async (task) => {
+    if (processingTasks.has(task.id)) return;
+
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
+
+    setProcessingTasks(prev => new Set([...prev, task.id]));
 
     try {
       await axios.delete(`${API}/tasks/${task.id}`, { headers });
@@ -1641,6 +1667,12 @@ export default function App() {
       console.error("[deleteTask] API error:", err);
       if (err.response?.status === 404) showToast("Zadanie już nie istnieje");
       else showToast(err.response?.data?.detail || "Błąd usuwania");
+    } finally {
+      setProcessingTasks(prev => {
+        const next = new Set(prev);
+        next.delete(task.id);
+        return next;
+      });
     }
   };
   
@@ -1678,8 +1710,8 @@ export default function App() {
       />
       <PlayerSummary user={user} progress={progress} />
       <ChallengesBar challenges={challenges} />
-      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} />
+      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} processingTasks={processingTasks} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} processingTasks={processingTasks} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">
