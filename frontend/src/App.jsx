@@ -402,9 +402,22 @@ function Auth({ onLogin }) {
   );
 }
 
+const CALENDAR_COLLAPSED_KEY = "questdo-calendar-collapsed";
+
+function readCalendarCollapsedPreference() {
+  try {
+    const saved = localStorage.getItem(CALENDAR_COLLAPSED_KEY);
+    if (saved !== null) return saved === "true";
+  } catch {
+    /* ignore */
+  }
+  return true;
+}
+
 function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete, processingTaskIds = [] }) {
   const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
   const [view, setView] = useState("month");
+  const [collapsed, setCollapsed] = useState(readCalendarCollapsedPreference);
   const selectedStr = toDateStr(selectedDate);
   const selectedDateObj = selectedDate instanceof Date ? selectedDate : new Date(selectedStr + "T12:00:00");
 
@@ -423,6 +436,18 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
     const today = new Date();
     setCursor(today);
     onDateSelect(toDateStr(today));
+  };
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(CALENDAR_COLLAPSED_KEY, String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
   };
 
   const shift = (delta) => {
@@ -537,8 +562,38 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
       ? weekTitle
       : selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" });
 
+  const selectedDayStats = taskStats(selectedStr);
+  const selectedDayLabel = selectedDateObj.toLocaleDateString("pl-PL", {
+    weekday: "short",
+    day: "numeric",
+    month: "short",
+  });
+  const selectedDayMeta = selectedDayStats.total > 0
+    ? `${selectedDayStats.done}/${selectedDayStats.total} questów`
+    : "brak questów";
+
   return (
-    <div className="calendar-container">
+    <section className={`calendar-section ${collapsed ? "calendar-section--collapsed" : "calendar-section--expanded"}`}>
+      <div className="calendar-section-bar">
+        <button
+          type="button"
+          className="calendar-section-toggle"
+          onClick={toggleCollapsed}
+          aria-expanded={!collapsed}
+          aria-controls="questdo-calendar-body"
+        >
+          <span className="calendar-section-title">📅 Kalendarz</span>
+          <span className="calendar-section-meta">{selectedDayLabel} · {selectedDayMeta}</span>
+          <span className="calendar-section-chevron" aria-hidden="true">{collapsed ? "▼" : "▲"}</span>
+        </button>
+        {collapsed && (
+          <button type="button" className="calendar-section-today" onClick={goToday}>
+            Dzisiaj
+          </button>
+        )}
+      </div>
+      {!collapsed && (
+      <div id="questdo-calendar-body" className="calendar-container">
       <div className="calendar-header">
         <div className="calendar-nav">
           <button type="button" onClick={() => shift(-1)} aria-label="Poprzedni zakres">◀</button>
@@ -562,7 +617,9 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
         {view === "week" && <div className="week-view">{renderWeekView()}</div>}
         {view === "day" && renderDayView()}
       </div>
-    </div>
+      </div>
+      )}
+    </section>
   );
 }
 
