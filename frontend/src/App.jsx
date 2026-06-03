@@ -184,6 +184,24 @@ function reconcileAchievementsOptimistic(tasks, achievements) {
     const required = TASK_ACHIEVEMENT_REQUIREMENTS[ach.slug];
     return required == null || completedCount >= required;
   });
+
+  // Add newly-met task-count achievements that are not yet in unlocked
+  const unlockedSlugs = new Set(unlocked.map((a) => a.slug));
+  const ACHIEVEMENT_DEFS_TASK = [
+    { slug: "first_step", title: "Pierwszy krok", description: "Ukończ pierwszy quest.", icon: "🌟", value: 1 },
+    { slug: "second_bite", title: "Dobry start", description: "Ukończ 3 questy.", icon: "✨", value: 3 },
+    { slug: "scout_badge", title: "Dziesiątka zadań", description: "Ukończ 10 questów.", icon: "⚔️", value: 10 },
+    { slug: "veteran_wall", title: "Stały rytm", description: "Ukończ 25 questów.", icon: "🛡️", value: 25 },
+    { slug: "hundred_club", title: "Pięćdziesiątka", description: "Ukończ 50 questów.", icon: "🏆", value: 50 },
+    { slug: "mission_archive", title: "Archiwum zadań", description: "Ukończ 100 questów.", icon: "📜", value: 100 },
+    { slug: "invincible_grind", title: "Dwieście zadań", description: "Ukończ 200 questów.", icon: "💥", value: 200 },
+  ];
+  for (const def of ACHIEVEMENT_DEFS_TASK) {
+    if (!unlockedSlugs.has(def.slug) && completedCount >= def.value) {
+      unlocked.push({ slug: def.slug, title: def.title, description: def.description, icon: def.icon });
+      unlockedSlugs.add(def.slug);
+    }
+  }
   
   let next = achievements.next;
   if (next) {
@@ -245,7 +263,18 @@ function applyUserGamificationDelta(
 ) {
   setUser((prev) => {
     if (!prev) return prev;
-    const exp = Math.max(0, (prev.exp || 0) + getExpDeltaFromApi(data) - optimisticExpDelta);
+    // If the API returned an absolute exp value AND we are the latest gamification sequence,
+    // use it directly instead of delta arithmetic. This prevents ghost EXP caused by
+    // accumulated rounding or unexpected server-side bonuses/penalties.
+    // We still need to keep the optimistic delta in mind: if the API gave us an absolute
+    // value we can trust it fully; if not, fall back to delta math.
+    let exp;
+    if (data.exp != null) {
+      // Absolute from server — trust it. No delta math needed.
+      exp = Math.max(0, data.exp);
+    } else {
+      exp = Math.max(0, (prev.exp || 0) + getExpDeltaFromApi(data) - optimisticExpDelta);
+    }
     const derived = getGamificationFromExp(exp, levelsMetaRef.current, levelThresholdsRef.current);
     return {
       ...prev,
@@ -1552,8 +1581,15 @@ export default function App() {
       optimisticExpDelta,
       syncStreak: isLatestGamification(gamSeq),
     });
+    // Always update achievements immediately from API — the full list is authoritative.
+    // This ensures new achievements appear as soon as the API responds, regardless of
+    // request ordering. We never skip this update because data.achievements is additive
+    // (the server always returns the complete unlocked list).
+    if (data.achievements) setAchievements(data.achievements);
     if (isLatestGamification(gamSeq)) {
-      applyGamificationResponse(data, gamificationSetters);
+      if (data.challenges) setChallenges(data.challenges);
+      if (data.rare_drops) setRareDrops(data.rare_drops);
+      if (data.history) setHistory(data.history);
     }
   }, [isLatestGamification]);
 

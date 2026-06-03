@@ -126,7 +126,15 @@ def gather_user_stats(user, db, models) -> dict:
                 late += 1
             else:
                 ontime += 1
-        if t.created_at and done_day and t.created_at.date() == done_day:
+        # same_day: task must have been created on the SAME calendar date it was completed.
+        # Both timestamps are stored as UTC, so .date() comparison is consistent.
+        # Extra guard: created_at must not be later than completed_at (sanity check).
+        if (
+            t.created_at
+            and done_day
+            and t.created_at <= t.completed_at  # sanity: not created after completion
+            and t.created_at.date() == done_day  # created and completed on same UTC date
+        ):
             same_day += 1
         if t.difficulty == "hard" and done_day and done_day >= week_start:
             hard_this_week += 1
