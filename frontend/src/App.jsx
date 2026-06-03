@@ -955,6 +955,9 @@ export default function App() {
   const refreshUserData = async () => {
     if (!token) return;
     
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] refreshUserData START - current_exp: ${user?.exp}, current_streak: ${user?.streak}`);
+    
     const noCacheHeaders = {
       ...headers,
       'Cache-Control': 'no-cache',
@@ -971,21 +974,28 @@ export default function App() {
       
       const newUnlocked = achRes.data.unlocked || [];
       
+      console.log(`[${timestamp}] refreshUserData API RESPONSE - server_exp: ${userRes.data.exp}, server_streak: ${userRes.data.streak}`);
+      
       // Nie nadpisuj exp i streak, jeśli użytkownik ma już wyższe wartości (optimistic UI)
       setUser(prev => {
         if (!prev) return userRes.data;
+        const newExp = Math.max(prev.exp || 0, userRes.data.exp || 0);
+        const newStreak = Math.max(prev.streak || 0, userRes.data.streak || 0);
+        console.log(`[${timestamp}] refreshUserData PRESERVING - preserved_exp: ${newExp}, preserved_streak: ${newStreak}`);
         return {
           ...userRes.data,
           // Zachowaj wyższe wartości (optymistyczne)
-          exp: Math.max(prev.exp || 0, userRes.data.exp || 0),
-          streak: Math.max(prev.streak || 0, userRes.data.streak || 0),
+          exp: newExp,
+          streak: newStreak,
         };
       });
       setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
       setHistory(historyRes.data || []);
+      
+      console.log(`[${timestamp}] refreshUserData SUCCESS`);
     } catch (err) {
-      console.error("Refresh user data error:", err);
+      console.error(`[${timestamp}] refreshUserData ERROR:`, err);
     }
   };
 
@@ -1047,6 +1057,9 @@ export default function App() {
   const toggleTask = async (task) => {
     if (task.completed) return;
     
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] toggleTask START - task_id: ${task.id}, title: ${task.title}`);
+    
     const expPreview = getExpPreview(task.difficulty, task.due_date);
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
@@ -1061,32 +1074,55 @@ export default function App() {
     });
     
     // 2. Natychmiastowa aktualizacja EXP w stanie user (bez czekania na API)
-    setUser(prev => prev ? { ...prev, exp: (prev.exp || 0) + expPreview.amount } : prev);
+    setUser(prev => {
+      if (!prev) return prev;
+      const newExp = (prev.exp || 0) + expPreview.amount;
+      const level = getExpProgress(newExp, levelThresholds);
+      return { ...prev, exp: newExp, level: level.current };
+    });
+    
+    console.log(`[${timestamp}] toggleTask OPTIMISTIC - exp_preview: ${expPreview.amount}, new_exp: ${(user?.exp || 0) + expPreview.amount}`);
     
     showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
     
     try {
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-      const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop, exp_gained, exp_timing, challenges, streak } = res.data;
+      const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop, exp_gained, exp_timing, challenges, streak, level, exp: serverExp } = res.data;
       
-      console.log('[toggleTask] PATCH response challenges:', challenges);
+      console.log(`[${timestamp}] toggleTask API RESPONSE - exp_gained: ${exp_gained}, streak: ${streak}, level: ${level}, server_exp: ${serverExp}`);
+      console.log(`[${timestamp}] toggleTask API RESPONSE - challenges:`, challenges);
       
       // 3. Aktualizacja z danymi z API (tylko jeśli różne od optymistycznych)
       setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true, exp_awarded: true, exp_awarded_amount: exp_gained || expPreview.amount } : t));
       
       // 4. Inkrementalna aktualizacja user.exp (poprawka ewentualnej różnicy)
       if (exp_gained && exp_gained !== expPreview.amount) {
-        setUser(prev => prev ? { ...prev, exp: (prev.exp || 0) + (exp_gained - expPreview.amount) } : prev);
+        const diff = exp_gained - expPreview.amount;
+        setUser(prev => {
+          if (!prev) return prev;
+          const newExp = (prev.exp || 0) + diff;
+          const levelInfo = getExpProgress(newExp, levelThresholds);
+          return { ...prev, exp: newExp, level: levelInfo.current };
+        });
+        console.log(`[${timestamp}] toggleTask EXP CORRECTION - diff: ${diff}, new_exp: ${(user?.exp || 0) + diff}`);
       }
       
       // 5. Aktualizacja streaka z odpowiedzi API
       if (streak !== undefined) {
         setUser(prev => prev ? { ...prev, streak: streak } : prev);
+        console.log(`[${timestamp}] toggleTask STREAK UPDATE - streak: ${streak}`);
       }
       
       // 6. Update challenges immediately from response
       if (challenges) {
         setChallenges(challenges);
+        console.log(`[${timestamp}] toggleTask CHALLENGES UPDATE`);
+      }
+      
+      // 7. Update level from API response
+      if (level !== undefined) {
+        setUser(prev => prev ? { ...prev, level: level } : prev);
+        console.log(`[${timestamp}] toggleTask LEVEL UPDATE - level: ${level}`);
       }
       
       if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
@@ -1102,14 +1138,17 @@ export default function App() {
         showAppNotification("Nowe osiągnięcie", `${freshAchievement.title}: ${freshAchievement.description}`);
       }
       
-      // 7. Odśwież dane użytkownika (ale tylko jeśli to konieczne - nie nadpisuj exp)
-      refreshUserData();
-      fetchChallenges();
+      console.log(`[${timestamp}] toggleTask SUCCESS`);
     } catch (err) {
-      console.error('[toggleTask] API error:', err);
+      console.error(`[${timestamp}] toggleTask API ERROR:`, err);
       // Rollback on error - przywróć poprzednie wartości
       setTasks(prev => prev.map(t => t.id === task.id ? task : t));
-      setUser(prev => prev ? { ...prev, exp: (prev.exp || 0) - expPreview.amount } : prev);
+      setUser(prev => {
+        if (!prev) return prev;
+        const newExp = (prev.exp || 0) - expPreview.amount;
+        const levelInfo = getExpProgress(newExp, levelThresholds);
+        return { ...prev, exp: newExp, level: levelInfo.current };
+      });
       showToast(err.response?.data?.detail || "Błąd aktualizacji");
     }
   };
@@ -1142,31 +1181,74 @@ export default function App() {
       return;
     }
 
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] uncheckTask START - task_id: ${task.id}, title: ${task.title}`);
+
     const originalTask = { ...task };
+    const expToRevert = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     
     // Optimistic update
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: false, exp_awarded: false, exp_awarded_amount: 0 } : t));
+    
+    // Optimistic EXP revert with level recalculation
+    setUser(prev => {
+      if (!prev) return prev;
+      const newExp = Math.max(0, (prev.exp || 0) - expToRevert);
+      const levelInfo = getExpProgress(newExp, levelThresholds);
+      return { ...prev, exp: newExp, level: levelInfo.current };
+    });
+    
+    console.log(`[${timestamp}] uncheckTask OPTIMISTIC - exp_to_revert: ${expToRevert}, new_exp: ${Math.max(0, (user?.exp || 0) - expToRevert)}`);
+    
     showToast("🔄 Cofanie ukończenia...");
 
     try {
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
-      const { challenges } = res.data;
+      const { challenges, streak, exp: serverExp, level } = res.data;
       
-      console.log('[uncheckTask] PATCH response challenges:', challenges);
+      console.log(`[${timestamp}] uncheckTask API RESPONSE - streak: ${streak}, server_exp: ${serverExp}, level: ${level}`);
+      console.log(`[${timestamp}] uncheckTask API RESPONSE - challenges:`, challenges);
       
       // Update challenges immediately from response
       if (challenges) {
         setChallenges(challenges);
+        console.log(`[${timestamp}] uncheckTask CHALLENGES UPDATE`);
       }
       
-      // Refresh user data
-      refreshUserData();
+      // Update streak from API response
+      if (streak !== undefined) {
+        setUser(prev => prev ? { ...prev, streak: streak } : prev);
+        console.log(`[${timestamp}] uncheckTask STREAK UPDATE - streak: ${streak}`);
+      }
       
+      // Update level from API response
+      if (level !== undefined) {
+        setUser(prev => prev ? { ...prev, level: level } : prev);
+        console.log(`[${timestamp}] uncheckTask LEVEL UPDATE - level: ${level}`);
+      }
+      
+      // Correct EXP if server value differs
+      if (serverExp !== undefined && user?.exp !== serverExp) {
+        setUser(prev => {
+          if (!prev) return prev;
+          const levelInfo = getExpProgress(serverExp, levelThresholds);
+          return { ...prev, exp: serverExp, level: levelInfo.current };
+        });
+        console.log(`[${timestamp}] uncheckTask EXP CORRECTION - server_exp: ${serverExp}`);
+      }
+      
+      console.log(`[${timestamp}] uncheckTask SUCCESS`);
       showToast("✅ Cofnięto ukończenie zadania");
     } catch (err) {
-      console.error('[uncheckTask] API error:', err);
+      console.error(`[${timestamp}] uncheckTask API ERROR:`, err);
       // Rollback on error
       setTasks(prev => prev.map(t => t.id === task.id ? originalTask : t));
+      setUser(prev => {
+        if (!prev) return prev;
+        const newExp = (prev.exp || 0) + expToRevert;
+        const levelInfo = getExpProgress(newExp, levelThresholds);
+        return { ...prev, exp: newExp, level: levelInfo.current };
+      });
       showToast(err.response?.data?.detail || "Błąd cofania ukończenia");
     }
   };
@@ -1186,24 +1268,66 @@ export default function App() {
   };
   
   const deleteTask = async (task) => {
+    const timestamp = new Date().toISOString();
+    console.log(`[${timestamp}] deleteTask START - task_id: ${task.id}, title: ${task.title}`);
+    
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
     
     // Optimistic delete
     setTasks(prev => prev.filter(t => t.id !== task.id));
     
+    // Optimistic EXP revert with level recalculation
+    if (task.exp_awarded) {
+      setUser(prev => {
+        if (!prev) return prev;
+        const newExp = Math.max(0, (prev.exp || 0) - exp);
+        const levelInfo = getExpProgress(newExp, levelThresholds);
+        return { ...prev, exp: newExp, level: levelInfo.current };
+      });
+      console.log(`[${timestamp}] deleteTask OPTIMISTIC - exp_to_revert: ${exp}, new_exp: ${Math.max(0, (user?.exp || 0) - exp)}`);
+    }
+    
     try {
       const res = await axios.delete(`${API}/tasks/${task.id}`, { headers });
+      const { exp_removed, exp: serverExp, level } = res.data;
+      
+      console.log(`[${timestamp}] deleteTask API RESPONSE - exp_removed: ${exp_removed}, server_exp: ${serverExp}, level: ${level}`);
+      
+      // Update level from API response
+      if (level !== undefined) {
+        setUser(prev => prev ? { ...prev, level: level } : prev);
+        console.log(`[${timestamp}] deleteTask LEVEL UPDATE - level: ${level}`);
+      }
+      
+      // Correct EXP if server value differs
+      if (serverExp !== undefined && user?.exp !== serverExp) {
+        setUser(prev => {
+          if (!prev) return prev;
+          const levelInfo = getExpProgress(serverExp, levelThresholds);
+          return { ...prev, exp: serverExp, level: levelInfo.current };
+        });
+        console.log(`[${timestamp}] deleteTask EXP CORRECTION - server_exp: ${serverExp}`);
+      }
+      
       showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
-      refreshUserData();
+      console.log(`[${timestamp}] deleteTask SUCCESS`);
     } catch (err) {
-      console.error('[deleteTask] API error:', err);
+      console.error(`[${timestamp}] deleteTask API ERROR:`, err);
       if (err.response?.status === 404) {
         showToast("Zadanie już nie istnieje");
         return;
       }
-      // Rollback - restore task
+      // Rollback - restore task and EXP
       setTasks(prev => [...prev, task]);
+      if (task.exp_awarded) {
+        setUser(prev => {
+          if (!prev) return prev;
+          const newExp = (prev.exp || 0) + exp;
+          const levelInfo = getExpProgress(newExp, levelThresholds);
+          return { ...prev, exp: newExp, level: levelInfo.current };
+        });
+      }
       showToast(err.response?.data?.detail || "Błąd usuwania");
     }
   };
