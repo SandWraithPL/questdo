@@ -579,6 +579,21 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
     return hoursSinceCompletion < 24;
   };
 
+  // Unified toggle function - handles both completing and uncompleting
+  const handleToggleClick = (task) => {
+    if (task.completed) {
+      // Task is completed - try to uncheck if within 24h
+      if (canUncheckTask(task) && onUncheck) {
+        onUncheck(task);
+      } else if (!canUncheckTask(task)) {
+        onError("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
+      }
+    } else {
+      // Task is not completed - complete it
+      onToggle(task);
+    }
+  };
+
   const dateStr = toDateStr(selectedDate);
   const dateLabel = new Date(dateStr + "T12:00:00").toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
@@ -663,7 +678,9 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
             </div>
           ) : (
             <>
-              {task.completed ? <div className="task-check checked locked" title="Ukończone - tylko usunięcie">✓</div> : <button className="task-check" onClick={() => onToggle(task)}></button>}
+              <button className="task-check" onClick={() => handleToggleClick(task)}>
+                {task.completed ? "✓" : ""}
+              </button>
               <div className="task-info">
                 <h4 className={task.completed ? "done" : ""}>{task.important && <span className="important-mark">Ważne · </span>}{task.title}</h4>
                 {task.description && <p>{task.description}</p>}
@@ -677,7 +694,6 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
               </div>
               <div className="task-actions">
                 {!task.completed && <button className="icon-btn" onClick={() => startEdit(task)}>✏️</button>}
-                {task.completed && onUncheck && canUncheckTask(task) && <button className="icon-btn" onClick={() => onUncheck(task)} title="Cofnij ukończenie">🔄</button>}
                 <button className="task-delete" onClick={() => onDelete(task)}>🗑</button>
               </div>
             </>
