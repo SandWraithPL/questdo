@@ -571,6 +571,14 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
 
+  const canUncheckTask = (task) => {
+    if (!task.completed || !task.completed_at) return false;
+    const completedAt = new Date(task.completed_at);
+    const now = new Date();
+    const hoursSinceCompletion = (now - completedAt) / (1000 * 60 * 60);
+    return hoursSinceCompletion < 24;
+  };
+
   const dateStr = toDateStr(selectedDate);
   const dateLabel = new Date(dateStr + "T12:00:00").toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
