@@ -103,15 +103,96 @@ function Toast({ message }) {
   return <div className="toast">{message}</div>;
 }
 
+function LoadingSpinner({ label = "Ładowanie…" }) {
+  return (
+    <div className="loading-state" role="status" aria-live="polite">
+      <div className="spinner" aria-hidden="true" />
+      {label && <p>{label}</p>}
+    </div>
+  );
+}
+
+function canUncheckTask(task) {
+  if (!task.completed || !task.completed_at) return false;
+  const completedAt = new Date(task.completed_at);
+  const hoursSinceCompletion = (Date.now() - completedAt.getTime()) / (1000 * 60 * 60);
+  return hoursSinceCompletion < 24;
+}
+
+function getTaskCheckState(task) {
+  if (!task.completed) {
+    return { className: "", title: "Oznacz jako ukończone", disabled: false, showUncheckBadge: false };
+  }
+  if (canUncheckTask(task)) {
+    return {
+      className: "checked uncheckable",
+      title: "Można odznaczyć (24h)",
+      disabled: false,
+      showUncheckBadge: true,
+    };
+  }
+  return {
+    className: "checked locked",
+    title: "Nie można odznaczyć (minęło więcej niż 24h)",
+    disabled: true,
+    showUncheckBadge: false,
+  };
+}
+
+function getReminderAt(task) {
+  if (task.reminder_offset_days === null || task.reminder_offset_days === undefined) return null;
+  const reminderAt = new Date(`${task.due_date}T09:00:00`);
+  reminderAt.setDate(reminderAt.getDate() - Number(task.reminder_offset_days || 0));
+  return reminderAt;
+}
+
+function getReminderStorageKey(task) {
+  return `questdo-reminded-${task.id}-${task.due_date}-${task.reminder_offset_days}`;
+}
+
+async function processTaskReminders(tasks) {
+  if (!("Notification" in window) || Notification.permission !== "granted") return;
+  const now = Date.now();
+  const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
+
+  for (const task of tasks) {
+    if (task.completed) continue;
+    const reminderAt = getReminderAt(task);
+    if (!reminderAt) continue;
+
+    const fireTime = reminderAt.getTime();
+    if (fireTime > now) continue;
+    if (fireTime < weekAgo) continue;
+
+    const storageKey = getReminderStorageKey(task);
+    if (localStorage.getItem(storageKey)) continue;
+
+    localStorage.setItem(storageKey, "1");
+    const title = task.important ? "Ważny quest czeka" : "QuestDo przypomina";
+    const body = `${task.title} · termin ${task.due_date}`;
+    await showAppNotification(title, body, {
+      tag: storageKey,
+      data: { url: `/?date=${task.due_date}`, taskId: task.id },
+    });
+  }
+}
+
 async function ensureNotificationPermission() {
   if (!("Notification" in window)) return "unsupported";
   if (Notification.permission === "default") return Notification.requestPermission();
   return Notification.permission;
 }
 
-async function showAppNotification(title, body) {
+async function showAppNotification(title, body, options = {}) {
   if (!("Notification" in window) || Notification.permission !== "granted") return false;
-  const payload = { title, body, icon: "/favicon.svg", badge: "/favicon.svg" };
+  const payload = {
+    title,
+    body,
+    icon: "/favicon.svg",
+    badge: "/favicon.svg",
+    tag: options.tag,
+    data: options.data || { url: "/" },
+  };
   if ("serviceWorker" in navigator) {
     const reg = await navigator.serviceWorker.getRegistration();
     if (reg?.showNotification) {
@@ -119,7 +200,7 @@ async function showAppNotification(title, body) {
       return true;
     }
   }
-  new Notification(title, payload);
+  new Notification(title, { body, icon: payload.icon, tag: payload.tag, data: payload.data });
   return true;
 }
 
@@ -147,7 +228,7 @@ async function registerServiceWorkerForUpdates() {
   navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
   navigator.serviceWorker.addEventListener("message", onMessage);
 
-  const registration = await navigator.serviceWorker.register("/sw.js?v=questdo-v7", { updateViaCache: "none" });
+  const registration = await navigator.serviceWorker.register("/sw.js?v=questdo-v8", { updateViaCache: "none" });
   sessionStorage.removeItem("questdo-sw-reloading");
 
   const activateWaitingWorker = () => {
@@ -540,7 +621,7 @@ function LeaderboardPanel({ currentUser }) {
           <div className="leaderboard-categories">
             {categories.map(cat => <button key={cat.id} className={`rank-cat-btn ${rankType === cat.id ? "active" : ""}`} onClick={() => handleCategoryChange(cat.id)}>{cat.label}</button>)}
           </div>
-          {!rankingLoaded ? <p className="leaderboard-empty">Ładowanie rankingów...</p> : (
+          {!rankingLoaded ? <LoadingSpinner label="Ładowanie rankingów…" /> : (
             <ol className="leaderboard-list">
               {currentRanking.map((item) => (
                 <li key={item.username} className={item.username === currentUser ? "me" : ""}>
@@ -572,14 +653,6 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
   const [filter, setFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
-
-  const canUncheckTask = (task) => {
-    if (!task.completed || !task.completed_at) return false;
-    const completedAt = new Date(task.completed_at);
-    const now = new Date();
-    const hoursSinceCompletion = (now - completedAt) / (1000 * 60 * 60);
-    return hoursSinceCompletion < 24;
-  };
 
   const handleToggleClick = (task) => {
     if (busyTaskIds.includes(task.id)) return;
@@ -651,8 +724,10 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
       {allDay.length > 0 && (<div className="progress-wrap"><div className="progress-bar"><div className="progress-fill" style={{ width: `${percent}%` }} /></div><span>{percent}% ukończone ({doneCount}/{allDay.length})</span></div>)}
       <div className="stats-counter"><span>Wszystkich: <strong>{allDay.length}</strong></span><span>Ukończonych: <strong>{doneCount}</strong></span><span>Pozostało: <strong>{allDay.length - doneCount}</strong></span></div>
       {dayTasks.length === 0 && <div className="empty">{allDay.length ? "Brak questów pasujących do filtrów." : "Brak questów na ten dzień. Dodaj pierwszy! ⚔️"}</div>}
-      {dayTasks.map((task) => (
-        <div key={task.id} className={`task-card ${task.difficulty} ${task.completed ? "done" : ""}`}>
+      {dayTasks.map((task) => {
+        const checkState = getTaskCheckState(task);
+        return (
+        <div key={task.id} className={`task-card ${task.difficulty} ${task.completed ? "done" : ""} ${checkState.showUncheckBadge ? "can-uncheck" : ""}`}>
           {editingId === task.id ? (
             <div className="task-edit-form">
               <input className="input-edit" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} placeholder="Nazwa zadania" />
@@ -680,23 +755,26 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
           ) : (
             <>
               <button
-                className={`task-check ${task.completed && !canUncheckTask(task) ? "locked" : ""}`}
-                disabled={busyTaskIds.includes(task.id)}
+                type="button"
+                className={`task-check ${checkState.className}`}
+                disabled={busyTaskIds.includes(task.id) || checkState.disabled}
                 onClick={() => handleToggleClick(task)}
-                title={task.completed && !canUncheckTask(task) ? "Nie można odznaczyć (minęło więcej niż 24h)" : busyTaskIds.includes(task.id) ? "Trwa synchronizacja..." : ""}
+                title={busyTaskIds.includes(task.id) ? "Trwa synchronizacja…" : checkState.title}
+                aria-label={checkState.title}
               >
                 {task.completed ? "✓" : ""}
               </button>
               <div className="task-info">
                 <h4 className={task.completed ? "done" : ""}>{task.important && <span className="important-mark">Ważne · </span>}{task.title}</h4>
-                {task.description && <p>{task.description}</p>}
+                {task.description && <p className={task.completed ? "done-desc" : ""}>{task.description}</p>}
                 <div className="task-meta">
                   <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>
                   <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>
                   <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>
                   {!task.exp_awarded && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = EXP_TIMING_LABELS[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
                   {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
-                  {task.completed && !canUncheckTask(task) && <span className="badge locked-badge">🔒 Zablokowane</span>}
+                  {checkState.showUncheckBadge && <span className="badge uncheck-badge">↩️ Można odznaczyć (24h)</span>}
+                  {task.completed && checkState.disabled && <span className="badge locked-badge">🔒 Zablokowane</span>}
                 </div>
               </div>
               <div className="task-actions">
@@ -706,7 +784,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
             </>
           )}
         </div>
-      ))}
+      );})}
     </div>
   );
 }
@@ -716,8 +794,6 @@ function AdminPanel({ isOpen, onClose, headers }) {
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
-  const [resetExp, setResetExp] = useState(false);
-
   const fetchData = async () => {
     setLoading(true);
     setError(null);
@@ -746,12 +822,10 @@ function AdminPanel({ isOpen, onClose, headers }) {
   };
 
   const resetAllProgress = async () => {
-    const confirmMsg = resetExp
-      ? "Zresetować osiągnięcia, znajdźki, serie ORAZ EXP WSZYSTKIM użytkownikom? Ta operacja jest nieodwracalna."
-      : "Zresetować osiągnięcia, znajdźki i serie WSZYSTKIM użytkownikom? EXP zostanie zachowane.";
+    const confirmMsg = "Zresetować WSZYSTKO (osiągnięcia, znajdźki, serie, EXP i historię) dla wszystkich użytkowników? Ta operacja jest nieodwracalna.";
     if (!window.confirm(confirmMsg)) return;
     try {
-      const res = await axios.post(`${API}/admin/reset-all-progress`, { reset_exp: resetExp }, { headers });
+      const res = await axios.post(`${API}/admin/reset-all-progress`, {}, { headers });
       alert(res.data?.message || "Reset wykonany");
       fetchData();
     } catch (err) {
@@ -778,7 +852,7 @@ function AdminPanel({ isOpen, onClose, headers }) {
           <h2>🔧 Panel Admina</h2>
           <button type="button" onClick={onClose} className="admin-close">✕</button>
         </div>
-        {loading ? <p>Ładowanie...</p> : error ? <p style={{ color: "#e74c3c" }}>{error}</p> : (
+        {loading ? <LoadingSpinner label="Ładowanie panelu…" /> : error ? <p style={{ color: "#e74c3c" }}>{error}</p> : (
           <>
             {stats && (
               <div className="admin-stats">
@@ -790,11 +864,8 @@ function AdminPanel({ isOpen, onClose, headers }) {
               </div>
             )}
             <div className="admin-danger-zone">
-              <label className="reset-exp-toggle">
-                <input type="checkbox" checked={resetExp} onChange={(e) => setResetExp(e.target.checked)} />
-                <span>Resetuj również EXP (wszyscy użytkownicy → 0 EXP)</span>
-              </label>
-              <button type="button" className="reset-progress-btn" onClick={resetAllProgress}>Reset osiągnięć, znajdziek i serii</button>
+              <p className="admin-danger-hint">Resetuje osiągnięcia, znajdźki, serie (streak), EXP (→ 0) i historię wszystkich użytkowników.</p>
+              <button type="button" className="reset-progress-btn" onClick={resetAllProgress}>Resetuj wszystko</button>
             </div>
             <div className="admin-users-section">
               <h3>Użytkownicy</h3>
@@ -895,28 +966,56 @@ export default function App() {
     const permission = await ensureNotificationPermission();
     const enabled = permission === "granted";
     setNotificationsEnabled(enabled);
-    showToast(enabled ? "Powiadomienia są włączone" : permission === "unsupported" ? "Ta przeglądarka nie obsługuje powiadomień" : "Nie włączono powiadomień");
+    if (enabled) {
+      await processTaskReminders(tasks);
+      showToast("Powiadomienia włączone — przypomnienia o 09:00 (gdy aplikacja lub PWA jest aktywna)");
+    } else {
+      showToast(permission === "unsupported" ? "Ta przeglądarka nie obsługuje powiadomień" : "Nie włączono powiadomień");
+    }
   };
 
   useEffect(() => {
     if (!notificationsEnabled || !tasks.length) return undefined;
+
+    processTaskReminders(tasks);
+
     const timers = [];
     const now = Date.now();
-    tasks
-      .filter((task) => !task.completed && task.reminder_offset_days !== null && task.reminder_offset_days !== undefined)
-      .forEach((task) => {
-        const reminderAt = new Date(`${task.due_date}T09:00:00`);
-        reminderAt.setDate(reminderAt.getDate() - Number(task.reminder_offset_days || 0));
-        const delay = reminderAt.getTime() - now;
-        const storageKey = `questdo-reminded-${task.id}-${task.due_date}-${task.reminder_offset_days}`;
-        if (delay < -1000 || delay > 2147483647 || localStorage.getItem(storageKey)) return;
-        const timer = setTimeout(() => {
-          localStorage.setItem(storageKey, "1");
-          showAppNotification(task.important ? "Ważny quest czeka" : "QuestDo przypomina", `${task.title} · termin ${task.due_date}`);
-        }, Math.max(0, delay));
-        timers.push(timer);
-      });
-    return () => timers.forEach(clearTimeout);
+    tasks.forEach((task) => {
+      if (task.completed) return;
+      const reminderAt = getReminderAt(task);
+      if (!reminderAt) return;
+
+      const delay = reminderAt.getTime() - now;
+      const storageKey = getReminderStorageKey(task);
+      if (delay <= 0 || delay > 2147483647 || localStorage.getItem(storageKey)) return;
+
+      const timer = setTimeout(() => {
+        if (localStorage.getItem(storageKey)) return;
+        localStorage.setItem(storageKey, "1");
+        const title = task.important ? "Ważny quest czeka" : "QuestDo przypomina";
+        showAppNotification(title, `${task.title} · termin ${task.due_date}`, {
+          tag: storageKey,
+          data: { url: `/?date=${task.due_date}`, taskId: task.id },
+        });
+      }, delay);
+      timers.push(timer);
+    });
+
+    const interval = window.setInterval(() => {
+      processTaskReminders(tasks);
+    }, 60 * 1000);
+
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") processTaskReminders(tasks);
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    return () => {
+      timers.forEach(clearTimeout);
+      window.clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibility);
+    };
   }, [tasks, notificationsEnabled]);
 
   const fetchData = async () => {
@@ -978,8 +1077,22 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    let cleanup;
+    registerServiceWorkerForUpdates().then((fn) => { cleanup = fn; });
+    return () => { cleanup?.(); };
+  }, []);
+
   useEffect(() => { if (token) fetchData(); }, [token]);
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const dateParam = params.get("date");
+    if (dateParam && /^\d{4}-\d{2}-\d{2}$/.test(dateParam)) {
+      setSelectedDate(new Date(`${dateParam}T12:00:00`));
+    }
+  }, []);
 
   const addTask = async () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
@@ -1054,14 +1167,6 @@ export default function App() {
     }
   };
 
-  const canUncheckTask = (task) => {
-    if (!task.completed || !task.completed_at) return false;
-    const completedAt = new Date(task.completed_at);
-    const now = new Date();
-    const hoursSinceCompletion = (now - completedAt) / (1000 * 60 * 60);
-    return hoursSinceCompletion < 24;
-  };
-
   const uncheckTask = async (task) => {
     if (!canUncheckTask(task)) {
       showToast("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
@@ -1126,7 +1231,7 @@ export default function App() {
   const handleLogin = () => { const newToken = localStorage.getItem("token"); setToken(newToken); if (newToken) setTimeout(fetchData, 100); };
 
   if (!token) return <Auth onLogin={handleLogin} />;
-  if (!user) return <div className="app"><p>Ładowanie...</p></div>;
+  if (!user) return <div className="app"><LoadingSpinner label="Ładowanie questów…" /></div>;
 
   const { progress } = getExpProgress(user.exp, levelThresholds);
 

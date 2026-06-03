@@ -1,5 +1,5 @@
 /* global clients */
-const CACHE_NAME = 'questdo-v7';
+const CACHE_NAME = 'questdo-v8';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -8,26 +8,17 @@ const STATIC_ASSETS = [
   '/favicon.ico'
 ];
 
-// Przy instalacji - cache statycznych assetów
 self.addEventListener('install', (event) => {
-  console.log('SW installing...');
   event.waitUntil(
-    caches.open(CACHE_NAME).then(cache => {
-      return cache.addAll(STATIC_ASSETS);
-    })
+    caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
   self.skipWaiting();
 });
 
-// Przy aktywacji - usuń stare cache
 self.addEventListener('activate', (event) => {
-  console.log('SW activating...');
   event.waitUntil(
-    caches.keys().then(keys => Promise.all(
-      keys.filter(key => key !== CACHE_NAME).map(key => {
-        console.log('Deleting old cache:', key);
-        return caches.delete(key);
-      })
+    caches.keys().then((keys) => Promise.all(
+      keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
     )).then(() => clients.claim())
   );
 });
@@ -38,12 +29,11 @@ self.addEventListener('message', (event) => {
   }
 });
 
-// Fetch - tylko cache dla statycznych assetów, API zawsze z sieci
 self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(event.request.url);
-  
-  // API requests - zawsze z sieci, nigdy z cache
-  if (requestUrl.pathname.startsWith('/api') || 
+
+  if (requestUrl.hostname.includes('onrender.com') ||
+      requestUrl.pathname.startsWith('/api') ||
       requestUrl.pathname.includes('/rankings') ||
       requestUrl.pathname.includes('/tasks') ||
       requestUrl.pathname.includes('/me') ||
@@ -51,26 +41,17 @@ self.addEventListener('fetch', (event) => {
       requestUrl.pathname.includes('/challenges') ||
       requestUrl.pathname.includes('/history') ||
       requestUrl.pathname.includes('/rare-drops')) {
-    event.respondWith(
-      fetch(event.request, {
-        cache: 'no-store',
-        headers: {
-          'Cache-Control': 'no-cache',
-          'Pragma': 'no-cache'
-        }
-      })
-    );
+    event.respondWith(fetch(event.request, { cache: 'no-store' }));
     return;
   }
-  
-  // Statyczne assety - cache first
+
   event.respondWith(
-    caches.match(event.request).then(cached => {
+    caches.match(event.request).then((cached) => {
       if (cached) return cached;
-      return fetch(event.request).then(response => {
-        if (response && response.status === 200) {
+      return fetch(event.request).then((response) => {
+        if (response && response.status === 200 && event.request.method === 'GET') {
           const responseClone = response.clone();
-          caches.open(CACHE_NAME).then(cache => {
+          caches.open(CACHE_NAME).then((cache) => {
             cache.put(event.request, responseClone);
           });
         }
@@ -83,15 +64,55 @@ self.addEventListener('fetch', (event) => {
   );
 });
 
-self.addEventListener('notificationclick', (event) => {
+self.addEventListener('push', (event) => {
+  let payload = { title: 'QuestDo', body: 'Masz nowe przypomnienie', data: { url: '/' } };
+  try {
+    if (event.data) {
+      const parsed = event.data.json();
+      payload = {
+        title: parsed.title || payload.title,
+        body: parsed.body || payload.body,
+        icon: parsed.icon || '/favicon.svg',
+        badge: parsed.badge || '/favicon.svg',
+        tag: parsed.tag,
+        data: parsed.data || { url: parsed.url || '/' },
+      };
+    }
+  } catch {
+    if (event.data?.text()) {
+      payload.body = event.data.text();
+    }
+  }
+
+  event.waitUntil(
+    self.registration.showNotification(payload.title, {
+      body: payload.body,
+      icon: payload.icon,
+      badge: payload.badge,
+      tag: payload.tag,
+      data: payload.data,
+    })
+  );
+});
+
+function openAppFromNotification(event) {
+  const targetUrl = event.notification?.data?.url || '/';
   event.notification.close();
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
       for (const client of clientList) {
-        if ('focus' in client) return client.focus();
+        if ('focus' in client) {
+          if ('navigate' in client && targetUrl !== '/') {
+            return client.navigate(targetUrl).then(() => client.focus());
+          }
+          return client.focus();
+        }
       }
-      if (clients.openWindow) return clients.openWindow('/');
+      if (clients.openWindow) return clients.openWindow(targetUrl);
       return undefined;
     })
   );
-});
+}
+
+self.addEventListener('notificationclick', openAppFromNotification);
+self.addEventListener('notificationclose', () => {});

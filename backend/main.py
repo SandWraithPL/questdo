@@ -1325,7 +1325,7 @@ def get_admin_stats(current_user: models.User = Depends(get_current_admin_user),
 
 
 @app.post("/admin/reset-all-progress")
-def reset_all_progress(current_user: models.User = Depends(get_current_admin_user), db: Session = Depends(get_db), reset_exp: bool = False):
+def reset_all_progress(current_user: models.User = Depends(get_current_admin_user), db: Session = Depends(get_db)):
     reset_at = datetime.utcnow()
     users = db.query(models.User).all()
 
@@ -1338,20 +1338,15 @@ def reset_all_progress(current_user: models.User = Depends(get_current_admin_use
     for user in users:
         user.streak = 0
         user.last_streak_date = None
+        user.exp = 0
+        user.exp_at_progress_reset = 0
         user.progress_reset_at = reset_at
-        user.exp_at_progress_reset = user.exp or 0
-        if reset_exp:
-            user.exp = 0
 
     db.commit()
-    message = "Zresetowano osiągnięcia, znajdźki, serie i historię wszystkim użytkownikom"
-    if reset_exp:
-        message += " oraz EXP"
     return {
-        "message": message,
+        "message": "Zresetowano osiągnięcia, znajdźki, serie, EXP i historię wszystkim użytkownikom",
         "users_reset": len(users),
         "reset_at": str(reset_at),
-        "exp_reset": reset_exp,
     }
 
 
