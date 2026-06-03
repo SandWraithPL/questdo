@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import axios from "axios";
 import "./index.css";
 import DatePicker from "./DatePicker";
@@ -117,6 +117,62 @@ function canUncheckTask(task) {
   const completedAt = new Date(task.completed_at);
   const hoursSinceCompletion = (Date.now() - completedAt.getTime()) / (1000 * 60 * 60);
   return hoursSinceCompletion < 24;
+}
+
+function sortTasks(list) {
+  return [...list].sort((a, b) => {
+    if (a.completed !== b.completed) return a.completed ? 1 : -1;
+    return new Date(a.due_date) - new Date(b.due_date);
+  });
+}
+
+function makeRequestId(taskId) {
+  return `${Date.now()}-${taskId}`;
+}
+
+function applyGamificationResponse(data, { setChallenges, setAchievements, setRareDrops, setHistory }) {
+  if (data.challenges) setChallenges(data.challenges);
+  const newAch = [...(data.new_achievements || []), ...(data.new_exclusive_achievements || [])];
+  if (newAch.length > 0) {
+    setAchievements((prev) => {
+      const unlocked = prev?.unlocked ?? [];
+      const seen = new Set(unlocked.map((a) => a.slug || a.title));
+      const merged = [...unlocked];
+      for (const ach of newAch) {
+        const key = ach.slug || ach.title;
+        if (!seen.has(key)) {
+          seen.add(key);
+          merged.push(ach);
+        }
+      }
+      return { ...prev, unlocked: merged };
+    });
+    setHistory((prev) => [
+      ...newAch.map((ach, i) => ({
+        id: `ach-${Date.now()}-${i}`,
+        occurred_at: new Date().toISOString(),
+        message: `Osiągnięcie: ${ach.title}`,
+      })),
+      ...prev,
+    ]);
+  }
+  if (data.earned_drop) {
+    const drop = data.earned_drop;
+    setRareDrops((prev) => {
+      const items = [...(prev?.items || [])];
+      const idx = items.findIndex((d) => d.slug === drop.slug);
+      if (idx >= 0) {
+        items[idx] = { ...items[idx], count: (items[idx].count || 1) + 1 };
+      } else {
+        items.push({ ...drop, count: 1 });
+      }
+      return { ...prev, items, total_items: (prev?.total_items || 0) + 1 };
+    });
+    setHistory((prev) => [
+      { id: `drop-${Date.now()}`, occurred_at: new Date().toISOString(), message: `Znajdźka: ${drop.name}` },
+      ...prev,
+    ]);
+  }
 }
 
 function getTaskCheckState(task) {
@@ -334,7 +390,7 @@ function Auth({ onLogin }) {
   );
 }
 
-function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete, busyTaskIds = [] }) {
+function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete, processingTaskIds = [] }) {
   const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
   const [view, setView] = useState("month");
   const selectedStr = toDateStr(selectedDate);
@@ -438,7 +494,7 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
         {dayTasks.map(task => (
           <div key={task.id} className={`day-task ${task.completed ? "completed" : ""}`}>
             {task.completed ? <div className="task-check checked locked">✓</div> : (
-              <button type="button" className="task-check" disabled={busyTaskIds.includes(task.id)} onClick={() => onTaskToggle(task)} />
+              <button type="button" className="task-check" disabled={processingTaskIds.includes(String(task.id))} onClick={() => onTaskToggle(task)} />
             )}
             <div className="day-task-info">
               <strong>{task.important ? "Ważne · " : ""}{task.title}</strong>
@@ -449,7 +505,7 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
                 {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
               </div>
             </div>
-            <button type="button" disabled={busyTaskIds.includes(task.id)} onClick={() => onTaskDelete(task)}>🗑</button>
+            <button type="button" disabled={processingTaskIds.includes(String(task.id))} onClick={() => onTaskDelete(task)}>🗑</button>
           </div>
         ))}
       </div>
@@ -648,14 +704,14 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
-function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck, busyTaskIds = [] }) {
+function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck, processingTaskIds = [] }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
 
   const handleToggleClick = (task) => {
-    if (busyTaskIds.includes(task.id)) return;
+    if (processingTaskIds.includes(String(task.id))) return;
 
     if (task.completed) {
       if (canUncheckTask(task) && onUncheck) {
@@ -757,9 +813,9 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
               <button
                 type="button"
                 className={`task-check ${checkState.className}`}
-                disabled={busyTaskIds.includes(task.id) || checkState.disabled}
+                disabled={processingTaskIds.includes(String(task.id)) || checkState.disabled}
                 onClick={() => handleToggleClick(task)}
-                title={busyTaskIds.includes(task.id) ? "Trwa synchronizacja…" : checkState.title}
+                title={processingTaskIds.includes(String(task.id)) ? "Trwa synchronizacja…" : checkState.title}
                 aria-label={checkState.title}
               >
                 {task.completed ? "✓" : ""}
@@ -779,7 +835,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
               </div>
               <div className="task-actions">
                 {!task.completed && <button className="icon-btn" onClick={() => startEdit(task)}>✏️</button>}
-                <button className="task-delete" disabled={busyTaskIds.includes(task.id)} onClick={() => onDelete(task)}>🗑</button>
+                <button className="task-delete" disabled={processingTaskIds.includes(String(task.id))} onClick={() => onDelete(task)}>🗑</button>
               </div>
             </>
           )}
@@ -954,13 +1010,75 @@ export default function App() {
   const [reminderOffset, setReminderOffset] = useState("");
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => ("Notification" in window ? Notification.permission === "granted" : false));
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [addingTask, setAddingTask] = useState(false);
-  const [busyTaskIds, setBusyTaskIds] = useState([]);
+  const [processingTaskIds, setProcessingTaskIds] = useState([]);
+
+  const apiQueueRef = useRef([]);
+  const apiQueueRunningRef = useRef(false);
+  const lastRequestIdRef = useRef(new Map());
+  const processingTaskIdsRef = useRef(new Set());
+  const levelThresholdsRef = useRef(levelThresholds);
+  levelThresholdsRef.current = levelThresholds;
 
   const headers = { Authorization: `Bearer ${token}` };
-  const setTaskBusy = (id, busy) => {
-    setBusyTaskIds((prev) => (busy ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter((x) => x !== id)));
-  };
+  const gamificationSetters = { setChallenges, setAchievements, setRareDrops, setHistory };
+
+  const syncProcessingTaskIds = useCallback(() => {
+    setProcessingTaskIds([...processingTaskIdsRef.current]);
+  }, []);
+
+  const isTaskProcessing = useCallback((taskKey) => processingTaskIdsRef.current.has(String(taskKey)), []);
+
+  const isStaleRequest = useCallback((taskKey, requestId) => lastRequestIdRef.current.get(String(taskKey)) !== requestId, []);
+
+  const startTaskRequest = useCallback((taskKey) => {
+    const key = String(taskKey);
+    const requestId = makeRequestId(key);
+    lastRequestIdRef.current.set(key, requestId);
+    processingTaskIdsRef.current.add(key);
+    syncProcessingTaskIds();
+    return requestId;
+  }, [syncProcessingTaskIds]);
+
+  const finishTaskRequest = useCallback((taskKey, requestId) => {
+    const key = String(taskKey);
+    if (lastRequestIdRef.current.get(key) !== requestId) return;
+    processingTaskIdsRef.current.delete(key);
+    syncProcessingTaskIds();
+  }, [syncProcessingTaskIds]);
+
+  const enqueueApiJob = useCallback((job) => {
+    apiQueueRef.current.push(job);
+    const drainQueue = async () => {
+      if (apiQueueRunningRef.current) return;
+      apiQueueRunningRef.current = true;
+      while (apiQueueRef.current.length > 0) {
+        const nextJob = apiQueueRef.current.shift();
+        await nextJob();
+      }
+      apiQueueRunningRef.current = false;
+    };
+    drainQueue();
+  }, []);
+
+  const applyUserFromApi = useCallback((data) => {
+    setUser((prev) => {
+      if (!prev) return prev;
+      const exp = data.exp ?? prev.exp;
+      const levelInfo = getExpProgress(exp, levelThresholdsRef.current);
+      return {
+        ...prev,
+        exp,
+        level: data.level ?? levelInfo.current,
+        title: data.title ?? prev.title,
+        streak: data.streak ?? prev.streak,
+      };
+    });
+  }, []);
+
+  const patchTaskInState = useCallback((taskId, patch) => {
+    setTasks((prev) => sortTasks(prev.map((t) => (t.id === taskId ? { ...t, ...patch } : t))));
+  }, []);
+
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
   const enableNotifications = async () => {
     const permission = await ensureNotificationPermission();
@@ -1094,11 +1212,13 @@ export default function App() {
     }
   }, []);
 
-  const addTask = async () => {
+  const addTask = () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
-    if (addingTask) return;
 
     const savedDate = taskDate;
+    const tempId = `temp-${Date.now()}`;
+    if (isTaskProcessing(tempId)) return;
+
     const apiPayload = {
       title,
       description: desc,
@@ -1108,85 +1228,177 @@ export default function App() {
       important,
       reminder_offset_days: parseReminderValue(reminderOffset),
     };
+    const tempTask = {
+      id: tempId,
+      title,
+      description: desc,
+      difficulty,
+      category,
+      due_date: taskDate,
+      important,
+      reminder_offset_days: parseReminderValue(reminderOffset),
+      completed: false,
+      exp_awarded: false,
+      exp_awarded_amount: 0,
+    };
 
-    setAddingTask(true);
+    const requestId = startTaskRequest(tempId);
+    setTasks((prev) => sortTasks([...prev, tempTask]));
     setTitle("");
     setDesc("");
     setImportant(false);
     setReminderOffset("");
     setShowAddTask(false);
 
-    try {
-      await axios.post(`${API}/tasks`, apiPayload, { headers });
-      showToast(`✅ Dodano quest na ${savedDate}`);
-      await fetchData();
-    } catch (err) {
-      console.error("[addTask] API error:", err);
-      showToast(err.response?.data?.detail || "Błąd dodawania");
-    } finally {
-      setAddingTask(false);
-    }
+    enqueueApiJob(async () => {
+      let serverId = null;
+      try {
+        const res = await axios.post(`${API}/tasks`, apiPayload, { headers });
+        if (isStaleRequest(tempId, requestId)) return;
+        serverId = res.data.id;
+        setTasks((prev) => sortTasks(prev.map((t) => (t.id === tempId ? { ...tempTask, id: serverId } : t))));
+        lastRequestIdRef.current.delete(String(tempId));
+        lastRequestIdRef.current.set(String(serverId), requestId);
+        processingTaskIdsRef.current.delete(String(tempId));
+        processingTaskIdsRef.current.add(String(serverId));
+        syncProcessingTaskIds();
+        showToast(`✅ Dodano quest na ${savedDate}`);
+      } catch (err) {
+        console.error("[addTask] API error:", err);
+        if (!isStaleRequest(tempId, requestId)) {
+          setTasks((prev) => prev.filter((t) => t.id !== tempId));
+          showToast(err.response?.data?.detail || "Błąd dodawania");
+        }
+      } finally {
+        finishTaskRequest(serverId ?? tempId, requestId);
+      }
+    });
   };
 
-  const toggleTask = async (task) => {
-    if (task.completed || busyTaskIds.includes(task.id)) return;
+  const toggleTask = (task) => {
+    if (task.completed || isTaskProcessing(task.id)) return;
 
+    const taskKey = task.id;
+    const requestId = startTaskRequest(taskKey);
+    const snapshot = { task: { ...task }, user: user ? { ...user } : null };
     const expPreview = getExpPreview(task.difficulty, task.due_date);
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
 
-    setTaskBusy(task.id, true);
+    setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? {
+      ...t,
+      completed: true,
+      exp_awarded: true,
+      exp_awarded_amount: expPreview.amount,
+      completed_at: new Date().toISOString(),
+    } : t))));
+    setUser((prev) => {
+      if (!prev) return prev;
+      const newExp = (prev.exp || 0) + expPreview.amount;
+      const levelInfo = getExpProgress(newExp, levelThresholdsRef.current);
+      return { ...prev, exp: newExp, level: levelInfo.current };
+    });
     showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
 
-    try {
-      const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-      showToggleRewards(res.data);
-      await fetchData();
-    } catch (err) {
-      console.error("[toggleTask] API error:", err);
-      showToast(err.response?.data?.detail || "Błąd aktualizacji");
-      await fetchData();
-    } finally {
-      setTaskBusy(task.id, false);
-    }
+    enqueueApiJob(async () => {
+      try {
+        const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
+        if (isStaleRequest(taskKey, requestId)) return;
+        const data = res.data;
+        if (data.task) patchTaskInState(task.id, data.task);
+        applyUserFromApi(data);
+        applyGamificationResponse(data, gamificationSetters);
+        showToggleRewards(data);
+      } catch (err) {
+        console.error("[toggleTask] API error:", err);
+        if (!isStaleRequest(taskKey, requestId)) {
+          setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? snapshot.task : t))));
+          if (snapshot.user) setUser(snapshot.user);
+          showToast(err.response?.data?.detail || "Błąd aktualizacji");
+        }
+      } finally {
+        finishTaskRequest(taskKey, requestId);
+      }
+    });
   };
 
   const saveTask = async (id, updates) => {
-    if (busyTaskIds.includes(id)) return;
+    if (isTaskProcessing(id)) return;
 
-    setTaskBusy(id, true);
-    try {
-      await axios.patch(`${API}/tasks/${id}`, updates, { headers });
-      showToast("💾 Zapisano zmiany");
-      await fetchData();
-    } catch (err) {
-      showToast(err.response?.data?.detail || "Błąd zapisu");
-      await fetchData();
-    } finally {
-      setTaskBusy(id, false);
+    const taskKey = id;
+    const requestId = startTaskRequest(taskKey);
+    const snapshot = tasks.find((t) => t.id === id);
+    if (!snapshot) {
+      finishTaskRequest(taskKey, requestId);
+      return;
     }
+
+    setTasks((prev) => sortTasks(prev.map((t) => (t.id === id ? { ...t, ...updates } : t))));
+
+    enqueueApiJob(async () => {
+      try {
+        const res = await axios.patch(`${API}/tasks/${id}`, updates, { headers });
+        if (isStaleRequest(taskKey, requestId)) return;
+        if (res.data.task) patchTaskInState(id, res.data.task);
+        if (res.data.exp !== undefined) applyUserFromApi(res.data);
+        showToast("💾 Zapisano zmiany");
+      } catch (err) {
+        if (!isStaleRequest(taskKey, requestId)) {
+          patchTaskInState(id, snapshot);
+          showToast(err.response?.data?.detail || "Błąd zapisu");
+        }
+      } finally {
+        finishTaskRequest(taskKey, requestId);
+      }
+    });
   };
 
-  const uncheckTask = async (task) => {
+  const uncheckTask = (task) => {
     if (!canUncheckTask(task)) {
       showToast("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
       return;
     }
-    if (busyTaskIds.includes(task.id)) return;
+    if (isTaskProcessing(task.id)) return;
 
-    setTaskBusy(task.id, true);
+    const taskKey = task.id;
+    const requestId = startTaskRequest(taskKey);
+    const snapshot = { task: { ...task }, user: user ? { ...user } : null };
+    const expToRevert = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
+
+    setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? {
+      ...t,
+      completed: false,
+      exp_awarded: false,
+      exp_awarded_amount: 0,
+      completed_at: null,
+    } : t))));
+    setUser((prev) => {
+      if (!prev) return prev;
+      const newExp = Math.max(0, (prev.exp || 0) - expToRevert);
+      const levelInfo = getExpProgress(newExp, levelThresholdsRef.current);
+      return { ...prev, exp: newExp, level: levelInfo.current };
+    });
     showToast("✅ Cofnięto ukończenie zadania");
 
-    try {
-      await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
-      await fetchData();
-    } catch (err) {
-      console.error("[uncheckTask] API error:", err);
-      showToast(err.response?.data?.detail || "Błąd cofania ukończenia");
-      await fetchData();
-    } finally {
-      setTaskBusy(task.id, false);
-    }
+    enqueueApiJob(async () => {
+      try {
+        const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
+        if (isStaleRequest(taskKey, requestId)) return;
+        const data = res.data;
+        if (data.task) patchTaskInState(task.id, data.task);
+        applyUserFromApi(data);
+        applyGamificationResponse(data, gamificationSetters);
+      } catch (err) {
+        console.error("[uncheckTask] API error:", err);
+        if (!isStaleRequest(taskKey, requestId)) {
+          setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? snapshot.task : t))));
+          if (snapshot.user) setUser(snapshot.user);
+          showToast(err.response?.data?.detail || "Błąd cofania ukończenia");
+        }
+      } finally {
+        finishTaskRequest(taskKey, requestId);
+      }
+    });
   };
   
   const deleteAccount = async (password, onDone) => { 
@@ -1203,28 +1415,44 @@ export default function App() {
     } 
   };
   
-  const deleteTask = async (task) => {
-    if (busyTaskIds.includes(task.id)) return;
+  const deleteTask = (task) => {
+    if (isTaskProcessing(task.id)) return;
 
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
 
-    setTaskBusy(task.id, true);
-    try {
-      const res = await axios.delete(`${API}/tasks/${task.id}`, { headers });
-      showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
-      await fetchData();
-    } catch (err) {
-      console.error("[deleteTask] API error:", err);
-      if (err.response?.status === 404) {
-        showToast("Zadanie już nie istnieje");
-      } else {
-        showToast(err.response?.data?.detail || "Błąd usuwania");
-      }
-      await fetchData();
-    } finally {
-      setTaskBusy(task.id, false);
+    const taskKey = task.id;
+    const requestId = startTaskRequest(taskKey);
+    const snapshot = { task: { ...task }, tasks: tasks, user: user ? { ...user } : null };
+
+    setTasks((prev) => prev.filter((t) => t.id !== task.id));
+    if (task.exp_awarded) {
+      setUser((prev) => {
+        if (!prev) return prev;
+        const newExp = Math.max(0, (prev.exp || 0) - exp);
+        const levelInfo = getExpProgress(newExp, levelThresholdsRef.current);
+        return { ...prev, exp: newExp, level: levelInfo.current };
+      });
     }
+
+    enqueueApiJob(async () => {
+      try {
+        const res = await axios.delete(`${API}/tasks/${task.id}`, { headers });
+        if (isStaleRequest(taskKey, requestId)) return;
+        applyUserFromApi(res.data);
+        showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
+      } catch (err) {
+        console.error("[deleteTask] API error:", err);
+        if (!isStaleRequest(taskKey, requestId)) {
+          setTasks(sortTasks(snapshot.tasks));
+          if (snapshot.user) setUser(snapshot.user);
+          if (err.response?.status === 404) showToast("Zadanie już nie istnieje");
+          else showToast(err.response?.data?.detail || "Błąd usuwania");
+        }
+      } finally {
+        finishTaskRequest(taskKey, requestId);
+      }
+    });
   };
   
   const logout = () => { localStorage.removeItem("token"); setToken(null); setUser(null); };
@@ -1238,8 +1466,8 @@ export default function App() {
   return (
     <div className="app">
       <div className="header"><h1>⚔️ QuestDo</h1><Profile user={user} onLogout={logout} onDeleteAccount={deleteAccount} achievements={achievements} rareDrops={rareDrops} history={history} onOpenAdmin={() => setShowAdminPanel(true)} /></div>
-      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} busyTaskIds={busyTaskIds} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} busyTaskIds={busyTaskIds} />
+      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} processingTaskIds={processingTaskIds} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} processingTaskIds={processingTaskIds} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">
@@ -1258,8 +1486,8 @@ export default function App() {
           </div>
           {(() => { const p = getExpPreview(difficulty, taskDate); const info = EXP_TIMING_LABELS[p.timing]; return <p className="exp-preview-hint">Ukończ dziś: <strong>+{p.amount} EXP</strong> ({info.text})</p>; })()}
           <div className="row">
-            <button onClick={addTask} disabled={addingTask}>{addingTask ? "Dodawanie…" : "Dodaj Quest"}</button>
-            <button onClick={() => setShowAddTask(false)} className="cancel-btn" disabled={addingTask}>Anuluj</button>
+            <button onClick={addTask} disabled={processingTaskIds.some((id) => String(id).startsWith("temp-"))}>{processingTaskIds.some((id) => String(id).startsWith("temp-")) ? "Dodawanie…" : "Dodaj Quest"}</button>
+            <button onClick={() => setShowAddTask(false)} className="cancel-btn" disabled={processingTaskIds.some((id) => String(id).startsWith("temp-"))}>Anuluj</button>
           </div>
         </div>
       )}
