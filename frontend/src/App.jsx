@@ -1080,6 +1080,9 @@ export default function App() {
       return;
     }
     
+    // Save the expected state before API call to detect race conditions
+    const expectedCompletedState = false;
+    
     const expPreview = getExpPreview(task.difficulty, task.due_date);
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
@@ -1112,11 +1115,19 @@ export default function App() {
       console.log(`[${timestamp}] toggleTask API RESPONSE - exp_gained: ${exp_gained}, streak: ${streak}, level: ${level}, server_exp: ${serverExp}`);
       console.log(`[${timestamp}] toggleTask API RESPONSE - challenges:`, challenges);
       
+      // Check if task state has changed since request was sent (race condition detection)
+      const taskAfterRequest = tasks.find(t => t.id === task.id);
+      if (!taskAfterRequest || taskAfterRequest.completed !== true) {
+        console.log(`[${timestamp}] toggleTask IGNORE STALE RESPONSE - task state changed since request was sent`);
+        return;
+      }
+      
       // 3. Aktualizacja z danymi z API (tylko jeśli różne od optymistycznych)
       setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true, exp_awarded: true, exp_awarded_amount: exp_gained || expPreview.amount } : t));
       
       // 4. Inkrementalna aktualizacja user.exp (poprawka ewentualnej różnicy)
-      if (exp_gained && exp_gained !== expPreview.amount) {
+      // Skip correction if exp_gained is 0 or negative (indicates uncheck operation or stale response)
+      if (exp_gained && exp_gained > 0 && exp_gained !== expPreview.amount) {
         const diff = exp_gained - expPreview.amount;
         setUser(prev => {
           if (!prev) return prev;
@@ -1211,6 +1222,9 @@ export default function App() {
       return;
     }
 
+    // Save the expected state before API call to detect race conditions
+    const expectedCompletedState = true;
+
     const originalTask = { ...task };
     const expToRevert = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     
@@ -1235,6 +1249,13 @@ export default function App() {
       
       console.log(`[${timestamp}] uncheckTask API RESPONSE - streak: ${streak}, server_exp: ${serverExp}, level: ${level}`);
       console.log(`[${timestamp}] uncheckTask API RESPONSE - challenges:`, challenges);
+      
+      // Check if task state has changed since request was sent (race condition detection)
+      const taskAfterRequest = tasks.find(t => t.id === task.id);
+      if (!taskAfterRequest || taskAfterRequest.completed !== false) {
+        console.log(`[${timestamp}] uncheckTask IGNORE STALE RESPONSE - task state changed since request was sent`);
+        return;
+      }
       
       // Update challenges immediately from response
       if (challenges) {

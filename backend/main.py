@@ -781,6 +781,9 @@ def update_task(task_id: int, task_update: TaskUpdate,
             task.completed = False
             task.completed_at = None
             
+            # Set exp_gained to negative value to indicate EXP was removed
+            exp_gained = -exp_to_revert
+            
             print(f"[uncheck] Reverting {exp_to_revert} EXP for task {task.id}")
             
             # Revert streak - recalculate based on remaining completed tasks
