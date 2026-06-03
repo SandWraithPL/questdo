@@ -23,6 +23,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 
 /* Profile card */
 .profile-card { background: #1a1a2e; border-radius: 12px; padding: 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 20px; }
+.profile-card--top { margin-bottom: 14px; border: 1px solid #2a2a3e; }
 .avatar { width: 60px; height: 60px; border-radius: 50%; background: #ff8906; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: bold; color: #0f0e17; }
 .profile-info h2 { font-size: 1.2rem; }
 .profile-info .title { color: #ff8906; font-size: 0.9rem; margin-bottom: 8px; }
@@ -207,10 +208,25 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .add-task-btn { width: 100%; padding: 16px; background: #ff8906; color: #0f0e17; border: none; border-radius: 12px; font-weight: bold; font-size: 1rem; cursor: pointer; margin-bottom: 24px; transition: background 0.2s, transform 0.15s; }
 .add-task-btn:hover { background: #ffa040; transform: translateY(-1px); }
 .add-task-btn:active { transform: translateY(0); }
-.notifications-btn { width: 100%; padding: 12px; background: transparent; color: #aaa; border: 1px solid #333; border-radius: 10px; font-weight: bold; cursor: pointer; margin: -8px 0 18px; transition: border-color 0.2s, background 0.2s, color 0.2s; }
-.notifications-btn:hover { border-color: #ff8906; color: #ff8906; }
-.notifications-btn.enabled { color: #4caf50; border-color: #1b3a1f; background: #102016; }
-.notifications-btn.enabled:hover { border-color: #4caf50; color: #81c784; }
+.profile-notifications-block { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #2a2a3e; }
+.profile-notifications-btn { width: 100%; padding: 10px 12px; background: #0f0e17; color: #ff8906; border: 1px solid #333; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.88rem; text-align: left; transition: border-color 0.2s, background 0.2s, color 0.2s; }
+.profile-notifications-btn:hover:not(:disabled) { border-color: #ff8906; color: #ffa040; }
+.profile-notifications-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+.profile-notifications-btn.enabled { color: #4caf50; border-color: #1b3a1f; background: #102016; }
+.profile-notifications-btn.enabled:hover:not(:disabled) { border-color: #4caf50; color: #81c784; }
+.profile-notifications-hint { margin: 8px 0 0; font-size: 0.72rem; line-height: 1.45; color: #888; }
+
+/* Challenges – collapsible section */
+.challenges-section { background: #1a1a2e; border-radius: 12px; margin-bottom: 16px; border: 1px solid #2a2a3e; overflow: hidden; }
+.challenges-section--collapsed { margin-bottom: 12px; }
+.challenges-section-toggle { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: none; background: transparent; color: #fff; cursor: pointer; text-align: left; }
+.challenges-section-toggle:hover .challenges-section-title,
+.challenges-section-toggle:hover .challenges-section-chevron { color: #ffa040; }
+.challenges-section-title { font-weight: bold; color: #ff8906; font-size: 0.95rem; white-space: nowrap; flex-shrink: 0; }
+.challenges-section-meta { flex: 1; min-width: 0; font-size: 0.82rem; color: #aaa; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.challenges-section-chevron { flex-shrink: 0; color: #ff8906; font-size: 0.8rem; line-height: 1; }
+.challenges-section--expanded .challenges-section-toggle { border-bottom: 1px solid #2a2a3e; }
+.challenges-section .challenges-bar { background: transparent; border: none; border-radius: 0; margin-bottom: 0; padding: 12px 14px 14px; }
 
 /* Challenges */
 .challenges-bar { background: #1a1a2e; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
@@ -366,6 +382,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   
   /* Profile card */
   .profile-card { padding: 16px; gap: 12px; flex-direction: column; text-align: center; }
+  .profile-card--top { margin-bottom: 12px; }
   .avatar { width: 50px; height: 50px; font-size: 1.5rem; }
   .profile-info h2 { font-size: 1rem; }
   .exp-bar-bg { width: 100%; }
@@ -425,6 +442,11 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .day-task { padding: 10px; }
   
   /* Challenges */
+  .challenges-section { margin-bottom: 12px; }
+  .challenges-section-toggle { padding: 10px 12px; gap: 8px; }
+  .challenges-section-title { font-size: 0.88rem; }
+  .challenges-section-meta { font-size: 0.78rem; }
+  .challenges-section .challenges-bar { padding: 10px 12px 12px; }
   .challenges-bar { padding: 12px; }
   .challenges-bar h4 { font-size: 0.85rem; }
   .challenge-item { padding: 10px; }

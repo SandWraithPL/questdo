@@ -132,3 +132,23 @@ class PlayerHistory(Base):
     message = Column(String)
     occurred_at = Column(DateTime, default=datetime.utcnow, index=True)
     user = relationship("User")
+
+
+class PushSubscription(Base):
+    """Subskrypcja Web Push (powiadomienia gdy aplikacja zamknięta)."""
+    __tablename__ = "push_subscriptions"
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), index=True)
+    endpoint = Column(String, unique=True, index=True)
+    p256dh = Column(String)
+    auth = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class SentTaskReminder(Base):
+    """Wysłane przypomnienia push (jedno na zadanie i dzień przypomnienia)."""
+    __tablename__ = "sent_task_reminders"
+    id = Column(Integer, primary_key=True, index=True)
+    task_id = Column(Integer, ForeignKey("tasks.id"), index=True)
+    reminder_on = Column(Date, index=True)
+    sent_at = Column(DateTime, default=datetime.utcnow)

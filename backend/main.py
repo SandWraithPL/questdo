@@ -16,6 +16,21 @@ import game_content as gc
 import time
 import random
 import math
+import os
+import json
+import threading
+from zoneinfo import ZoneInfo
+
+try:
+    from pywebpush import webpush, WebPushException
+except ImportError:
+    webpush = None
+    WebPushException = Exception
+
+REMINDER_TZ = ZoneInfo("Europe/Warsaw")
+VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "")
+VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "")
+VAPID_CONTACT = os.getenv("VAPID_CONTACT", "mailto:questdo@example.com")
 
 def create_tables():
     for i in range(10):
@@ -169,9 +184,107 @@ def migrate_schema():
 
 app = FastAPI(title="QuestDo API")
 
+def _push_configured() -> bool:
+    return bool(webpush and VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY)
+
+
+def task_reminder_date(task: models.Task) -> Optional[date]:
+    if task.reminder_offset_days is None:
+        return None
+    return task.due_date - timedelta(days=int(task.reminder_offset_days))
+
+
+def send_push_to_user(db: Session, user_id: int, body: str, url: str = "/") -> int:
+    if not _push_configured():
+        return 0
+    subs = db.query(models.PushSubscription).filter(models.PushSubscription.user_id == user_id).all()
+    payload = json.dumps({"title": "QuestDo", "body": body, "data": {"url": url}})
+    sent = 0
+    for sub in subs:
+        subscription = {
+            "endpoint": sub.endpoint,
+            "keys": {"p256dh": sub.p256dh, "auth": sub.auth},
+        }
+        try:
+            webpush(
+                subscription_info=subscription,
+                data=payload,
+                vapid_private_key=VAPID_PRIVATE_KEY,
+                vapid_claims={"sub": VAPID_CONTACT},
+            )
+            sent += 1
+        except WebPushException as exc:
+            print(f"[push] failed for subscription {sub.id}: {exc}")
+            if getattr(exc, "response", None) and exc.response.status_code in (404, 410):
+                db.delete(sub)
+    return sent
+
+
+def process_scheduled_reminders():
+    if not _push_configured():
+        return
+    db = next(get_db())
+    try:
+        now = datetime.now(REMINDER_TZ)
+        if now.hour != 9 or now.minute > 1:
+            return
+        today = now.date()
+        tasks = (
+            db.query(models.Task)
+            .filter(
+                models.Task.completed.is_(False),
+                models.Task.reminder_offset_days.isnot(None),
+            )
+            .all()
+        )
+        for task in tasks:
+            reminder_on = task_reminder_date(task)
+            if reminder_on != today:
+                continue
+            already = (
+                db.query(models.SentTaskReminder)
+                .filter(
+                    models.SentTaskReminder.task_id == task.id,
+                    models.SentTaskReminder.reminder_on == reminder_on,
+                )
+                .first()
+            )
+            if already:
+                continue
+            body = f'Przypomnienie: zadanie „{task.title}" ma termin {task.due_date}'
+            url = f"/?date={task.due_date}"
+            send_push_to_user(db, task.owner_id, body, url)
+            db.add(
+                models.SentTaskReminder(
+                    task_id=task.id,
+                    reminder_on=reminder_on,
+                )
+            )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"[reminders] scheduler error: {exc}")
+    finally:
+        db.close()
+
+
+def reminder_scheduler_loop():
+    while True:
+        try:
+            process_scheduled_reminders()
+        except Exception as exc:
+            print(f"[reminders] loop error: {exc}")
+        time.sleep(60)
+
+
 @app.on_event("startup")
 def startup_event():
     create_tables()
+    if _push_configured():
+        threading.Thread(target=reminder_scheduler_loop, daemon=True).start()
+        print("[push] Web Push scheduler started (09:00 Europe/Warsaw)")
+    else:
+        print("[push] Web Push disabled — set VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY")
 
 app.add_middleware(
     CORSMiddleware,
@@ -528,6 +641,17 @@ class Token(BaseModel):
 
 class AccountDelete(BaseModel):
     password: str
+
+
+class PushKeysIn(BaseModel):
+    p256dh: str
+    auth: str
+
+
+class PushSubscriptionIn(BaseModel):
+    endpoint: str
+    keys: PushKeysIn
+    expirationTime: Optional[int] = None
 
 # --- Auth helpers ---
 def verify_password(plain, hashed):
@@ -1197,6 +1321,71 @@ def try_award_daily_triple_bonus(user: models.User, db: Session, day: Union[date
 @app.get("/challenges")
 def get_challenges(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     return build_challenges_payload(current_user, db)
+
+
+@app.get("/push/vapid-public-key")
+def get_vapid_public_key():
+    if not VAPID_PUBLIC_KEY:
+        raise HTTPException(status_code=503, detail="Web Push nie jest skonfigurowany na serwerze")
+    return {"publicKey": VAPID_PUBLIC_KEY}
+
+
+@app.post("/push/subscribe")
+def push_subscribe(
+    payload: PushSubscriptionIn,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    row = db.query(models.PushSubscription).filter(
+        models.PushSubscription.endpoint == payload.endpoint
+    ).first()
+    if row:
+        row.user_id = current_user.id
+        row.p256dh = payload.keys.p256dh
+        row.auth = payload.keys.auth
+    else:
+        db.add(
+            models.PushSubscription(
+                user_id=current_user.id,
+                endpoint=payload.endpoint,
+                p256dh=payload.keys.p256dh,
+                auth=payload.keys.auth,
+            )
+        )
+    db.commit()
+    return {"message": "Subscribed", "push_enabled": _push_configured()}
+
+
+@app.delete("/push/subscribe")
+def push_unsubscribe(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    db.query(models.PushSubscription).filter(
+        models.PushSubscription.user_id == current_user.id
+    ).delete()
+    db.commit()
+    return {"message": "Unsubscribed"}
+
+
+@app.post("/push/test")
+def push_test(
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if not _push_configured():
+        raise HTTPException(status_code=503, detail="Web Push nie jest skonfigurowany")
+    sent = send_push_to_user(
+        db,
+        current_user.id,
+        "Test powiadomienia QuestDo — wszystko działa!",
+        "/",
+    )
+    db.commit()
+    if sent == 0:
+        raise HTTPException(status_code=400, detail="Brak aktywnej subskrypcji push")
+    return {"message": "Test wysłany", "delivered": sent}
+
 
 @app.delete("/tasks/{task_id}")
 def delete_task(task_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):

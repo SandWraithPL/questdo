@@ -207,41 +207,116 @@ function getTaskCheckState(task) {
   };
 }
 
-function getReminderAt(task) {
+const REMINDER_HOUR = 9;
+const REMINDER_GRACE_MS = 24 * 60 * 60 * 1000;
+
+function getReminderFireTime(task) {
   if (task.reminder_offset_days === null || task.reminder_offset_days === undefined) return null;
-  const reminderAt = new Date(`${task.due_date}T09:00:00`);
-  reminderAt.setDate(reminderAt.getDate() - Number(task.reminder_offset_days || 0));
-  return reminderAt;
+  const offset = Number(task.reminder_offset_days);
+  if (Number.isNaN(offset)) return null;
+  const parts = String(task.due_date).slice(0, 10).split("-").map(Number);
+  if (parts.length !== 3) return null;
+  const [year, month, day] = parts;
+  const dueAtNine = new Date(year, month - 1, day, REMINDER_HOUR, 0, 0, 0);
+  const fireAt = new Date(dueAtNine);
+  fireAt.setDate(fireAt.getDate() - offset);
+  return fireAt;
 }
 
 function getReminderStorageKey(task) {
-  return `questdo-reminded-${task.id}-${task.due_date}-${task.reminder_offset_days}`;
+  const fireAt = getReminderFireTime(task);
+  const fireDay = fireAt ? toDateStr(fireAt) : "unknown";
+  return `questdo-reminded-${task.id}-${task.due_date}-${task.reminder_offset_days}-${fireDay}`;
 }
 
-async function processTaskReminders(tasks) {
+function isWithinReminderGracePeriod(fireTimeMs, nowMs = Date.now()) {
+  return nowMs >= fireTimeMs && nowMs < fireTimeMs + REMINDER_GRACE_MS;
+}
+
+function buildReminderBody(task) {
+  return task.important
+    ? `Ważny quest: „${task.title}" · termin ${task.due_date}`
+    : `Przypomnienie: zadanie „${task.title}" ma termin ${task.due_date}`;
+}
+
+async function fireTaskReminder(task) {
+  const storageKey = getReminderStorageKey(task);
+  if (localStorage.getItem(storageKey)) return false;
+  localStorage.setItem(storageKey, "1");
+  await showAppNotification(buildReminderBody(task), {
+    tag: storageKey,
+    data: { url: `/?date=${task.due_date}`, taskId: task.id },
+  });
+  return true;
+}
+
+async function processMissedTaskReminders(tasks) {
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const now = Date.now();
-  const weekAgo = now - 7 * 24 * 60 * 60 * 1000;
-
   for (const task of tasks) {
     if (task.completed) continue;
-    const reminderAt = getReminderAt(task);
-    if (!reminderAt) continue;
+    const fireAt = getReminderFireTime(task);
+    if (!fireAt) continue;
+    const fireTime = fireAt.getTime();
+    if (!isWithinReminderGracePeriod(fireTime, now)) continue;
+    await fireTaskReminder(task);
+  }
+}
 
-    const fireTime = reminderAt.getTime();
-    if (fireTime > now) continue;
-    if (fireTime < weekAgo) continue;
-
+function scheduleTaskReminders(tasks) {
+  const timers = [];
+  const now = Date.now();
+  tasks.forEach((task) => {
+    if (task.completed) return;
+    const fireAt = getReminderFireTime(task);
+    if (!fireAt) return;
+    const fireTime = fireAt.getTime();
     const storageKey = getReminderStorageKey(task);
-    if (localStorage.getItem(storageKey)) continue;
+    if (localStorage.getItem(storageKey)) return;
 
-    localStorage.setItem(storageKey, "1");
-    const title = task.important ? "Ważny quest czeka" : "QuestDo przypomina";
-    const body = `${task.title} · termin ${task.due_date}`;
-    await showAppNotification(title, body, {
-      tag: storageKey,
-      data: { url: `/?date=${task.due_date}`, taskId: task.id },
-    });
+    if (fireTime > now) {
+      const delay = fireTime - now;
+      if (delay > 0 && delay <= 2147483647) {
+        timers.push(setTimeout(() => { fireTaskReminder(task); }, delay));
+      }
+      return;
+    }
+    if (isWithinReminderGracePeriod(fireTime, now)) {
+      fireTaskReminder(task);
+    }
+  });
+  return timers;
+}
+
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = window.atob(base64);
+  return Uint8Array.from([...rawData], (char) => char.charCodeAt(0));
+}
+
+function isStandalonePwa() {
+  return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
+}
+
+async function subscribeToWebPush(authHeaders) {
+  if (!("serviceWorker" in navigator) || !("PushManager" in window)) return { ok: false, reason: "unsupported" };
+  try {
+    const { data } = await axios.get(`${API}/push/vapid-public-key`, { headers: authHeaders });
+    if (!data?.publicKey) return { ok: false, reason: "server" };
+    const reg = await navigator.serviceWorker.ready;
+    let sub = await reg.pushManager.getSubscription();
+    if (!sub) {
+      sub = await reg.pushManager.subscribe({
+        userVisibleOnly: true,
+        applicationServerKey: urlBase64ToUint8Array(data.publicKey),
+      });
+    }
+    await axios.post(`${API}/push/subscribe`, sub.toJSON(), { headers: authHeaders });
+    return { ok: true, reason: "subscribed" };
+  } catch (err) {
+    console.error("[push] subscribe failed:", err);
+    return { ok: false, reason: "error" };
   }
 }
 
@@ -251,24 +326,23 @@ async function ensureNotificationPermission() {
   return Notification.permission;
 }
 
-async function showAppNotification(title, body, options = {}) {
+async function showAppNotification(body, options = {}) {
   if (!("Notification" in window) || Notification.permission !== "granted") return false;
-  const payload = {
-    title,
+  const notificationOptions = {
     body,
-    icon: "/favicon.svg",
-    badge: "/favicon.svg",
+    icon: NOTIFICATION_ICON,
+    badge: NOTIFICATION_ICON,
     tag: options.tag,
     data: options.data || { url: "/" },
   };
   if ("serviceWorker" in navigator) {
     const reg = await navigator.serviceWorker.getRegistration();
     if (reg?.showNotification) {
-      await reg.showNotification(title, payload);
+      await reg.showNotification(NOTIFICATION_TITLE, notificationOptions);
       return true;
     }
   }
-  new Notification(title, { body, icon: payload.icon, tag: payload.tag, data: payload.data });
+  new Notification(NOTIFICATION_TITLE, notificationOptions);
   return true;
 }
 
@@ -403,6 +477,19 @@ function Auth({ onLogin }) {
 }
 
 const CALENDAR_COLLAPSED_KEY = "questdo-calendar-collapsed";
+const CHALLENGES_COLLAPSED_KEY = "questdo-challenges-collapsed";
+const NOTIFICATION_ICON = "/notification-icon.svg";
+const NOTIFICATION_TITLE = "QuestDo";
+
+function readChallengesCollapsedPreference() {
+  try {
+    const saved = localStorage.getItem(CHALLENGES_COLLAPSED_KEY);
+    if (saved !== null) return saved === "true";
+  } catch {
+    /* ignore */
+  }
+  return false;
+}
 
 function readCalendarCollapsedPreference() {
   try {
@@ -623,9 +710,32 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
   );
 }
 
+function PlayerSummary({ user, progress }) {
+  return (
+    <div className="profile-card profile-card--top">
+      <div className="avatar">{user.username[0].toUpperCase()}</div>
+      <div className="profile-info">
+        <h2>Poziom {user.level}</h2>
+        <div className="title">{user.title}</div>
+        <div className="exp-bar-bg"><div className="exp-bar" style={{ width: `${progress}%` }} /></div>
+        <div className="exp-text">{user.exp} EXP</div>
+        {user.next_level_title && <div className="level-next-hint">Do &quot;{user.next_level_title}&quot;: {user.next_level_exp} EXP</div>}
+        {user.exp_tip && <p className="exp-tip">{user.exp_tip}</p>}
+      </div>
+      <div className="streak">
+        <div className="flame">🔥</div>
+        <div className="count">{user.streak}</div>
+        <div className="label">seria</div>
+      </div>
+    </div>
+  );
+}
+
 function ChallengesBar({ challenges }) {
+  const [collapsed, setCollapsed] = useState(readChallengesCollapsedPreference);
   if (!challenges?.goals?.length) return null;
   const bonusExp = challenges.triple_bonus_exp || 35;
+  const completedGoals = challenges.goals.filter((g) => g.done || g.current >= g.target).length;
   
   const getChallengeDescription = (goal) => {
     if (goal.description) return goal.description;
@@ -646,33 +756,59 @@ function ChallengesBar({ challenges }) {
     };
     return descMap[label] || `Ukończ ${target} ${target === 1 ? 'zadanie' : 'zadania'}`;
   };
-  
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem(CHALLENGES_COLLAPSED_KEY, String(next));
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
+  };
+
   return (
-    <div className="challenges-bar">
-      <div className="challenges-header-row"><h4>🎯 Wyzwania na dziś</h4></div>
-      {challenges.bonus_claimed ? (
-        <p className="challenges-bonus-done">✨ Bonus +{bonusExp} EXP odebrany!</p>
-      ) : (
-        <p className="challenges-hint">Ukończ wszystkie 3 → +{bonusExp} EXP bonus</p>
+    <section className={`challenges-section ${collapsed ? "challenges-section--collapsed" : "challenges-section--expanded"}`}>
+      <button
+        type="button"
+        className="challenges-section-toggle"
+        onClick={toggleCollapsed}
+        aria-expanded={!collapsed}
+        aria-controls="questdo-challenges-body"
+      >
+        <span className="challenges-section-title">🎯 Wyzwania na dziś</span>
+        <span className="challenges-section-meta">{completedGoals}/{challenges.goals.length} ukończone</span>
+        <span className="challenges-section-chevron" aria-hidden="true">{collapsed ? "▼" : "▲"}</span>
+      </button>
+      {!collapsed && (
+        <div id="questdo-challenges-body" className="challenges-bar">
+          {challenges.bonus_claimed ? (
+            <p className="challenges-bonus-done">✨ Bonus +{bonusExp} EXP odebrany!</p>
+          ) : (
+            <p className="challenges-hint">Ukończ wszystkie 3 → +{bonusExp} EXP bonus</p>
+          )}
+          <div className="challenges-list">
+            {challenges.goals.map((g) => {
+              const pct = g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0;
+              const done = g.done || g.current >= g.target;
+              return (
+                <div key={g.id} className={`challenge-item ${done ? "done completed" : ""}`}>
+                  <div className="challenge-row-top">
+                    <span className="challenge-icon">{done ? "✅" : g.icon}</span>
+                    <span className="challenge-label">{g.label}</span>
+                    <div className="challenge-progress-small"><div className="challenge-fill-small" style={{ width: `${pct}%` }} /></div>
+                    <span className="challenge-count-small">{g.current}/{g.target}</span>
+                  </div>
+                  <div className="challenge-description">{getChallengeDescription(g)}</div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
-      <div className="challenges-list">
-        {challenges.goals.map((g) => {
-          const pct = g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0;
-          const done = g.done || g.current >= g.target;
-          return (
-            <div key={g.id} className={`challenge-item ${done ? "done completed" : ""}`}>
-              <div className="challenge-row-top">
-                <span className="challenge-icon">{done ? "✅" : g.icon}</span>
-                <span className="challenge-label">{g.label}</span>
-                <div className="challenge-progress-small"><div className="challenge-fill-small" style={{ width: `${pct}%` }} /></div>
-                <span className="challenge-count-small">{g.current}/{g.target}</span>
-              </div>
-              <div className="challenge-description">{getChallengeDescription(g)}</div>
-            </div>
-          );
-        })}
-      </div>
-    </div>
+    </section>
   );
 }
 
@@ -1015,7 +1151,19 @@ function AdminPanel({ isOpen, onClose, headers }) {
   );
 }
 
-function Profile({ user, onLogout, onDeleteAccount, achievements, rareDrops, history, onOpenAdmin }) {
+function Profile({
+  user,
+  onLogout,
+  onDeleteAccount,
+  achievements,
+  rareDrops,
+  history,
+  onOpenAdmin,
+  notificationsEnabled,
+  notificationsUnsupported,
+  isStandalonePwa: standalonePwa,
+  onToggleNotifications,
+}) {
   const [showAchievements, setShowAchievements] = useState(false);
   const [activeTab, setActiveTab] = useState("achievements");
   const [deleteMode, setDeleteMode] = useState(false);
@@ -1034,6 +1182,22 @@ function Profile({ user, onLogout, onDeleteAccount, achievements, rareDrops, his
       {showAchievements && (
         <div className="profile-menu">
           <div className="profile-info-dropdown"><p><strong>{user.username}</strong></p><p>Poziom {user.level} - {user.title}</p><p>{user.exp} EXP | 🔥 {user.streak} dni</p></div>
+          <div className="profile-notifications-block">
+            <button
+              type="button"
+              className={`profile-notifications-btn ${notificationsEnabled ? "enabled" : ""}`}
+              onClick={onToggleNotifications}
+              disabled={notificationsUnsupported}
+            >
+              {notificationsEnabled ? "🔔 Powiadomienia włączone" : "🔔 Włącz powiadomienia"}
+            </button>
+            <p className="profile-notifications-hint">
+              {notificationsUnsupported && "Ta przeglądarka nie obsługuje powiadomień."}
+              {!notificationsUnsupported && notificationsEnabled && standalonePwa && "Przypomnienia o 09:00 — także gdy aplikacja jest zamknięta (push)."}
+              {!notificationsUnsupported && notificationsEnabled && !standalonePwa && "Przypomnienia o 09:00 działają, gdy aplikacja jest otwarta lub w tle. Zainstaluj QuestDo (Dodaj do ekranu głównego), aby otrzymywać powiadomienia także przy zamkniętej aplikacji."}
+              {!notificationsUnsupported && !notificationsEnabled && "Włącz powiadomienia, aby dostawać przypomnienia o questach o 09:00 w wybranym dniu."}
+            </p>
+          </div>
           <div className="profile-tabs">
             <button type="button" className={activeTab === "achievements" ? "active" : ""} onClick={() => setActiveTab("achievements")}>Osiągnięcia</button>
             <button type="button" className={activeTab === "history" ? "active" : ""} onClick={() => setActiveTab("history")}>Historia</button>
@@ -1078,6 +1242,8 @@ export default function App() {
   const [important, setImportant] = useState(false);
   const [reminderOffset, setReminderOffset] = useState("");
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => ("Notification" in window ? Notification.permission === "granted" : false));
+  const [standalonePwa, setStandalonePwa] = useState(false);
+  const notificationsUnsupported = !("Notification" in window);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const [processingTaskIds, setProcessingTaskIds] = useState([]);
 
@@ -1152,52 +1318,47 @@ export default function App() {
   }, []);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+
   const enableNotifications = async () => {
     const permission = await ensureNotificationPermission();
     const enabled = permission === "granted";
     setNotificationsEnabled(enabled);
-    if (enabled) {
-      await processTaskReminders(tasks);
-      showToast("Powiadomienia włączone — przypomnienia o 09:00 (gdy aplikacja lub PWA jest aktywna)");
-    } else {
+    if (!enabled) {
       showToast(permission === "unsupported" ? "Ta przeglądarka nie obsługuje powiadomień" : "Nie włączono powiadomień");
+      return;
+    }
+    const push = await subscribeToWebPush(headers);
+    processMissedTaskReminders(tasks);
+    if (push.ok) {
+      showToast(standalonePwa
+        ? "Powiadomienia włączone — przypomnienia o 09:00 także przy zamkniętej aplikacji"
+        : "Powiadomienia włączone — przypomnienia o 09:00 (push po zainstalowaniu PWA)");
+    } else if (push.reason === "server") {
+      showToast("Powiadomienia lokalne włączone (09:00). Push wymaga konfiguracji serwera VAPID.");
+    } else {
+      showToast("Powiadomienia włączone — przypomnienia o 09:00, gdy aplikacja jest otwarta lub w tle");
     }
   };
 
   useEffect(() => {
+    setStandalonePwa(isStandalonePwa());
+    const onDisplayMode = () => setStandalonePwa(isStandalonePwa());
+    window.matchMedia("(display-mode: standalone)").addEventListener("change", onDisplayMode);
+    return () => window.matchMedia("(display-mode: standalone)").removeEventListener("change", onDisplayMode);
+  }, []);
+
+  useEffect(() => {
     if (!notificationsEnabled || !tasks.length) return undefined;
 
-    processTaskReminders(tasks);
-
-    const timers = [];
-    const now = Date.now();
-    tasks.forEach((task) => {
-      if (task.completed) return;
-      const reminderAt = getReminderAt(task);
-      if (!reminderAt) return;
-
-      const delay = reminderAt.getTime() - now;
-      const storageKey = getReminderStorageKey(task);
-      if (delay <= 0 || delay > 2147483647 || localStorage.getItem(storageKey)) return;
-
-      const timer = setTimeout(() => {
-        if (localStorage.getItem(storageKey)) return;
-        localStorage.setItem(storageKey, "1");
-        const title = task.important ? "Ważny quest czeka" : "QuestDo przypomina";
-        showAppNotification(title, `${task.title} · termin ${task.due_date}`, {
-          tag: storageKey,
-          data: { url: `/?date=${task.due_date}`, taskId: task.id },
-        });
-      }, delay);
-      timers.push(timer);
-    });
+    processMissedTaskReminders(tasks);
+    const timers = scheduleTaskReminders(tasks);
 
     const interval = window.setInterval(() => {
-      processTaskReminders(tasks);
+      processMissedTaskReminders(tasks);
     }, 60 * 1000);
 
     const onVisibility = () => {
-      if (document.visibilityState === "visible") processTaskReminders(tasks);
+      if (document.visibilityState === "visible") processMissedTaskReminders(tasks);
     };
     document.addEventListener("visibilitychange", onVisibility);
 
@@ -1258,12 +1419,12 @@ export default function App() {
     if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
     if (earned_drop) {
       showToast(`✨ Zdobyto ${earned_drop.icon} ${earned_drop.name}! ${earned_drop.description}`);
-      showAppNotification("Nowa znajdźka", `${earned_drop.name}: ${earned_drop.description}`);
+      showAppNotification(`Nowa znajdźka: ${earned_drop.icon} ${earned_drop.name} — ${earned_drop.description}`);
     }
     const freshAchievement = [...(new_achievements || []), ...(new_exclusive_achievements || [])][0];
     if (freshAchievement) {
       showToast(`🏆 Odblokowano: ${freshAchievement.title}! ${freshAchievement.icon}`);
-      showAppNotification("Nowe osiągnięcie", `${freshAchievement.title}: ${freshAchievement.description}`);
+      showAppNotification(`Nowe osiągnięcie: ${freshAchievement.icon} ${freshAchievement.title} — ${freshAchievement.description}`);
     }
   };
 
@@ -1551,7 +1712,24 @@ export default function App() {
 
   return (
     <div className="app">
-      <div className="header"><h1>⚔️ QuestDo</h1><Profile user={user} onLogout={logout} onDeleteAccount={deleteAccount} achievements={achievements} rareDrops={rareDrops} history={history} onOpenAdmin={() => setShowAdminPanel(true)} /></div>
+      <div className="header">
+        <h1>⚔️ QuestDo</h1>
+        <Profile
+          user={user}
+          onLogout={logout}
+          onDeleteAccount={deleteAccount}
+          achievements={achievements}
+          rareDrops={rareDrops}
+          history={history}
+          onOpenAdmin={() => setShowAdminPanel(true)}
+          notificationsEnabled={notificationsEnabled}
+          notificationsUnsupported={notificationsUnsupported}
+          isStandalonePwa={standalonePwa}
+          onToggleNotifications={enableNotifications}
+        />
+      </div>
+      <PlayerSummary user={user} progress={progress} />
+      <ChallengesBar challenges={challenges} />
       <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} processingTaskIds={processingTaskIds} />
       <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} processingTaskIds={processingTaskIds} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
@@ -1577,15 +1755,6 @@ export default function App() {
           </div>
         </div>
       )}
-      <button type="button" className={`notifications-btn ${notificationsEnabled ? "enabled" : ""}`} onClick={enableNotifications}>
-        {notificationsEnabled ? "Powiadomienia włączone" : "Włącz powiadomienia"}
-      </button>
-      <div className="profile-card">
-        <div className="avatar">{user.username[0].toUpperCase()}</div>
-        <div className="profile-info"><h2>Poziom {user.level}</h2><div className="title">{user.title}</div><div className="exp-bar-bg"><div className="exp-bar" style={{ width: `${progress}%` }} /></div><div className="exp-text">{user.exp} EXP</div>{user.next_level_title && <div className="level-next-hint">Do "{user.next_level_title}": {user.next_level_exp} EXP</div>}{user.exp_tip && <p className="exp-tip">{user.exp_tip}</p>}</div>
-        <div className="streak"><div className="flame">🔥</div><div className="count">{user.streak}</div><div className="label">seria</div></div>
-      </div>
-      <ChallengesBar challenges={challenges} />
       <LeaderboardPanel currentUser={user.username} />
       {toast && <Toast message={toast} />}
       <AdminPanel isOpen={showAdminPanel} onClose={() => setShowAdminPanel(false)} headers={headers} />

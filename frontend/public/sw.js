@@ -1,9 +1,12 @@
 /* global clients */
-const CACHE_NAME = 'questdo-v8';
+const CACHE_NAME = 'questdo-v10';
+const NOTIFICATION_ICON = '/notification-icon.svg';
+const NOTIFICATION_TITLE = 'QuestDo';
 const STATIC_ASSETS = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/notification-icon.svg',
   '/favicon.svg',
   '/favicon.ico'
 ];
@@ -65,32 +68,31 @@ self.addEventListener('fetch', (event) => {
 });
 
 self.addEventListener('push', (event) => {
-  let payload = { title: 'QuestDo', body: 'Masz nowe przypomnienie', data: { url: '/' } };
+  let title = NOTIFICATION_TITLE;
+  let body = 'Masz nowe przypomnienie';
+  let tag;
+  let data = { url: '/' };
   try {
     if (event.data) {
       const parsed = event.data.json();
-      payload = {
-        title: parsed.title || payload.title,
-        body: parsed.body || payload.body,
-        icon: parsed.icon || '/favicon.svg',
-        badge: parsed.badge || '/favicon.svg',
-        tag: parsed.tag,
-        data: parsed.data || { url: parsed.url || '/' },
-      };
+      title = parsed.title || NOTIFICATION_TITLE;
+      body = parsed.body || body;
+      tag = parsed.tag;
+      data = parsed.data || { url: parsed.url || '/' };
     }
   } catch {
     if (event.data?.text()) {
-      payload.body = event.data.text();
+      body = event.data.text();
     }
   }
 
   event.waitUntil(
-    self.registration.showNotification(payload.title, {
-      body: payload.body,
-      icon: payload.icon,
-      badge: payload.badge,
-      tag: payload.tag,
-      data: payload.data,
+    self.registration.showNotification(title, {
+      body,
+      icon: NOTIFICATION_ICON,
+      badge: NOTIFICATION_ICON,
+      tag,
+      data,
     })
   );
 });
