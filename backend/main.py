@@ -928,6 +928,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
     was_completed = task.completed
     exp_gained = 0
     exp_timing = None
+    daily_bonus_reverted = 0
     new_rewards = {"achievements": [], "exclusive_achievements": []}
     level_ups = []
     earned_drop = None
@@ -1050,7 +1051,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
             level_ups.extend(record_level_ups(current_user, current_user.exp, db))
             
             # Revert daily bonus if no longer all quests complete
-            assignment = get_or_create_daily_assignment(current_user, db, task.due_date)
+            assignment = get_or_create_daily_assignment(current_user, db, date.today())
             if assignment.bonus_claimed:
                 stats = dq.build_day_stats(current_user, all_tasks, date.today())
                 quest_ids = [x.strip() for x in assignment.quest_ids.split(",") if x.strip()]
@@ -1058,6 +1059,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
                 if not dq.all_goals_complete(goals):
                     assignment.bonus_claimed = False
                     current_user.exp = max(0, current_user.exp - dq.TRIPLE_BONUS_EXP)
+                    daily_bonus_reverted = dq.TRIPLE_BONUS_EXP
                     print(f"[uncheck] Reverted daily bonus {dq.TRIPLE_BONUS_EXP} EXP")
             
         if task_update.completed and not was_completed:
@@ -1102,7 +1104,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
         "streak": current_user.streak,
         "exp_gained": exp_gained,
         "exp_timing": exp_timing,
-        "daily_bonus": daily_bonus,
+        "daily_bonus": (daily_bonus or 0) - daily_bonus_reverted,
         "exp_awarded": task.exp_awarded,
         "task": task_to_dict(task),
         "challenges": build_challenges_payload(current_user, db),

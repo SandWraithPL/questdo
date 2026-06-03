@@ -130,11 +130,61 @@ function makeRequestId(taskId) {
   return `${Date.now()}-${taskId}`;
 }
 
+function getExpDeltaFromApi(data) {
+  return (data.exp_gained ?? 0) + (data.daily_bonus ?? 0);
+}
+
+function applyUserGamificationDelta(data, setUser, levelThresholdsRef, { optimisticExpDelta = 0, syncStreak = false } = {}) {
+  setUser((prev) => {
+    if (!prev) return prev;
+    const exp = Math.max(0, (prev.exp || 0) + getExpDeltaFromApi(data) - optimisticExpDelta);
+    const levelInfo = getExpProgress(exp, levelThresholdsRef.current);
+    return {
+      ...prev,
+      exp,
+      level: data.level ?? levelInfo.current,
+      title: data.title ?? prev.title,
+      streak: syncStreak && data.streak != null ? data.streak : prev.streak,
+    };
+  });
+}
+
+function applyUserFromApiAbsolute(data, setUser, levelThresholdsRef) {
+  setUser((prev) => {
+    if (!prev) return prev;
+    const exp = data.exp ?? prev.exp;
+    const levelInfo = getExpProgress(exp, levelThresholdsRef.current);
+    return {
+      ...prev,
+      exp,
+      level: data.level ?? levelInfo.current,
+      title: data.title ?? prev.title,
+      streak: data.streak ?? prev.streak,
+    };
+  });
+}
+
 function applyGamificationResponse(data, { setChallenges, setAchievements, setRareDrops, setHistory }) {
   if (data.challenges) setChallenges(data.challenges);
   if (data.achievements) setAchievements(data.achievements);
   if (data.rare_drops) setRareDrops(data.rare_drops);
   if (data.history) setHistory(data.history);
+}
+
+function adjustChallengesForTask(challenges, task, completed) {
+  if (!challenges?.goals?.length) return challenges;
+  const delta = completed ? 1 : -1;
+  const goals = challenges.goals.map((goal) => {
+    if (goal.type !== "complete_count") return goal;
+    const current = Math.min(goal.target, Math.max(0, goal.current + delta));
+    return { ...goal, current, done: current >= goal.target };
+  });
+  return {
+    ...challenges,
+    today_done: Math.max(0, (challenges.today_done || 0) + delta),
+    goals,
+    all_complete: goals.length > 0 && goals.every((g) => g.done),
+  };
 }
 
 function getTaskCheckState(task) {
@@ -977,9 +1027,17 @@ export default function App() {
   const apiQueueRef = useRef([]);
   const apiQueueRunningRef = useRef(false);
   const lastRequestIdRef = useRef(new Map());
+  const gamificationSeqRef = useRef(0);
   const processingTaskIdsRef = useRef(new Set());
   const levelThresholdsRef = useRef(levelThresholds);
   levelThresholdsRef.current = levelThresholds;
+
+  const beginGamificationUpdate = useCallback(() => {
+    gamificationSeqRef.current += 1;
+    return gamificationSeqRef.current;
+  }, []);
+
+  const isLatestGamification = useCallback((seq) => gamificationSeqRef.current === seq, []);
 
   const headers = { Authorization: `Bearer ${token}` };
   const gamificationSetters = { setChallenges, setAchievements, setRareDrops, setHistory };
@@ -1022,20 +1080,15 @@ export default function App() {
     drainQueue();
   }, []);
 
-  const applyUserFromApi = useCallback((data) => {
-    setUser((prev) => {
-      if (!prev) return prev;
-      const exp = data.exp ?? prev.exp;
-      const levelInfo = getExpProgress(exp, levelThresholdsRef.current);
-      return {
-        ...prev,
-        exp,
-        level: data.level ?? levelInfo.current,
-        title: data.title ?? prev.title,
-        streak: data.streak ?? prev.streak,
-      };
+  const applyGamificationFromTaskResponse = useCallback((data, { gamSeq, optimisticExpDelta }) => {
+    applyUserGamificationDelta(data, setUser, levelThresholdsRef, {
+      optimisticExpDelta,
+      syncStreak: isLatestGamification(gamSeq),
     });
-  }, []);
+    if (isLatestGamification(gamSeq)) {
+      applyGamificationResponse(data, gamificationSetters);
+    }
+  }, [isLatestGamification]);
 
   const patchTaskInState = useCallback((taskId, patch) => {
     setTasks((prev) => sortTasks(prev.map((t) => (t.id === taskId ? { ...t, ...patch } : t))));
@@ -1242,8 +1295,10 @@ export default function App() {
 
     const taskKey = task.id;
     const requestId = startTaskRequest(taskKey);
+    const gamSeq = beginGamificationUpdate();
     const snapshot = { task: { ...task }, user: user ? { ...user } : null };
     const expPreview = getExpPreview(task.difficulty, task.due_date);
+    const optimisticExpDelta = expPreview.amount;
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
 
@@ -1260,6 +1315,7 @@ export default function App() {
       const levelInfo = getExpProgress(newExp, levelThresholdsRef.current);
       return { ...prev, exp: newExp, level: levelInfo.current };
     });
+    setChallenges((prev) => adjustChallengesForTask(prev, task, true));
     showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
 
     enqueueApiJob(async () => {
@@ -1268,9 +1324,8 @@ export default function App() {
         if (isStaleRequest(taskKey, requestId)) return;
         const data = res.data;
         if (data.task) patchTaskInState(task.id, data.task);
-        applyUserFromApi(data);
-        applyGamificationResponse(data, gamificationSetters);
-        showToggleRewards(data);
+        applyGamificationFromTaskResponse(data, { gamSeq, optimisticExpDelta });
+        if (isLatestGamification(gamSeq)) showToggleRewards(data);
       } catch (err) {
         console.error("[toggleTask] API error:", err);
         if (!isStaleRequest(taskKey, requestId)) {
@@ -1302,7 +1357,7 @@ export default function App() {
         const res = await axios.patch(`${API}/tasks/${id}`, updates, { headers });
         if (isStaleRequest(taskKey, requestId)) return;
         if (res.data.task) patchTaskInState(id, res.data.task);
-        if (res.data.exp !== undefined) applyUserFromApi(res.data);
+        if (res.data.exp !== undefined) applyUserFromApiAbsolute(res.data, setUser, levelThresholdsRef);
         showToast("💾 Zapisano zmiany");
       } catch (err) {
         if (!isStaleRequest(taskKey, requestId)) {
@@ -1324,8 +1379,10 @@ export default function App() {
 
     const taskKey = task.id;
     const requestId = startTaskRequest(taskKey);
+    const gamSeq = beginGamificationUpdate();
     const snapshot = { task: { ...task }, user: user ? { ...user } : null };
     const expToRevert = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
+    const optimisticExpDelta = -expToRevert;
 
     setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? {
       ...t,
@@ -1340,6 +1397,7 @@ export default function App() {
       const levelInfo = getExpProgress(newExp, levelThresholdsRef.current);
       return { ...prev, exp: newExp, level: levelInfo.current };
     });
+    setChallenges((prev) => adjustChallengesForTask(prev, task, false));
     showToast("✅ Cofnięto ukończenie zadania");
 
     enqueueApiJob(async () => {
@@ -1348,8 +1406,7 @@ export default function App() {
         if (isStaleRequest(taskKey, requestId)) return;
         const data = res.data;
         if (data.task) patchTaskInState(task.id, data.task);
-        applyUserFromApi(data);
-        applyGamificationResponse(data, gamificationSetters);
+        applyGamificationFromTaskResponse(data, { gamSeq, optimisticExpDelta });
       } catch (err) {
         console.error("[uncheckTask] API error:", err);
         if (!isStaleRequest(taskKey, requestId)) {
@@ -1385,7 +1442,9 @@ export default function App() {
 
     const taskKey = task.id;
     const requestId = startTaskRequest(taskKey);
+    const gamSeq = beginGamificationUpdate();
     const snapshot = { task: { ...task }, tasks: tasks, user: user ? { ...user } : null };
+    const optimisticExpDelta = task.exp_awarded ? -(task.exp_awarded_amount || exp) : 0;
 
     setTasks((prev) => prev.filter((t) => t.id !== task.id));
     if (task.exp_awarded) {
@@ -1395,13 +1454,21 @@ export default function App() {
         const levelInfo = getExpProgress(newExp, levelThresholdsRef.current);
         return { ...prev, exp: newExp, level: levelInfo.current };
       });
+      setChallenges((prev) => adjustChallengesForTask(prev, task, false));
     }
 
     enqueueApiJob(async () => {
       try {
         const res = await axios.delete(`${API}/tasks/${task.id}`, { headers });
         if (isStaleRequest(taskKey, requestId)) return;
-        applyUserFromApi(res.data);
+        if (task.exp_awarded) {
+          applyGamificationFromTaskResponse(
+            { ...res.data, exp_gained: -(res.data.exp_removed || exp), daily_bonus: 0 },
+            { gamSeq, optimisticExpDelta },
+          );
+        } else {
+          applyUserFromApiAbsolute(res.data, setUser, levelThresholdsRef);
+        }
         showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
       } catch (err) {
         console.error("[deleteTask] API error:", err);
