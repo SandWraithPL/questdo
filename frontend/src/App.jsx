@@ -1432,7 +1432,7 @@ export default function App() {
     writeNotificationsPreference(false);
     setNotificationsEnabled(false);
     await unsubscribeFromWebPush(headers);
-    showToast("Powiadomienia wyłączone. Aby całkowicie wyłączyć powiadomienia w przeglądarce, zmień ustawienia w menedżerze uprawnień.");
+    showToast("Powiadomienia wyłączone w aplikacji. Aby całkowicie wyłączyć powiadomienia w przeglądarce, zmień ustawienia (kliknij ikonę kłódki 🔒 w pasku adresu).");
   };
 
   const toggleNotifications = async () => {
