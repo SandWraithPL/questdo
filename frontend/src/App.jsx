@@ -30,10 +30,10 @@ function getExpPreview(difficulty, dueDateStr) {
   const base = EXP_MAP[difficulty] || 10;
   const today = toDateStr(new Date());
   if (today < dueDateStr) {
-    return { amount: Math.max(1, Math.round(base * 1.5)), timing: "early", base };
+    return { amount: Math.max(1, Math.floor(base * 1.5)), timing: "early", base };
   }
   if (today > dueDateStr) {
-    return { amount: Math.max(1, Math.round(base * 0.5)), timing: "late", base };
+    return { amount: Math.max(1, Math.floor(base * 0.5)), timing: "late", base };
   }
   return { amount: base, timing: "ontime", base };
 }

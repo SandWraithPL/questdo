@@ -128,26 +128,34 @@ def pick_three_quests(user_id: int, day: date) -> list[dict]:
 
 def build_day_stats(user, all_tasks, day: date) -> dict:
     today_tasks = [t for t in all_tasks if t.due_date == day]
-    done = [t for t in today_tasks if t.completed]
+    completed_on_day = [
+        t for t in all_tasks
+        if t.completed and t.completed_at and t.completed_at.date() == day
+    ]
     added_today = [
         t for t in all_tasks
         if t.created_at and t.created_at.date() == day
     ]
 
+    done_due_today = [t for t in today_tasks if t.completed]
+
     stats = {
-        "done_today": len(done),
+        "done_today": len(completed_on_day),
+        "done_due_today": len(done_due_today),
         "total_today": len(today_tasks),
-        "hard_done": sum(1 for t in done if t.difficulty == "hard"),
-        "medium_done": sum(1 for t in done if t.difficulty == "medium"),
-        "easy_done": sum(1 for t in done if t.difficulty == "easy"),
-        "categories_done": {t.category for t in done},
+        "hard_done": sum(1 for t in completed_on_day if t.difficulty == "hard"),
+        "medium_done": sum(1 for t in completed_on_day if t.difficulty == "medium"),
+        "easy_done": sum(1 for t in completed_on_day if t.difficulty == "easy"),
+        "categories_done": {t.category for t in completed_on_day},
         "added_today": len(added_today),
         "streak": user.streak or 0,
     }
-    
-    # Debug logging
-    print(f"[build_day_stats] day={day}, today_tasks={len(today_tasks)}, done={len(done)}, stats={stats}")
-    
+
+    print(
+        f"[build_day_stats] day={day}, due_today={len(today_tasks)}, "
+        f"completed_on_day={len(completed_on_day)}, stats={stats}"
+    )
+
     return stats
 
 
@@ -180,7 +188,7 @@ def evaluate_quest(quest: dict, stats: dict) -> dict:
         target = quest["target"]
     elif qtype == "complete_all":
         target = max(stats["total_today"], 1)
-        current = stats["done_today"]
+        current = stats["done_due_today"]
     elif qtype == "streak_min":
         current = stats["streak"]
         target = quest.get("target", 1)

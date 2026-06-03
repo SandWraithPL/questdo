@@ -15,6 +15,7 @@ import daily_quests as dq
 import game_content as gc
 import time
 import random
+import math
 
 def create_tables():
     for i in range(10):
@@ -254,12 +255,12 @@ def task_can_reschedule(task: models.Task) -> bool:
 def calculate_exp_reward(difficulty: str, due_date: date, completed_on: date) -> tuple[int, str]:
     base = EXP_REWARDS.get(difficulty, 10)
     if completed_on < due_date:
-        # Early completion - bonus
-        amount = max(MIN_EXP_REWARD, round(base * EARLY_EXP_MULTIPLIER))
+        # Early completion - bonus (always round down)
+        amount = max(MIN_EXP_REWARD, math.floor(base * EARLY_EXP_MULTIPLIER))
         timing = "early"
     elif completed_on > due_date:
-        # Late completion - penalty
-        amount = max(MIN_EXP_REWARD, round(base * LATE_EXP_MULTIPLIER))
+        # Late completion - penalty (always round down)
+        amount = max(MIN_EXP_REWARD, math.floor(base * LATE_EXP_MULTIPLIER))
         timing = "late"
     else:
         # On time - no bonus, no penalty
@@ -1051,7 +1052,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
             # Revert daily bonus if no longer all quests complete
             assignment = get_or_create_daily_assignment(current_user, db, task.due_date)
             if assignment.bonus_claimed:
-                stats = dq.build_day_stats(current_user, all_tasks, task.due_date)
+                stats = dq.build_day_stats(current_user, all_tasks, date.today())
                 quest_ids = [x.strip() for x in assignment.quest_ids.split(",") if x.strip()]
                 goals = dq.evaluate_assigned_quests(quest_ids, stats)
                 if not dq.all_goals_complete(goals):
