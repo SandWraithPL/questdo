@@ -98,7 +98,7 @@ def gather_user_stats(user, db, models) -> dict:
             ((models.Task.completed == False) & (models.Task.created_at >= reset_at))
         )
     tasks = task_query.all()
-    completed = [t for t in tasks if t.completed]
+    completed = [t for t in tasks if t.completed and t.completed_at and t.exp_awarded]
     active = [t for t in tasks if not t.completed]
 
     early = late = ontime = 0
@@ -213,6 +213,8 @@ def achievement_progress_text(stats: dict, ach: dict) -> str:
 def get_next_achievement(stats: dict, unlocked_slugs: set) -> dict | None:
     for ach in ACHIEVEMENT_DEFS:
         if ach["slug"] in unlocked_slugs:
+            continue
+        if achievement_met(stats, ach):
             continue
         return {
             "slug": ach["slug"],

@@ -30,6 +30,8 @@ class Task(Base):
     exp_awarded = Column(Boolean, default=False)  # Czy EXP już przyznany
     exp_awarded_amount = Column(Integer, default=0)  # Faktycznie przyznane EXP (z bonusem/karą)
     completed_at = Column(DateTime, nullable=True)
+    delayed_rewards_claimed = Column(Boolean, default=False)
+    delayed_rewards_forfeited = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     owner_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="tasks")

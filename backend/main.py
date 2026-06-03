@@ -70,6 +70,12 @@ def migrate_schema():
         if "reminder_offset_days" not in cols:
             conn.execute(text("ALTER TABLE tasks ADD COLUMN reminder_offset_days INTEGER"))
             print("Migracja: dodano kolumnę reminder_offset_days")
+        if "delayed_rewards_claimed" not in cols:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN delayed_rewards_claimed BOOLEAN DEFAULT FALSE"))
+            print("Migracja: dodano kolumnę delayed_rewards_claimed")
+        if "delayed_rewards_forfeited" not in cols:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN delayed_rewards_forfeited BOOLEAN DEFAULT FALSE"))
+            print("Migracja: dodano kolumnę delayed_rewards_forfeited")
     if "daily_quest_assignments" not in insp.get_table_names():
         models.DailyQuestAssignment.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę daily_quest_assignments")
@@ -302,6 +308,7 @@ pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="token")
 
 EXP_REWARDS = {"easy": 10, "medium": 25, "hard": 50}
+DELAYED_REWARD_HOURS = 24
 EARLY_EXP_MULTIPLIER = 1.5
 LATE_EXP_MULTIPLIER = 0.5
 MIN_EXP_REWARD = 1
@@ -550,16 +557,27 @@ def revoke_exclusive_achievement(user_id: int, slug: str, db: Session) -> None:
     ).delete(synchronize_session=False)
 
 
-def sync_achievements_after_uncheck(user: models.User, db: Session) -> None:
-    """Usuwa standardowe osiągnięcia, których warunki nie są już spełnione."""
+def reconcile_standard_achievements(
+    user: models.User,
+    db: Session,
+    task: Optional[models.Task] = None,
+) -> list[dict]:
+    """Synchronizuje standardowe osiągnięcia ze statystykami (odblokowuje i cofa)."""
     stats = gc.gather_user_stats(user, db, models)
-    for ua in db.query(models.UserAchievement).filter(
-        models.UserAchievement.user_id == user.id
-    ).all():
-        slug = ua.achievement.name
-        ach_def = gc.ACHIEVEMENT_BY_SLUG.get(slug)
-        if ach_def and not gc.achievement_met(stats, ach_def):
-            db.delete(ua)
+    unlocked_slugs = get_unlocked_slugs(user.id, db)
+    newly_unlocked = []
+    for ach_def in gc.ACHIEVEMENT_DEFS:
+        slug = ach_def["slug"]
+        met = gc.achievement_met(stats, ach_def)
+        if met and slug not in unlocked_slugs:
+            unlocked = unlock_achievement(user.id, ach_def, db, task=task)
+            if unlocked:
+                newly_unlocked.append(unlocked)
+                unlocked_slugs.add(slug)
+        elif not met and slug in unlocked_slugs:
+            revoke_standard_achievement(user.id, slug, db)
+            unlocked_slugs.discard(slug)
+    return newly_unlocked
 
 
 def remove_rewards_for_task(user: models.User, task: models.Task, db: Session) -> None:
@@ -594,7 +612,51 @@ def remove_rewards_for_task(user: models.User, task: models.Task, db: Session) -
         models.PlayerRareDrop.source_task_id == task.id,
     ).delete(synchronize_session=False)
 
-    sync_achievements_after_uncheck(user, db)
+    reconcile_standard_achievements(user, db)
+
+
+def grant_delayed_completion_rewards(user: models.User, task: models.Task, db: Session) -> dict:
+    """Znajdźki i osiągnięcia ekskluzywne — dopiero po 24h od ukończenia zadania."""
+    if task.delayed_rewards_forfeited or task.delayed_rewards_claimed:
+        return {"exclusive_achievements": [], "earned_drop": None}
+
+    newly_exclusive = gc.check_exclusive_achievements(user, db, models)
+    if newly_exclusive:
+        exclusive_payload = unlock_exclusive_with_history(user, newly_exclusive[0], task, db)
+        task.delayed_rewards_claimed = True
+        return {"exclusive_achievements": [exclusive_payload], "earned_drop": None}
+
+    earned_drop = award_rare_drop_on_completion(user, task, db)
+    task.delayed_rewards_claimed = True
+    return {"exclusive_achievements": [], "earned_drop": earned_drop}
+
+
+def process_delayed_task_rewards(user: models.User, db: Session) -> dict:
+    """Przyznaje opóźnione nagrody za zadania ukończone ≥24h temu (jeśli nie cofnięte wcześniej)."""
+    now = datetime.utcnow()
+    cutoff = timedelta(hours=DELAYED_REWARD_HOURS)
+    result = {"exclusive_achievements": [], "earned_drop": None, "new_achievements": []}
+
+    eligible = db.query(models.Task).filter(
+        models.Task.owner_id == user.id,
+        models.Task.completed == True,
+        models.Task.delayed_rewards_claimed == False,
+        models.Task.delayed_rewards_forfeited == False,
+        models.Task.completed_at != None,
+    ).all()
+
+    for task in eligible:
+        if now - task.completed_at < cutoff:
+            continue
+        batch = grant_delayed_completion_rewards(user, task, db)
+        if batch.get("exclusive_achievements"):
+            result["exclusive_achievements"].extend(batch["exclusive_achievements"])
+        if batch.get("earned_drop") and not result["earned_drop"]:
+            result["earned_drop"] = batch["earned_drop"]
+
+    if result["exclusive_achievements"] or result["earned_drop"]:
+        db.commit()
+    return result
 
 
 def record_level_ups(user: models.User, old_exp: int, db: Session) -> list[dict]:
@@ -809,46 +871,17 @@ def unlock_exclusive_with_history(user: models.User, ea_def: dict, task: models.
 
 
 def grant_completion_rewards(user: models.User, task: models.Task, db: Session) -> dict:
-    """Maksymalnie jedna nagroda na ukończenie: osiągnięcie, exclusive lub znajdźka."""
-    achievements = check_achievements(user, db, task=task, stop_at_first=True)
-    if achievements:
-        return {"achievements": achievements, "exclusive_achievements": [], "earned_drop": None}
-
-    newly_exclusive = gc.check_exclusive_achievements(user, db, models)
-    if newly_exclusive:
-        exclusive_payload = unlock_exclusive_with_history(user, newly_exclusive[0], task, db)
-        return {"achievements": [], "exclusive_achievements": [exclusive_payload], "earned_drop": None}
-
-    earned_drop = award_rare_drop_on_completion(user, task, db)
-    return {"achievements": [], "exclusive_achievements": [], "earned_drop": earned_drop}
+    """Natychmiast tylko standardowe osiągnięcia; znajdźki i ekskluzywne po 24h."""
+    achievements = reconcile_standard_achievements(user, db, task=task)
+    return {"achievements": achievements, "exclusive_achievements": [], "earned_drop": None}
 
 
 def refresh_player_rewards(user: models.User, db: Session, task: Optional[models.Task] = None) -> dict:
-    """Pełna synchronizacja (endpointy GET) — bez limitu jednej nagrody."""
-    achievements = check_achievements(user, db, task=task)
-    exclusive = gc.check_exclusive_achievements(user, db, models)
-    exclusive_payload = []
-    for ea_def in exclusive:
-        if task:
-            exclusive_payload.append(unlock_exclusive_with_history(user, ea_def, task, db))
-        else:
-            body = f"Zdobyto osiągnięcie '{ea_def['title']}'"
-            add_history_event(
-                user.id,
-                "achievement",
-                f"user:{user.id}:exclusive-achievement:{ea_def['slug']}",
-                body,
-                db,
-            )
-            exclusive_payload.append({
-                "slug": ea_def["slug"],
-                "title": ea_def["title"],
-                "description": ea_def["description"],
-                "icon": ea_def["icon"],
-            })
-    if achievements or exclusive:
+    """Pełna synchronizacja standardowych osiągnięć (GET /achievements)."""
+    achievements = reconcile_standard_achievements(user, db, task=task)
+    if achievements:
         db.commit()
-    return {"achievements": achievements, "exclusive_achievements": exclusive_payload}
+    return {"achievements": achievements, "exclusive_achievements": []}
 
 
 def refresh_all_player_rewards(db: Session) -> None:
@@ -949,6 +982,7 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
 def get_me(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     if normalize_streak(current_user):
         db.commit()
+    process_delayed_task_rewards(current_user, db)
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
         "username": current_user.username,
@@ -996,6 +1030,7 @@ def delete_account(
 
 @app.get("/tasks")
 def get_tasks(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    process_delayed_task_rewards(current_user, db)
     tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
     return [task_to_dict(t) for t in tasks]
 
@@ -1061,12 +1096,15 @@ def update_task(task_id: int, task_update: TaskUpdate,
     # Idempotent check: if task is already in target state, return current state without changes
     if task_update.completed is not None and task_update.completed == was_completed:
         print(f"[update_task] Task {task_id} already in target completed state: {was_completed}")
-        level, title, _, _ = gc.get_level(current_user.exp)
+        process_delayed_task_rewards(current_user, db)
+        level, title, next_exp, next_title = gc.get_level(current_user.exp)
         return {
             "message": "No change needed",
             "exp": current_user.exp,
             "level": level,
             "title": title,
+            "next_level_exp": next_exp,
+            "next_level_title": next_title,
             "streak": current_user.streak,
             "exp_gained": 0,
             "exp_timing": None,
@@ -1132,6 +1170,8 @@ def update_task(task_id: int, task_update: TaskUpdate,
             task.exp_awarded_amount = 0
             task.completed = False
             task.completed_at = None
+            task.delayed_rewards_forfeited = True
+            task.delayed_rewards_claimed = False
             
             # Set exp_gained to negative value to indicate EXP was removed
             exp_gained = -exp_to_revert
@@ -1189,6 +1229,8 @@ def update_task(task_id: int, task_update: TaskUpdate,
         if task_update.completed and not was_completed:
             task.completed = True
             task.completed_at = datetime.utcnow()
+            if not task.delayed_rewards_forfeited:
+                task.delayed_rewards_claimed = False
             if not task.exp_awarded:
                 old_exp = current_user.exp
                 exp_gained, exp_timing = calculate_exp_reward(
@@ -1218,13 +1260,19 @@ def update_task(task_id: int, task_update: TaskUpdate,
         db.refresh(current_user)
         bonus_rewards = refresh_player_rewards(current_user, db)
         new_rewards["achievements"].extend(bonus_rewards["achievements"])
-        new_rewards["exclusive_achievements"].extend(bonus_rewards["exclusive_achievements"])
-    level, title, _, _ = gc.get_level(current_user.exp)
+    delayed_rewards = process_delayed_task_rewards(current_user, db)
+    if delayed_rewards.get("exclusive_achievements"):
+        new_rewards["exclusive_achievements"].extend(delayed_rewards["exclusive_achievements"])
+    if delayed_rewards.get("earned_drop") and not earned_drop:
+        earned_drop = delayed_rewards["earned_drop"]
+    level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
         "message": "Updated",
         "exp": current_user.exp,
         "level": level,
         "title": title,
+        "next_level_exp": next_exp,
+        "next_level_title": next_title,
         "streak": current_user.streak,
         "exp_gained": exp_gained,
         "exp_timing": exp_timing,
@@ -1399,19 +1447,25 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
         current_user.exp = max(0, current_user.exp - exp_removed)
 
     db.delete(task)
+    if exp_removed:
+        reconcile_standard_achievements(current_user, db)
     db.commit()
-    level, title, _, _ = gc.get_level(current_user.exp)
+    level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
         "message": "Deleted",
         "exp_removed": exp_removed,
         "exp": current_user.exp,
         "level": level,
         "title": title,
+        "next_level_exp": next_exp,
+        "next_level_title": next_title,
+        "achievements": build_achievements_payload(current_user, db),
     }
 
 @app.get("/achievements")
 def get_achievements(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    refresh_player_rewards(current_user, db)
+    reconcile_standard_achievements(current_user, db)
+    db.commit()
     user_achs = db.query(models.UserAchievement).filter(
         models.UserAchievement.user_id == current_user.id
     ).all()

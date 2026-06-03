@@ -10,6 +10,38 @@ const DEFAULT_LEVEL_THRESHOLDS = [
   0, 80, 180, 320, 480, 660, 860, 1080, 1320, 1600, 1900, 2250, 2650, 3100, 3600,
   4150, 4750, 5400, 6100, 7000,
 ];
+const DEFAULT_LEVELS_META = [
+  { threshold: 0, level: 1, title: "Kadet" },
+  { threshold: 80, level: 2, title: "Rekrut" },
+  { threshold: 180, level: 3, title: "Zwiadowca" },
+  { threshold: 320, level: 4, title: "Żołnierz" },
+  { threshold: 480, level: 5, title: "As" },
+  { threshold: 660, level: 6, title: "Taktyk" },
+  { threshold: 860, level: 7, title: "Rywal" },
+  { threshold: 1080, level: 8, title: "Weteran w drodze" },
+  { threshold: 1320, level: 9, title: "W treningu" },
+  { threshold: 1600, level: 10, title: "Mistrz rytmu" },
+  { threshold: 1900, level: 11, title: "Uczeń" },
+  { threshold: 2250, level: 12, title: "Rycerz" },
+  { threshold: 2650, level: 13, title: "W przebiegu" },
+  { threshold: 3100, level: 14, title: "Strażnik" },
+  { threshold: 3600, level: 15, title: "W cieniu" },
+  { threshold: 4150, level: 16, title: "Architekt" },
+  { threshold: 4750, level: 17, title: "Teoretyk" },
+  { threshold: 5400, level: 18, title: "Decydent" },
+  { threshold: 6100, level: 19, title: "W zasięgu" },
+  { threshold: 7000, level: 20, title: "Legenda" },
+];
+const NOTIFICATIONS_PREF_KEY = "questdo-notifications-enabled";
+const TASK_ACHIEVEMENT_REQUIREMENTS = {
+  first_step: 1,
+  second_bite: 3,
+  scout_badge: 10,
+  veteran_wall: 25,
+  hundred_club: 50,
+  mission_archive: 100,
+  invincible_grind: 200,
+};
 const EXP_MAP = { easy: 10, medium: 25, hard: 50 };
 const EXP_TIMING_LABELS = {
   early: { text: "Wcześnie +50%", className: "timing-early" },
@@ -87,7 +119,8 @@ function formatHistoryDate(value) {
 }
 
 function getExpProgress(exp, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
-  let current = 0, next = thresholds[1] || 100;
+  let current = 0;
+  let next = thresholds[1] || 100;
   for (let i = thresholds.length - 1; i >= 0; i--) {
     if (exp >= thresholds[i]) {
       current = thresholds[i];
@@ -97,6 +130,72 @@ function getExpProgress(exp, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
   }
   const progress = next === current ? 100 : ((exp - current) / (next - current)) * 100;
   return { progress, current, next };
+}
+
+function getGamificationFromExp(exp, levelsMeta = DEFAULT_LEVELS_META, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
+  const meta = levelsMeta?.length ? levelsMeta : DEFAULT_LEVELS_META;
+  const thresh = thresholds?.length ? thresholds : DEFAULT_LEVEL_THRESHOLDS;
+  let level = meta[0]?.level ?? 1;
+  let title = meta[0]?.title ?? "Kadet";
+  let nextLevelExp = null;
+  let nextLevelTitle = null;
+  for (let i = meta.length - 1; i >= 0; i--) {
+    if (exp >= meta[i].threshold) {
+      level = meta[i].level;
+      title = meta[i].title;
+      if (meta[i + 1]) {
+        nextLevelExp = meta[i + 1].threshold;
+        nextLevelTitle = meta[i + 1].title;
+      }
+      break;
+    }
+  }
+  const { progress } = getExpProgress(exp, thresh);
+  return { level, title, next_level_exp: nextLevelExp, next_level_title: nextLevelTitle, progress };
+}
+
+function readNotificationsPreference() {
+  try {
+    if (localStorage.getItem(NOTIFICATIONS_PREF_KEY) === "0") return false;
+  } catch {
+    /* ignore */
+  }
+  return "Notification" in window && Notification.permission === "granted";
+}
+
+function writeNotificationsPreference(enabled) {
+  try {
+    localStorage.setItem(NOTIFICATIONS_PREF_KEY, enabled ? "1" : "0");
+  } catch {
+    /* ignore */
+  }
+}
+
+function countCompletedTasks(tasks) {
+  return tasks.filter((t) => t.completed && t.exp_awarded).length;
+}
+
+function reconcileAchievementsOptimistic(tasks, achievements) {
+  if (!achievements) return achievements;
+  const completedCount = countCompletedTasks(tasks);
+  const unlocked = (achievements.unlocked || []).filter((ach) => {
+    const required = TASK_ACHIEVEMENT_REQUIREMENTS[ach.slug];
+    return required == null || completedCount >= required;
+  });
+  let next = achievements.next;
+  if (next) {
+    const required = TASK_ACHIEVEMENT_REQUIREMENTS[next.slug];
+    if (required != null) {
+      const current = Math.min(completedCount, required);
+      next = {
+        ...next,
+        current,
+        target: required,
+        progress: `${current}/${required}`,
+      };
+    }
+  }
+  return { unlocked, next };
 }
 
 function Toast({ message }) {
@@ -134,31 +233,41 @@ function getExpDeltaFromApi(data) {
   return (data.exp_gained ?? 0) + (data.daily_bonus ?? 0);
 }
 
-function applyUserGamificationDelta(data, setUser, levelThresholdsRef, { optimisticExpDelta = 0, syncStreak = false } = {}) {
+function applyUserGamificationDelta(
+  data,
+  setUser,
+  levelThresholdsRef,
+  levelsMetaRef,
+  { optimisticExpDelta = 0, syncStreak = false } = {},
+) {
   setUser((prev) => {
     if (!prev) return prev;
     const exp = Math.max(0, (prev.exp || 0) + getExpDeltaFromApi(data) - optimisticExpDelta);
-    const levelInfo = getExpProgress(exp, levelThresholdsRef.current);
+    const derived = getGamificationFromExp(exp, levelsMetaRef.current, levelThresholdsRef.current);
     return {
       ...prev,
       exp,
-      level: data.level ?? levelInfo.current,
-      title: data.title ?? prev.title,
+      level: data.level ?? derived.level,
+      title: data.title ?? derived.title,
+      next_level_exp: data.next_level_exp ?? derived.next_level_exp,
+      next_level_title: data.next_level_title ?? derived.next_level_title,
       streak: syncStreak && data.streak != null ? data.streak : prev.streak,
     };
   });
 }
 
-function applyUserFromApiAbsolute(data, setUser, levelThresholdsRef) {
+function applyUserFromApiAbsolute(data, setUser, levelThresholdsRef, levelsMetaRef) {
   setUser((prev) => {
     if (!prev) return prev;
     const exp = data.exp ?? prev.exp;
-    const levelInfo = getExpProgress(exp, levelThresholdsRef.current);
+    const derived = getGamificationFromExp(exp, levelsMetaRef.current, levelThresholdsRef.current);
     return {
       ...prev,
       exp,
-      level: data.level ?? levelInfo.current,
-      title: data.title ?? prev.title,
+      level: data.level ?? derived.level,
+      title: data.title ?? derived.title,
+      next_level_exp: data.next_level_exp ?? derived.next_level_exp,
+      next_level_title: data.next_level_title ?? derived.next_level_title,
       streak: data.streak ?? prev.streak,
     };
   });
@@ -251,6 +360,7 @@ async function fireTaskReminder(task) {
 }
 
 async function processMissedTaskReminders(tasks) {
+  if (!readNotificationsPreference()) return;
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const now = Date.now();
   for (const task of tasks) {
@@ -264,6 +374,7 @@ async function processMissedTaskReminders(tasks) {
 }
 
 function scheduleTaskReminders(tasks) {
+  if (!readNotificationsPreference()) return [];
   const timers = [];
   const now = Date.now();
   tasks.forEach((task) => {
@@ -363,6 +474,7 @@ async function ensureNotificationPermission() {
 }
 
 async function showAppNotification(body, options = {}) {
+  if (!readNotificationsPreference()) return false;
   if (!("Notification" in window) || Notification.permission !== "granted") return false;
   const notificationOptions = {
     body,
@@ -1304,7 +1416,10 @@ function Profile({
             <button
               type="button"
               className={`profile-notifications-btn ${notificationsEnabled ? "enabled" : ""}`}
-              onClick={onToggleNotifications}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleNotifications();
+              }}
               disabled={notificationsUnsupported}
             >
               {notificationsEnabled ? "🔕 Wyłącz powiadomienia" : "🔔 Włącz powiadomienia"}
@@ -1353,6 +1468,7 @@ export default function App() {
   const [rareDrops, setRareDrops] = useState(null);
   const [history, setHistory] = useState([]);
   const [levelThresholds, setLevelThresholds] = useState(DEFAULT_LEVEL_THRESHOLDS);
+  const [levelsMeta, setLevelsMeta] = useState(DEFAULT_LEVELS_META);
   const [challenges, setChallenges] = useState(null);
   const [toast, setToast] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
@@ -1364,7 +1480,7 @@ export default function App() {
   const [taskDate, setTaskDate] = useState(toDateStr(new Date()));
   const [important, setImportant] = useState(false);
   const [reminderOffset, setReminderOffset] = useState("");
-  const [notificationsEnabled, setNotificationsEnabled] = useState(() => ("Notification" in window ? Notification.permission === "granted" : false));
+  const [notificationsEnabled, setNotificationsEnabled] = useState(readNotificationsPreference);
   const [standalonePwa, setStandalonePwa] = useState(false);
   const notificationsUnsupported = !("Notification" in window);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
@@ -1377,6 +1493,8 @@ export default function App() {
   const processingTaskIdsRef = useRef(new Set());
   const levelThresholdsRef = useRef(levelThresholds);
   levelThresholdsRef.current = levelThresholds;
+  const levelsMetaRef = useRef(levelsMeta);
+  levelsMetaRef.current = levelsMeta;
 
   const beginGamificationUpdate = useCallback(() => {
     gamificationSeqRef.current += 1;
@@ -1427,7 +1545,7 @@ export default function App() {
   }, []);
 
   const applyGamificationFromTaskResponse = useCallback((data, { gamSeq, optimisticExpDelta }) => {
-    applyUserGamificationDelta(data, setUser, levelThresholdsRef, {
+    applyUserGamificationDelta(data, setUser, levelThresholdsRef, levelsMetaRef, {
       optimisticExpDelta,
       syncStreak: isLatestGamification(gamSeq),
     });
@@ -1448,10 +1566,12 @@ export default function App() {
     const permission = await ensureNotificationPermission();
     const enabled = permission === "granted";
     if (!enabled) {
+      writeNotificationsPreference(false);
       setNotificationsEnabled(false);
       showToast(permission === "unsupported" ? "Ta przeglądarka nie obsługuje powiadomień" : "Nie włączono powiadomień");
       return;
     }
+    writeNotificationsPreference(true);
     setNotificationsEnabled(true);
     const push = await subscribeToWebPush(headers);
     processMissedTaskReminders(tasks);
@@ -1467,16 +1587,22 @@ export default function App() {
   };
 
   const disableNotifications = async () => {
-    await unsubscribeFromWebPush(headers);
+    writeNotificationsPreference(false);
     setNotificationsEnabled(false);
+    await unsubscribeFromWebPush(headers);
     showToast("Powiadomienia wyłączone");
   };
 
   const toggleNotifications = async () => {
-    if (notificationsEnabled) {
-      await disableNotifications();
-    } else {
-      await enableNotifications();
+    try {
+      if (notificationsEnabled) {
+        await disableNotifications();
+      } else {
+        await enableNotifications();
+      }
+    } catch (err) {
+      console.error("[notifications] toggle failed:", err);
+      showToast("Nie udało się zmienić ustawień powiadomień");
     }
   };
 
@@ -1543,7 +1669,10 @@ export default function App() {
       setTasks(sortedTasks);
       
       setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
-      if (levelsRes.data?.length) setLevelThresholds(levelsRes.data.map(l => l.threshold));
+      if (levelsRes.data?.length) {
+        setLevelsMeta(levelsRes.data);
+        setLevelThresholds(levelsRes.data.map((l) => l.threshold));
+      }
       setChallenges(chRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
       setHistory(historyRes.data || []);
@@ -1660,18 +1789,29 @@ export default function App() {
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
 
-    setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? {
-      ...t,
-      completed: true,
-      exp_awarded: true,
-      exp_awarded_amount: expPreview.amount,
-      completed_at: new Date().toISOString(),
-    } : t))));
+    setTasks((prev) => {
+      const nextTasks = sortTasks(prev.map((t) => (t.id === task.id ? {
+        ...t,
+        completed: true,
+        exp_awarded: true,
+        exp_awarded_amount: expPreview.amount,
+        completed_at: new Date().toISOString(),
+      } : t)));
+      setAchievements((ach) => reconcileAchievementsOptimistic(nextTasks, ach));
+      return nextTasks;
+    });
     setUser((prev) => {
       if (!prev) return prev;
       const newExp = (prev.exp || 0) + expPreview.amount;
-      const levelInfo = getExpProgress(newExp, levelThresholdsRef.current);
-      return { ...prev, exp: newExp, level: levelInfo.current };
+      const derived = getGamificationFromExp(newExp, levelsMetaRef.current, levelThresholdsRef.current);
+      return {
+        ...prev,
+        exp: newExp,
+        level: derived.level,
+        title: derived.title,
+        next_level_exp: derived.next_level_exp,
+        next_level_title: derived.next_level_title,
+      };
     });
     setChallenges((prev) => adjustChallengesForTask(prev, task, true));
     showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
@@ -1715,7 +1855,7 @@ export default function App() {
         const res = await axios.patch(`${API}/tasks/${id}`, updates, { headers });
         if (isStaleRequest(taskKey, requestId)) return;
         if (res.data.task) patchTaskInState(id, res.data.task);
-        if (res.data.exp !== undefined) applyUserFromApiAbsolute(res.data, setUser, levelThresholdsRef);
+        if (res.data.exp !== undefined) applyUserFromApiAbsolute(res.data, setUser, levelThresholdsRef, levelsMetaRef);
         showToast("💾 Zapisano zmiany");
       } catch (err) {
         if (!isStaleRequest(taskKey, requestId)) {
@@ -1742,18 +1882,29 @@ export default function App() {
     const expToRevert = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     const optimisticExpDelta = -expToRevert;
 
-    setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? {
-      ...t,
-      completed: false,
-      exp_awarded: false,
-      exp_awarded_amount: 0,
-      completed_at: null,
-    } : t))));
+    setTasks((prev) => {
+      const nextTasks = sortTasks(prev.map((t) => (t.id === task.id ? {
+        ...t,
+        completed: false,
+        exp_awarded: false,
+        exp_awarded_amount: 0,
+        completed_at: null,
+      } : t)));
+      setAchievements((ach) => reconcileAchievementsOptimistic(nextTasks, ach));
+      return nextTasks;
+    });
     setUser((prev) => {
       if (!prev) return prev;
       const newExp = Math.max(0, (prev.exp || 0) - expToRevert);
-      const levelInfo = getExpProgress(newExp, levelThresholdsRef.current);
-      return { ...prev, exp: newExp, level: levelInfo.current };
+      const derived = getGamificationFromExp(newExp, levelsMetaRef.current, levelThresholdsRef.current);
+      return {
+        ...prev,
+        exp: newExp,
+        level: derived.level,
+        title: derived.title,
+        next_level_exp: derived.next_level_exp,
+        next_level_title: derived.next_level_title,
+      };
     });
     setChallenges((prev) => adjustChallengesForTask(prev, task, false));
     showToast("✅ Cofnięto ukończenie zadania");
@@ -1804,13 +1955,26 @@ export default function App() {
     const snapshot = { task: { ...task }, tasks: tasks, user: user ? { ...user } : null };
     const optimisticExpDelta = task.exp_awarded ? -(task.exp_awarded_amount || exp) : 0;
 
-    setTasks((prev) => prev.filter((t) => t.id !== task.id));
+    setTasks((prev) => {
+      const nextTasks = prev.filter((t) => t.id !== task.id);
+      if (task.exp_awarded) {
+        setAchievements((ach) => reconcileAchievementsOptimistic(nextTasks, ach));
+      }
+      return nextTasks;
+    });
     if (task.exp_awarded) {
       setUser((prev) => {
         if (!prev) return prev;
         const newExp = Math.max(0, (prev.exp || 0) - exp);
-        const levelInfo = getExpProgress(newExp, levelThresholdsRef.current);
-        return { ...prev, exp: newExp, level: levelInfo.current };
+        const derived = getGamificationFromExp(newExp, levelsMetaRef.current, levelThresholdsRef.current);
+        return {
+          ...prev,
+          exp: newExp,
+          level: derived.level,
+          title: derived.title,
+          next_level_exp: derived.next_level_exp,
+          next_level_title: derived.next_level_title,
+        };
       });
       setChallenges((prev) => adjustChallengesForTask(prev, task, false));
     }
@@ -1825,7 +1989,7 @@ export default function App() {
             { gamSeq, optimisticExpDelta },
           );
         } else {
-          applyUserFromApiAbsolute(res.data, setUser, levelThresholdsRef);
+          applyUserFromApiAbsolute(res.data, setUser, levelThresholdsRef, levelsMetaRef);
         }
         showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
       } catch (err) {
@@ -1848,7 +2012,7 @@ export default function App() {
   if (!token) return <Auth onLogin={handleLogin} />;
   if (!user) return <div className="app"><LoadingSpinner label="Ładowanie questów…" /></div>;
 
-  const { progress } = getExpProgress(user.exp, levelThresholds);
+  const { progress } = getGamificationFromExp(user.exp, levelsMeta, levelThresholds);
 
   return (
     <div className="app">
