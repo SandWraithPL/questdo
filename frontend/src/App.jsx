@@ -175,94 +175,7 @@ function countCompletedTasks(tasks) {
   return tasks.filter((t) => t.completed && t.exp_awarded).length;
 }
 
-function computeAchievementsOptimistic(tasks, achievements) {
-  if (!achievements) return achievements;
-  const completedCount = countCompletedTasks(tasks);
 
-  const ACHIEVEMENT_DEFS_TASK = [
-    { slug: "first_step", title: "Pierwszy krok", description: "Ukończ pierwszy quest.", icon: "🌟", value: 1 },
-    { slug: "second_bite", title: "Dobry start", description: "Ukończ 3 questy.", icon: "✨", value: 3 },
-    { slug: "scout_badge", title: "Dziesiątka zadań", description: "Ukończ 10 questów.", icon: "⚔️", value: 10 },
-    { slug: "veteran_wall", title: "Stały rytm", description: "Ukończ 25 questów.", icon: "🛡️", value: 25 },
-    { slug: "hundred_club", title: "Pięćdziesiątka", description: "Ukończ 50 questów.", icon: "🏆", value: 50 },
-    { slug: "mission_archive", title: "Archiwum zadań", description: "Ukończ 100 questów.", icon: "📜", value: 100 },
-    { slug: "invincible_grind", title: "Dwieście zadań", description: "Ukończ 200 questów.", icon: "💥", value: 200 },
-  ];
-
-  const unlocked = (achievements.unlocked || []).filter((ach) => {
-    const required = TASK_ACHIEVEMENT_REQUIREMENTS[ach.slug];
-    return required == null || completedCount >= required;
-  });
-
-  const unlockedSlugs = new Set(unlocked.map((a) => a.slug));
-  for (const def of ACHIEVEMENT_DEFS_TASK) {
-    if (!unlockedSlugs.has(def.slug) && completedCount >= def.value) {
-      unlocked.push({ slug: def.slug, title: def.title, description: def.description, icon: def.icon });
-      unlockedSlugs.add(def.slug);
-    }
-  }
-
-  let next = null;
-  for (const def of ACHIEVEMENT_DEFS_TASK) {
-    if (!unlockedSlugs.has(def.slug)) {
-      const current = Math.min(completedCount, def.value);
-      next = {
-        slug: def.slug,
-        title: def.title,
-        description: def.description,
-        icon: def.icon,
-        current,
-        target: def.value,
-        progress: `${current}/${def.value}`,
-      };
-      break;
-    }
-  }
-
-  return { unlocked, next };
-}
-
-function reconcileAchievementsOptimistic(tasks, achievements) {
-  if (!achievements) return achievements;
-  const completedCount = countCompletedTasks(tasks);
-  
-  const unlocked = (achievements.unlocked || []).filter((ach) => {
-    const required = TASK_ACHIEVEMENT_REQUIREMENTS[ach.slug];
-    return required == null || completedCount >= required;
-  });
-
-  const unlockedSlugs = new Set(unlocked.map((a) => a.slug));
-  const ACHIEVEMENT_DEFS_TASK = [
-    { slug: "first_step", title: "Pierwszy krok", description: "Ukończ pierwszy quest.", icon: "🌟", value: 1 },
-    { slug: "second_bite", title: "Dobry start", description: "Ukończ 3 questy.", icon: "✨", value: 3 },
-    { slug: "scout_badge", title: "Dziesiątka zadań", description: "Ukończ 10 questów.", icon: "⚔️", value: 10 },
-    { slug: "veteran_wall", title: "Stały rytm", description: "Ukończ 25 questów.", icon: "🛡️", value: 25 },
-    { slug: "hundred_club", title: "Pięćdziesiątka", description: "Ukończ 50 questów.", icon: "🏆", value: 50 },
-    { slug: "mission_archive", title: "Archiwum zadań", description: "Ukończ 100 questów.", icon: "📜", value: 100 },
-    { slug: "invincible_grind", title: "Dwieście zadań", description: "Ukończ 200 questów.", icon: "💥", value: 200 },
-  ];
-  for (const def of ACHIEVEMENT_DEFS_TASK) {
-    if (!unlockedSlugs.has(def.slug) && completedCount >= def.value) {
-      unlocked.push({ slug: def.slug, title: def.title, description: def.description, icon: def.icon });
-      unlockedSlugs.add(def.slug);
-    }
-  }
-  
-  let next = achievements.next;
-  if (next) {
-    const required = TASK_ACHIEVEMENT_REQUIREMENTS[next.slug];
-    if (required != null) {
-      const current = Math.min(completedCount, required);
-      next = {
-        ...next,
-        current,
-        target: required,
-        progress: `${current}/${required}`,
-      };
-    }
-  }
-  return { unlocked, next };
-}
 
 function Toast({ message }) {
   return <div className="toast">{message}</div>;
@@ -291,184 +204,12 @@ function sortTasks(list) {
   });
 }
 
-function makeRequestId(taskId) {
-  return `${Date.now()}-${taskId}`;
-}
 
-function getExpDeltaFromApi(data) {
-  return (data.exp_gained ?? 0) + (data.daily_bonus ?? 0);
-}
 
-function applyUserGamificationDelta(
-  data,
-  setUser,
-  levelThresholdsRef,
-  levelsMetaRef,
-  { optimisticExpDelta = 0, syncStreak = false } = {},
-) {
-  setUser((prev) => {
-    if (!prev) return prev;
-    // If the API returned an absolute exp value AND we are the latest gamification sequence,
-    // use it directly instead of delta arithmetic. This prevents ghost EXP caused by
-    // accumulated rounding or unexpected server-side bonuses/penalties.
-    // We still need to keep the optimistic delta in mind: if the API gave us an absolute
-    // value we can trust it fully; if not, fall back to delta math.
-    let exp;
-    if (data.exp != null) {
-      // Absolute from server — trust it. No delta math needed.
-      exp = Math.max(0, data.exp);
-    } else {
-      exp = Math.max(0, (prev.exp || 0) + getExpDeltaFromApi(data) - optimisticExpDelta);
-    }
-    const derived = getGamificationFromExp(exp, levelsMetaRef.current, levelThresholdsRef.current);
-    return {
-      ...prev,
-      exp,
-      level: data.level ?? derived.level,
-      title: data.title ?? derived.title,
-      next_level_exp: data.next_level_exp ?? derived.next_level_exp,
-      next_level_title: data.next_level_title ?? derived.next_level_title,
-      streak: syncStreak && data.streak != null ? data.streak : prev.streak,
-    };
-  });
-}
 
-function applyUserFromApiAbsolute(data, setUser, levelThresholdsRef, levelsMetaRef) {
-  setUser((prev) => {
-    if (!prev) return prev;
-    const exp = data.exp ?? prev.exp;
-    const derived = getGamificationFromExp(exp, levelsMetaRef.current, levelThresholdsRef.current);
-    return {
-      ...prev,
-      exp,
-      level: data.level ?? derived.level,
-      title: data.title ?? derived.title,
-      next_level_exp: data.next_level_exp ?? derived.next_level_exp,
-      next_level_title: data.next_level_title ?? derived.next_level_title,
-      streak: data.streak ?? prev.streak,
-    };
-  });
-}
 
-function applyGamificationResponse(data, { setChallenges, setAchievements, setRareDrops, setHistory }) {
-  if (data.challenges) setChallenges(data.challenges);
-  if (data.achievements) setAchievements(data.achievements);
-  if (data.rare_drops) setRareDrops(data.rare_drops);
-  if (data.history) setHistory(data.history);
-}
 
-function computeChallengesOptimistic(tasks, challenges) {
-  if (!challenges?.goals?.length) return challenges;
 
-  const today = toDateStr(new Date());
-
-  const done_today = tasks.filter((t) => {
-    if (!t.completed || !t.completed_at) return false;
-    const completedDate = new Date(t.completed_at);
-    const completedLocalDate = toDateStr(completedDate);
-    return completedLocalDate === today;
-  }).length;
-
-  const total_today = tasks.filter((t) => t.due_date === today).length;
-
-  const hard_done = tasks.filter((t) => {
-    if (!t.completed || !t.completed_at) return false;
-    const completedDate = new Date(t.completed_at);
-    const completedLocalDate = toDateStr(completedDate);
-    return completedLocalDate === today && t.difficulty === "hard";
-  }).length;
-
-  const medium_done = tasks.filter((t) => {
-    if (!t.completed || !t.completed_at) return false;
-    const completedDate = new Date(t.completed_at);
-    const completedLocalDate = toDateStr(completedDate);
-    return completedLocalDate === today && t.difficulty === "medium";
-  }).length;
-
-  const easy_done = tasks.filter((t) => {
-    if (!t.completed || !t.completed_at) return false;
-    const completedDate = new Date(t.completed_at);
-    const completedLocalDate = toDateStr(completedDate);
-    return completedLocalDate === today && t.difficulty === "easy";
-  }).length;
-
-  const categories_done = new Set(
-    tasks.filter((t) => {
-      if (!t.completed || !t.completed_at) return false;
-      const completedDate = new Date(t.completed_at);
-      const completedLocalDate = toDateStr(completedDate);
-      return completedLocalDate === today;
-    }).map((t) => t.category)
-  );
-
-  const done_due_today = tasks.filter((t) => t.due_date === today && t.completed).length;
-
-  const goals = challenges.goals.map((goal) => {
-    const qtype = goal.type;
-    const target = goal.target || 1;
-    let current = 0;
-
-    if (qtype === "complete_count") {
-      current = done_today;
-    } else if (qtype === "complete_difficulty") {
-      const diff = goal.difficulty;
-      if (diff === "hard") {
-        current = hard_done;
-      } else if (diff === "medium") {
-        current = medium_done;
-      } else {
-        current = easy_done;
-      }
-    } else if (qtype === "complete_difficulty_any") {
-      current = hard_done + medium_done;
-    } else if (qtype === "complete_category") {
-      const cat = goal.category;
-      current = categories_done.has(cat) ? 1 : 0;
-    } else if (qtype === "complete_all") {
-      current = done_due_today;
-    } else if (qtype === "complete_categories_distinct") {
-      current = categories_done.size;
-    } else {
-      return goal;
-    }
-
-    const clampedCurrent = Math.min(current, target);
-    const done = clampedCurrent >= target;
-
-    return {
-      ...goal,
-      current: clampedCurrent,
-      done,
-    };
-  });
-
-  const all_complete = goals.length > 0 && goals.every((g) => g.done);
-  const bonus_claimed = all_complete || challenges.bonus_claimed;
-
-  return {
-    ...challenges,
-    today_done: done_today,
-    goals,
-    all_complete,
-    bonus_claimed,
-  };
-}
-
-function adjustChallengesForTask(challenges, task, completed) {
-  if (!challenges?.goals?.length) return challenges;
-  const delta = completed ? 1 : -1;
-  const goals = challenges.goals.map((goal) => {
-    if (goal.type !== "complete_count") return goal;
-    const current = Math.min(goal.target, Math.max(0, goal.current + delta));
-    return { ...goal, current, done: current >= goal.target };
-  });
-  return {
-    ...challenges,
-    today_done: Math.max(0, (challenges.today_done || 0) + delta),
-    goals,
-    all_complete: goals.length > 0 && goals.every((g) => g.done),
-  };
-}
 
 function getTaskCheckState(task) {
   if (!task.completed) {
@@ -823,7 +564,7 @@ function readCalendarCollapsedPreference() {
   return true;
 }
 
-function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete, processingTaskIds = [] }) {
+function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete }) {
   const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
   const [view, setView] = useState("month");
   const [collapsed, setCollapsed] = useState(readCalendarCollapsedPreference);
@@ -940,7 +681,7 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
         {dayTasks.map(task => (
           <div key={task.id} className={`day-task ${task.completed ? "completed" : ""}`}>
             {task.completed ? <div className="task-check checked locked">✓</div> : (
-              <button type="button" className="task-check" disabled={processingTaskIds.includes(String(task.id))} onClick={() => onTaskToggle(task)} />
+              <button type="button" className="task-check" onClick={() => onTaskToggle(task)} />
             )}
             <div className="day-task-info">
               <strong>{task.important ? "Ważne · " : ""}{task.title}</strong>
@@ -951,7 +692,7 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
                 {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
               </div>
             </div>
-            <button type="button" disabled={processingTaskIds.includes(String(task.id))} onClick={() => onTaskDelete(task)}>🗑</button>
+            <button type="button" onClick={() => onTaskDelete(task)}>🗑</button>
           </div>
         ))}
       </div>
@@ -1231,15 +972,13 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
-function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck, processingTaskIds = [] }) {
+function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
 
   const handleToggleClick = (task) => {
-    if (processingTaskIds.includes(String(task.id))) return;
-
     if (task.completed) {
       if (canUncheckTask(task) && onUncheck) {
         onUncheck(task);
@@ -1340,9 +1079,9 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
               <button
                 type="button"
                 className={`task-check ${checkState.className}`}
-                disabled={processingTaskIds.includes(String(task.id)) || checkState.disabled}
+                disabled={checkState.disabled}
                 onClick={() => handleToggleClick(task)}
-                title={processingTaskIds.includes(String(task.id)) ? "Trwa synchronizacja…" : checkState.title}
+                title={checkState.title}
                 aria-label={checkState.title}
               >
                 {task.completed ? "✓" : ""}
@@ -1362,7 +1101,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
               </div>
               <div className="task-actions">
                 {!task.completed && <button className="icon-btn" onClick={() => startEdit(task)}>✏️</button>}
-                <button className="task-delete" disabled={processingTaskIds.includes(String(task.id))} onClick={() => onDelete(task)}>🗑</button>
+                <button className="task-delete" onClick={() => onDelete(task)}>🗑</button>
               </div>
             </>
           )}
@@ -1658,86 +1397,8 @@ export default function App() {
   const [standalonePwa, setStandalonePwa] = useState(false);
   const notificationsUnsupported = !("Notification" in window);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [processingTaskIds, setProcessingTaskIds] = useState([]);
-
-  const apiQueueRef = useRef([]);
-  const apiQueueRunningRef = useRef(false);
-  const lastRequestIdRef = useRef(new Map());
-  const gamificationSeqRef = useRef(0);
-  const processingTaskIdsRef = useRef(new Set());
-  const levelThresholdsRef = useRef(levelThresholds);
-  levelThresholdsRef.current = levelThresholds;
-  const levelsMetaRef = useRef(levelsMeta);
-  levelsMetaRef.current = levelsMeta;
-
-  const beginGamificationUpdate = useCallback(() => {
-    gamificationSeqRef.current += 1;
-    return gamificationSeqRef.current;
-  }, []);
-
-  const isLatestGamification = useCallback((seq) => gamificationSeqRef.current === seq, []);
 
   const headers = { Authorization: `Bearer ${token}` };
-  const gamificationSetters = { setChallenges, setAchievements, setRareDrops, setHistory };
-
-  const syncProcessingTaskIds = useCallback(() => {
-    setProcessingTaskIds([...processingTaskIdsRef.current]);
-  }, []);
-
-  const isTaskProcessing = useCallback((taskKey) => processingTaskIdsRef.current.has(String(taskKey)), []);
-
-  const isStaleRequest = useCallback((taskKey, requestId) => lastRequestIdRef.current.get(String(taskKey)) !== requestId, []);
-
-  const startTaskRequest = useCallback((taskKey) => {
-    const key = String(taskKey);
-    const requestId = makeRequestId(key);
-    lastRequestIdRef.current.set(key, requestId);
-    processingTaskIdsRef.current.add(key);
-    syncProcessingTaskIds();
-    return requestId;
-  }, [syncProcessingTaskIds]);
-
-  const finishTaskRequest = useCallback((taskKey, requestId) => {
-    const key = String(taskKey);
-    if (lastRequestIdRef.current.get(key) !== requestId) return;
-    processingTaskIdsRef.current.delete(key);
-    syncProcessingTaskIds();
-  }, [syncProcessingTaskIds]);
-
-  const enqueueApiJob = useCallback((job) => {
-    apiQueueRef.current.push(job);
-    const drainQueue = async () => {
-      if (apiQueueRunningRef.current) return;
-      apiQueueRunningRef.current = true;
-      while (apiQueueRef.current.length > 0) {
-        const nextJob = apiQueueRef.current.shift();
-        await nextJob();
-      }
-      apiQueueRunningRef.current = false;
-    };
-    drainQueue();
-  }, []);
-
-  const applyGamificationFromTaskResponse = useCallback((data, { gamSeq, optimisticExpDelta }) => {
-    applyUserGamificationDelta(data, setUser, levelThresholdsRef, levelsMetaRef, {
-      optimisticExpDelta,
-      syncStreak: isLatestGamification(gamSeq),
-    });
-    // Always update achievements immediately from API — the full list is authoritative.
-    // This ensures new achievements appear as soon as the API responds, regardless of
-    // request ordering. We never skip this update because data.achievements is additive
-    // (the server always returns the complete unlocked list).
-    if (data.achievements) setAchievements(data.achievements);
-    if (isLatestGamification(gamSeq)) {
-      if (data.challenges) setChallenges(data.challenges);
-      if (data.rare_drops) setRareDrops(data.rare_drops);
-      if (data.history) setHistory(data.history);
-    }
-  }, [isLatestGamification]);
-
-  const patchTaskInState = useCallback((taskId, patch) => {
-    setTasks((prev) => sortTasks(prev.map((t) => (t.id === taskId ? { ...t, ...patch } : t))));
-  }, []);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
@@ -1771,7 +1432,7 @@ export default function App() {
     writeNotificationsPreference(false);
     setNotificationsEnabled(false);
     await unsubscribeFromWebPush(headers);
-    showToast("Powiadomienia wyłączone");
+    showToast("Powiadomienia wyłączone. Aby całkowicie wyłączyć powiadomienia w przeglądarce, zmień ustawienia w menedżerze uprawnień.");
   };
 
   const toggleNotifications = async () => {
@@ -1864,32 +1525,6 @@ export default function App() {
     }
   };
 
-  const showToggleRewards = (data) => {
-    const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop, revoked_achievements } = data;
-    if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
-    if (earned_drop) {
-      showToast(`✨ Zdobyto ${earned_drop.icon} ${earned_drop.name}! ${earned_drop.description}`);
-      showAppNotification(`Nowa znajdźka: ${earned_drop.icon} ${earned_drop.name} — ${earned_drop.description}`);
-    }
-    // Show notifications for ALL newly unlocked achievements (not just the first one)
-    const allNewAchievements = [...(new_achievements || []), ...(new_exclusive_achievements || [])];
-    if (allNewAchievements.length > 0) {
-      allNewAchievements.forEach((ach, index) => {
-        setTimeout(() => {
-          showToast(`🏆 Odblokowano: ${ach.title}! ${ach.icon}`);
-          showAppNotification(`Nowe osiągnięcie: ${ach.icon} ${ach.title} — ${ach.description}`);
-        }, index * 500); // Stagger notifications if multiple achievements
-      });
-    }
-    // Show notifications for revoked achievements
-    if (revoked_achievements && revoked_achievements.length > 0) {
-      revoked_achievements.forEach((ach, index) => {
-        setTimeout(() => {
-          showToast(`⚠️ Osiągnięcie cofnięte: ${ach.title} ${ach.icon}`);
-        }, index * 300);
-      });
-    }
-  };
 
   useEffect(() => {
     let cleanup;
@@ -1908,12 +1543,11 @@ export default function App() {
     }
   }, []);
 
-  const addTask = () => {
+  const addTask = async () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
 
     const savedDate = taskDate;
     const tempId = `temp-${Date.now()}`;
-    if (isTaskProcessing(tempId)) return;
 
     const apiPayload = {
       title,
@@ -1938,7 +1572,7 @@ export default function App() {
       exp_awarded_amount: 0,
     };
 
-    const requestId = startTaskRequest(tempId);
+    // Optimistically add task to UI
     setTasks((prev) => sortTasks([...prev, tempTask]));
     setTitle("");
     setDesc("");
@@ -1946,215 +1580,95 @@ export default function App() {
     setReminderOffset("");
     setShowAddTask(false);
 
-    enqueueApiJob(async () => {
-      let serverId = null;
-      try {
-        const res = await axios.post(`${API}/tasks`, apiPayload, { headers });
-        if (isStaleRequest(tempId, requestId)) return;
-        serverId = res.data.id;
-        setTasks((prev) => sortTasks(prev.map((t) => (t.id === tempId ? { ...tempTask, id: serverId } : t))));
-        lastRequestIdRef.current.delete(String(tempId));
-        lastRequestIdRef.current.set(String(serverId), requestId);
-        processingTaskIdsRef.current.delete(String(tempId));
-        processingTaskIdsRef.current.add(String(serverId));
-        syncProcessingTaskIds();
-        showToast(`✅ Dodano quest na ${savedDate}`);
-      } catch (err) {
-        console.error("[addTask] API error:", err);
-        if (!isStaleRequest(tempId, requestId)) {
-          setTasks((prev) => prev.filter((t) => t.id !== tempId));
-          showToast(err.response?.data?.detail || "Błąd dodawania");
-        }
-      } finally {
-        finishTaskRequest(serverId ?? tempId, requestId);
-      }
-    });
+    try {
+      await axios.post(`${API}/tasks`, apiPayload, { headers });
+      // Fetch all data from API on success
+      await fetchData();
+      showToast(`✅ Dodano quest na ${savedDate}`);
+    } catch (err) {
+      console.error("[addTask] API error:", err);
+      // Rollback: remove temp task from UI
+      setTasks((prev) => prev.filter((t) => t.id !== tempId));
+      showToast(err.response?.data?.detail || "Błąd dodawania");
+    }
   };
 
-  const toggleTask = (task) => {
-    if (task.completed || isTaskProcessing(task.id)) return;
+  const toggleTask = async (task) => {
+    if (task.completed) return;
 
-    const taskKey = task.id;
-    const requestId = startTaskRequest(taskKey);
-    const gamSeq = beginGamificationUpdate();
-    const snapshot = { task: { ...task }, user: user ? { ...user } : null, challenges: challenges ? { ...challenges } : null, achievements: achievements ? { ...achievements } : null };
-    const expPreview = getExpPreview(task.difficulty, task.due_date);
-    const optimisticExpDelta = expPreview.amount;
+    const snapshot = { ...task };
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
 
-    // Optimistically update the task
-    const nextTasks = sortTasks(tasks.map((t) => (t.id === task.id ? {
+    // Optimistically update task UI only (no numerical data)
+    setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? {
       ...t,
       completed: true,
-      exp_awarded: true,
-      exp_awarded_amount: expPreview.amount,
       completed_at: new Date().toISOString(),
-    } : t)));
+    } : t))));
 
-    // Compute optimistic challenges and achievements
-    const optimisticChallenges = computeChallengesOptimistic(nextTasks, challenges);
-    const optimisticAchievements = computeAchievementsOptimistic(nextTasks, achievements);
-
-    // Check if completing this task would complete all daily challenges (for optimistic daily bonus)
-    const willCompleteAllDaily = optimisticChallenges?.goals?.length > 0 && optimisticChallenges.goals.every((g) => g.done || g.current >= g.target);
-    const dailyBonusExp = challenges?.triple_bonus_exp || 35;
-    const optimisticDailyBonus = willCompleteAllDaily && !challenges?.bonus_claimed ? dailyBonusExp : 0;
-    const totalOptimisticExp = expPreview.amount + optimisticDailyBonus;
-
-    // Single setState for all data to avoid UI flickering
-    setTasks(nextTasks);
-    setAchievements(optimisticAchievements);
-    setUser((prev) => {
-      if (!prev) return prev;
-      const newExp = (prev.exp || 0) + totalOptimisticExp;
-      const derived = getGamificationFromExp(newExp, levelsMetaRef.current, levelThresholdsRef.current);
-      return {
-        ...prev,
-        exp: newExp,
-        level: derived.level,
-        title: derived.title,
-        next_level_exp: derived.next_level_exp,
-        next_level_title: derived.next_level_title,
-      };
-    });
-    setChallenges(optimisticChallenges);
-    showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}${optimisticDailyBonus > 0 ? ` 🎉 Bonus dzienny +${optimisticDailyBonus} EXP` : ""}`);
-
-    enqueueApiJob(async () => {
-      try {
-        const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-        if (isStaleRequest(taskKey, requestId)) return;
-        const data = res.data;
-        if (data.task) patchTaskInState(task.id, data.task);
-        // Apply API response, but subtract the optimistic daily bonus if we added it
-        const apiExpDelta = getExpDeltaFromApi(data);
-        const correctedOptimisticDelta = optimisticExpDelta + optimisticDailyBonus;
-        applyGamificationFromTaskResponse(data, { gamSeq, optimisticExpDelta: correctedOptimisticDelta });
-        if (isLatestGamification(gamSeq)) showToggleRewards(data);
-      } catch (err) {
-        console.error("[toggleTask] API error:", err);
-        if (!isStaleRequest(taskKey, requestId)) {
-          setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? snapshot.task : t))));
-          if (snapshot.user) setUser(snapshot.user);
-          if (snapshot.challenges) setChallenges(snapshot.challenges);
-          if (snapshot.achievements) setAchievements(snapshot.achievements);
-          showToast(err.response?.data?.detail || "Błąd aktualizacji");
-        }
-      } finally {
-        finishTaskRequest(taskKey, requestId);
-      }
-    });
+    try {
+      await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
+      // Fetch all data from API on success
+      await fetchData();
+      const expPreview = getExpPreview(task.difficulty, task.due_date);
+      showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
+    } catch (err) {
+      console.error("[toggleTask] API error:", err);
+      // Rollback: restore task state
+      setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? snapshot : t))));
+      showToast(err.response?.data?.detail || "Błąd aktualizacji");
+    }
   };
 
   const saveTask = async (id, updates) => {
-    if (isTaskProcessing(id)) return;
-
-    const taskKey = id;
-    const requestId = startTaskRequest(taskKey);
     const snapshot = tasks.find((t) => t.id === id);
-    if (!snapshot) {
-      finishTaskRequest(taskKey, requestId);
-      return;
-    }
+    if (!snapshot) return;
 
+    // Optimistically update task UI
     setTasks((prev) => sortTasks(prev.map((t) => (t.id === id ? { ...t, ...updates } : t))));
 
-    enqueueApiJob(async () => {
-      try {
-        const res = await axios.patch(`${API}/tasks/${id}`, updates, { headers });
-        if (isStaleRequest(taskKey, requestId)) return;
-        if (res.data.task) patchTaskInState(id, res.data.task);
-        if (res.data.exp !== undefined) applyUserFromApiAbsolute(res.data, setUser, levelThresholdsRef, levelsMetaRef);
-        showToast("💾 Zapisano zmiany");
-      } catch (err) {
-        if (!isStaleRequest(taskKey, requestId)) {
-          patchTaskInState(id, snapshot);
-          showToast(err.response?.data?.detail || "Błąd zapisu");
-        }
-      } finally {
-        finishTaskRequest(taskKey, requestId);
-      }
-    });
+    try {
+      await axios.patch(`${API}/tasks/${id}`, updates, { headers });
+      // Fetch all data from API on success
+      await fetchData();
+      showToast("💾 Zapisano zmiany");
+    } catch (err) {
+      // Rollback: restore task state
+      setTasks((prev) => sortTasks(prev.map((t) => (t.id === id ? snapshot : t))));
+      showToast(err.response?.data?.detail || "Błąd zapisu");
+    }
   };
 
-  const uncheckTask = (task) => {
+  const uncheckTask = async (task) => {
     if (!canUncheckTask(task)) {
       showToast("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
       return;
     }
-    if (isTaskProcessing(task.id)) return;
 
-    const taskKey = task.id;
-    const requestId = startTaskRequest(taskKey);
-    const gamSeq = beginGamificationUpdate();
-    const snapshot = { task: { ...task }, user: user ? { ...user } : null, challenges: challenges ? { ...challenges } : null, achievements: achievements ? { ...achievements } : null };
-    const expToRevert = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
-    const optimisticExpDelta = -expToRevert;
+    const snapshot = { ...task };
 
-    // Optimistically update the task
-    const nextTasks = sortTasks(tasks.map((t) => (t.id === task.id ? {
+    // Optimistically update task UI only (no numerical data)
+    setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? {
       ...t,
       completed: false,
       exp_awarded: false,
       exp_awarded_amount: 0,
       completed_at: null,
-    } : t)));
+    } : t))));
 
-    // Compute optimistic challenges and achievements
-    const optimisticChallenges = computeChallengesOptimistic(nextTasks, challenges);
-    const optimisticAchievements = computeAchievementsOptimistic(nextTasks, achievements);
-
-    // Check if unchecking this task would revoke the daily bonus
-    const willRevokeDailyBonus = challenges?.bonus_claimed && optimisticChallenges?.goals?.length > 0 && !optimisticChallenges.goals.every((g) => g.done || g.current >= g.target);
-    const dailyBonusExp = challenges?.triple_bonus_exp || 35;
-    const optimisticDailyBonusRevert = willRevokeDailyBonus ? dailyBonusExp : 0;
-    const totalOptimisticExpRevert = expToRevert + optimisticDailyBonusRevert;
-
-    // Single setState for all data to avoid UI flickering
-    setTasks(nextTasks);
-    setAchievements(optimisticAchievements);
-    setUser((prev) => {
-      if (!prev) return prev;
-      const newExp = Math.max(0, (prev.exp || 0) - totalOptimisticExpRevert);
-      const derived = getGamificationFromExp(newExp, levelsMetaRef.current, levelThresholdsRef.current);
-      return {
-        ...prev,
-        exp: newExp,
-        level: derived.level,
-        title: derived.title,
-        next_level_exp: derived.next_level_exp,
-        next_level_title: derived.next_level_title,
-      };
-    });
-    setChallenges(optimisticChallenges);
     showToast("✅ Cofnięto ukończenie zadania");
-    if (optimisticDailyBonusRevert > 0) {
-      setTimeout(() => showToast(`⚠️ Bonus dzienny cofnięty (-${optimisticDailyBonusRevert} EXP)`), 500);
-    }
 
-    enqueueApiJob(async () => {
-      try {
-        const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
-        if (isStaleRequest(taskKey, requestId)) return;
-        const data = res.data;
-        if (data.task) patchTaskInState(task.id, data.task);
-        // Apply API response, but account for the optimistic daily bonus revert
-        const correctedOptimisticDelta = -totalOptimisticExpRevert;
-        applyGamificationFromTaskResponse(data, { gamSeq, optimisticExpDelta: correctedOptimisticDelta });
-      } catch (err) {
-        console.error("[uncheckTask] API error:", err);
-        if (!isStaleRequest(taskKey, requestId)) {
-          setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? snapshot.task : t))));
-          if (snapshot.user) setUser(snapshot.user);
-          if (snapshot.challenges) setChallenges(snapshot.challenges);
-          if (snapshot.achievements) setAchievements(snapshot.achievements);
-          showToast(err.response?.data?.detail || "Błąd cofania ukończenia");
-        }
-      } finally {
-        finishTaskRequest(taskKey, requestId);
-      }
-    });
+    try {
+      await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
+      // Fetch all data from API on success
+      await fetchData();
+    } catch (err) {
+      console.error("[uncheckTask] API error:", err);
+      // Rollback: restore task state
+      setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? snapshot : t))));
+      showToast(err.response?.data?.detail || "Błąd cofania ukończenia");
+    }
   };
   
   const deleteAccount = async (password, onDone) => { 
@@ -2171,76 +1685,27 @@ export default function App() {
     } 
   };
   
-  const deleteTask = (task) => {
-    if (isTaskProcessing(task.id)) return;
-
+  const deleteTask = async (task) => {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
 
-    const taskKey = task.id;
-    const requestId = startTaskRequest(taskKey);
-    const gamSeq = beginGamificationUpdate();
-    const snapshot = { task: { ...task }, tasks: tasks, user: user ? { ...user } : null, challenges: challenges ? { ...challenges } : null, achievements: achievements ? { ...achievements } : null };
-    const optimisticExpDelta = task.exp_awarded ? -(task.exp_awarded_amount || exp) : 0;
+    const snapshot = { task: { ...task }, tasks: [...tasks] };
 
-    // Optimistically update the task
-    const nextTasks = sortTasks(tasks.filter((t) => t.id !== task.id));
+    // Optimistically remove task from UI only (no numerical data)
+    setTasks((prev) => sortTasks(prev.filter((t) => t.id !== task.id)));
 
-    // Compute optimistic challenges and achievements if task was completed
-    let optimisticChallenges = challenges;
-    let optimisticAchievements = achievements;
-    if (task.exp_awarded) {
-      optimisticChallenges = computeChallengesOptimistic(nextTasks, challenges);
-      optimisticAchievements = computeAchievementsOptimistic(nextTasks, achievements);
+    try {
+      await axios.delete(`${API}/tasks/${task.id}`, { headers });
+      // Fetch all data from API on success
+      await fetchData();
+      showToast("🗑️ Usunięto quest");
+    } catch (err) {
+      console.error("[deleteTask] API error:", err);
+      // Rollback: restore task list
+      setTasks(sortTasks(snapshot.tasks));
+      if (err.response?.status === 404) showToast("Zadanie już nie istnieje");
+      else showToast(err.response?.data?.detail || "Błąd usuwania");
     }
-
-    // Single setState for all data to avoid UI flickering
-    setTasks(nextTasks);
-    if (task.exp_awarded) {
-      setAchievements(optimisticAchievements);
-      setUser((prev) => {
-        if (!prev) return prev;
-        const newExp = Math.max(0, (prev.exp || 0) - exp);
-        const derived = getGamificationFromExp(newExp, levelsMetaRef.current, levelThresholdsRef.current);
-        return {
-          ...prev,
-          exp: newExp,
-          level: derived.level,
-          title: derived.title,
-          next_level_exp: derived.next_level_exp,
-          next_level_title: derived.next_level_title,
-        };
-      });
-      setChallenges(optimisticChallenges);
-    }
-
-    enqueueApiJob(async () => {
-      try {
-        const res = await axios.delete(`${API}/tasks/${task.id}`, { headers });
-        if (isStaleRequest(taskKey, requestId)) return;
-        if (task.exp_awarded) {
-          applyGamificationFromTaskResponse(
-            { ...res.data, exp_gained: -(res.data.exp_removed || exp), daily_bonus: 0 },
-            { gamSeq, optimisticExpDelta },
-          );
-        } else {
-          applyUserFromApiAbsolute(res.data, setUser, levelThresholdsRef, levelsMetaRef);
-        }
-        showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
-      } catch (err) {
-        console.error("[deleteTask] API error:", err);
-        if (!isStaleRequest(taskKey, requestId)) {
-          setTasks(sortTasks(snapshot.tasks));
-          if (snapshot.user) setUser(snapshot.user);
-          if (snapshot.challenges) setChallenges(snapshot.challenges);
-          if (snapshot.achievements) setAchievements(snapshot.achievements);
-          if (err.response?.status === 404) showToast("Zadanie już nie istnieje");
-          else showToast(err.response?.data?.detail || "Błąd usuwania");
-        }
-      } finally {
-        finishTaskRequest(taskKey, requestId);
-      }
-    });
   };
   
   const logout = () => { localStorage.removeItem("token"); setToken(null); setUser(null); };
@@ -2277,8 +1742,8 @@ export default function App() {
       />
       <PlayerSummary user={user} progress={progress} />
       <ChallengesBar challenges={challenges} />
-      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} processingTaskIds={processingTaskIds} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} processingTaskIds={processingTaskIds} />
+      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">
@@ -2297,8 +1762,8 @@ export default function App() {
           </div>
           {(() => { const p = getExpPreview(difficulty, taskDate); const info = EXP_TIMING_LABELS[p.timing]; return <p className="exp-preview-hint">Ukończ dziś: <strong>+{p.amount} EXP</strong> ({info.text})</p>; })()}
           <div className="row">
-            <button onClick={addTask} disabled={processingTaskIds.some((id) => String(id).startsWith("temp-"))}>{processingTaskIds.some((id) => String(id).startsWith("temp-")) ? "Dodawanie…" : "Dodaj Quest"}</button>
-            <button onClick={() => setShowAddTask(false)} className="cancel-btn" disabled={processingTaskIds.some((id) => String(id).startsWith("temp-"))}>Anuluj</button>
+            <button onClick={addTask}>Dodaj Quest</button>
+            <button onClick={() => setShowAddTask(false)} className="cancel-btn">Anuluj</button>
           </div>
         </div>
       )}
