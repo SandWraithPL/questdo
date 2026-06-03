@@ -570,6 +570,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
   const [filter, setFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
+  const [togglingTaskId, setTogglingTaskId] = useState(null);
 
   const canUncheckTask = (task) => {
     if (!task.completed || !task.completed_at) return false;
@@ -581,16 +582,23 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
 
   // Unified toggle function - handles both completing and uncompleting
   const handleToggleClick = (task) => {
+    // Prevent multiple simultaneous clicks on the same task
+    if (togglingTaskId === task.id) {
+      return;
+    }
+
     if (task.completed) {
       // Task is completed - try to uncheck if within 24h
       if (canUncheckTask(task) && onUncheck) {
-        onUncheck(task);
+        setTogglingTaskId(task.id);
+        onUncheck(task).finally(() => setTogglingTaskId(null));
       } else if (!canUncheckTask(task)) {
         onError("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
       }
     } else {
       // Task is not completed - complete it
-      onToggle(task);
+      setTogglingTaskId(task.id);
+      onToggle(task).finally(() => setTogglingTaskId(null));
     }
   };
 
@@ -678,7 +686,11 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
             </div>
           ) : (
             <>
-              <button className="task-check" onClick={() => handleToggleClick(task)}>
+              <button 
+                className={`task-check ${task.completed && !canUncheckTask(task) ? "locked" : ""}`} 
+                onClick={() => handleToggleClick(task)}
+                title={task.completed && !canUncheckTask(task) ? "Nie można odznaczyć (minęło więcej niż 24h)" : ""}
+              >
                 {task.completed ? "✓" : ""}
               </button>
               <div className="task-info">
@@ -690,6 +702,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
                   <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>
                   {!task.exp_awarded && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = EXP_TIMING_LABELS[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
                   {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
+                  {task.completed && !canUncheckTask(task) && <span className="badge locked-badge">🔒 Zablokowane</span>}
                 </div>
               </div>
               <div className="task-actions">
@@ -1060,6 +1073,13 @@ export default function App() {
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] toggleTask START - task_id: ${task.id}, title: ${task.title}`);
     
+    // Check if task is still in expected state before API call
+    const currentTask = tasks.find(t => t.id === task.id);
+    if (!currentTask || currentTask.completed) {
+      console.log(`[${timestamp}] toggleTask ABORT - task already completed or not found`);
+      return;
+    }
+    
     const expPreview = getExpPreview(task.difficulty, task.due_date);
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
@@ -1183,6 +1203,13 @@ export default function App() {
 
     const timestamp = new Date().toISOString();
     console.log(`[${timestamp}] uncheckTask START - task_id: ${task.id}, title: ${task.title}`);
+
+    // Check if task is still in expected state before API call
+    const currentTask = tasks.find(t => t.id === task.id);
+    if (!currentTask || !currentTask.completed) {
+      console.log(`[${timestamp}] uncheckTask ABORT - task already uncompleted or not found`);
+      return;
+    }
 
     const originalTask = { ...task };
     const expToRevert = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;

@@ -709,6 +709,28 @@ def update_task(task_id: int, task_update: TaskUpdate,
     earned_drop = None
     fields_set = getattr(task_update, "model_fields_set", getattr(task_update, "__fields_set__", set()))
 
+    # Idempotent check: if task is already in target state, return current state without changes
+    if task_update.completed is not None and task_update.completed == was_completed:
+        print(f"[update_task] Task {task_id} already in target completed state: {was_completed}")
+        level, title, _, _ = gc.get_level(current_user.exp)
+        return {
+            "message": "No change needed",
+            "exp": current_user.exp,
+            "level": level,
+            "title": title,
+            "streak": current_user.streak,
+            "exp_gained": 0,
+            "exp_timing": None,
+            "daily_bonus": 0,
+            "exp_awarded": task.exp_awarded,
+            "task": task_to_dict(task),
+            "challenges": build_challenges_payload(current_user, db),
+            "new_achievements": [],
+            "new_exclusive_achievements": [],
+            "level_ups": [],
+            "earned_drop": None,
+        }
+
     if task_update.due_date is not None:
         if not task_can_reschedule(task):
             raise HTTPException(
