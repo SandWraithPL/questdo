@@ -971,7 +971,16 @@ export default function App() {
       
       const newUnlocked = achRes.data.unlocked || [];
       
-      setUser(userRes.data);
+      // Nie nadpisuj exp i streak, jeśli użytkownik ma już wyższe wartości (optimistic UI)
+      setUser(prev => {
+        if (!prev) return userRes.data;
+        return {
+          ...userRes.data,
+          // Zachowaj wyższe wartości (optymistyczne)
+          exp: Math.max(prev.exp || 0, userRes.data.exp || 0),
+          streak: Math.max(prev.streak || 0, userRes.data.streak || 0),
+        };
+      });
       setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
       setHistory(historyRes.data || []);
@@ -1042,29 +1051,40 @@ export default function App() {
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
     
-    // Optimistic UI update - set exp_awarded immediately and sort
+    // 1. Optimistic UI update - set exp_awarded immediately and sort
     setTasks(prev => {
       const updated = prev.map(t => t.id === task.id ? { ...t, completed: true, exp_awarded: true, exp_awarded_amount: expPreview.amount } : t);
-      // Sort: uncompleted on top (by date ascending), completed at bottom (by date ascending)
       return updated.sort((a, b) => {
-        if (a.completed !== b.completed) {
-          return a.completed ? 1 : -1; // uncompleted first
-        }
-        return new Date(a.due_date) - new Date(b.due_date); // by date ascending
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        return new Date(a.due_date) - new Date(b.due_date);
       });
     });
+    
+    // 2. Natychmiastowa aktualizacja EXP w stanie user (bez czekania na API)
+    setUser(prev => prev ? { ...prev, exp: (prev.exp || 0) + expPreview.amount } : prev);
+    
     showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
     
     try {
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-      const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop, exp_gained, exp_timing, challenges } = res.data;
+      const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop, exp_gained, exp_timing, challenges, streak } = res.data;
       
       console.log('[toggleTask] PATCH response challenges:', challenges);
       
-      // Update with real data from API (if different from optimistic)
+      // 3. Aktualizacja z danymi z API (tylko jeśli różne od optymistycznych)
       setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true, exp_awarded: true, exp_awarded_amount: exp_gained || expPreview.amount } : t));
       
-      // Update challenges immediately from response
+      // 4. Inkrementalna aktualizacja user.exp (poprawka ewentualnej różnicy)
+      if (exp_gained && exp_gained !== expPreview.amount) {
+        setUser(prev => prev ? { ...prev, exp: (prev.exp || 0) + (exp_gained - expPreview.amount) } : prev);
+      }
+      
+      // 5. Aktualizacja streaka z odpowiedzi API
+      if (streak !== undefined) {
+        setUser(prev => prev ? { ...prev, streak: streak } : prev);
+      }
+      
+      // 6. Update challenges immediately from response
       if (challenges) {
         setChallenges(challenges);
       }
@@ -1082,13 +1102,14 @@ export default function App() {
         showAppNotification("Nowe osiągnięcie", `${freshAchievement.title}: ${freshAchievement.description}`);
       }
       
-      // Refresh user data and challenges in background (don't block UI, don't overwrite tasks)
+      // 7. Odśwież dane użytkownika (ale tylko jeśli to konieczne - nie nadpisuj exp)
       refreshUserData();
       fetchChallenges();
     } catch (err) {
       console.error('[toggleTask] API error:', err);
-      // Rollback on error
+      // Rollback on error - przywróć poprzednie wartości
       setTasks(prev => prev.map(t => t.id === task.id ? task : t));
+      setUser(prev => prev ? { ...prev, exp: (prev.exp || 0) - expPreview.amount } : prev);
       showToast(err.response?.data?.detail || "Błąd aktualizacji");
     }
   };

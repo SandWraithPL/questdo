@@ -763,22 +763,36 @@ def update_task(task_id: int, task_update: TaskUpdate,
             
             # Revert streak - recalculate based on remaining completed tasks
             all_tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
-            completed_dates = sorted({t.due_date for t in all_tasks if t.completed}, reverse=True)
-            if completed_dates:
-                latest_date = completed_dates[0]
-                if latest_date == date.today():
-                    # Still have tasks completed today, keep streak
-                    pass
-                elif latest_date == date.today() - timedelta(days=1):
-                    # Latest completed task was yesterday, streak might need adjustment
-                    current_user.streak = len(completed_dates)
+            completed_tasks = [t for t in all_tasks if t.completed and t.completed_at]
+            # Sort by completion date (newest first)
+            completed_tasks.sort(key=lambda t: t.completed_at, reverse=True)
+            
+            # Recalculate streak: count consecutive days from today backwards
+            today = date.today()
+            streak = 0
+            last_date = None
+            
+            for t in completed_tasks:
+                task_date = t.completed_at.date()
+                if last_date is None:
+                    # First completed task
+                    if task_date == today or task_date == today - timedelta(days=1):
+                        streak = 1
+                        last_date = task_date
+                    else:
+                        break
                 else:
-                    # Gap in completion, reset streak
-                    current_user.streak = len(completed_dates)
-                current_user.last_streak_date = latest_date
-            else:
-                current_user.streak = 0
-                current_user.last_streak_date = None
+                    # Check if this task was completed on the day before last_date
+                    if task_date == last_date - timedelta(days=1):
+                        streak += 1
+                        last_date = task_date
+                    else:
+                        break
+            
+            current_user.streak = streak
+            current_user.last_streak_date = last_date if streak > 0 else None
+            
+            print(f"[uncheck] Recalculated streak: {streak}, last_date: {last_date}")
             
             # Remove rare drops obtained for this task
             drops_to_remove = db.query(models.PlayerRareDrop).filter(
