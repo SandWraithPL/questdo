@@ -561,11 +561,12 @@ def reconcile_standard_achievements(
     user: models.User,
     db: Session,
     task: Optional[models.Task] = None,
-) -> list[dict]:
+) -> dict:
     """Synchronizuje standardowe osiągnięcia ze statystykami (odblokowuje i cofa)."""
     stats = gc.gather_user_stats(user, db, models)
     unlocked_slugs = get_unlocked_slugs(user.id, db)
     newly_unlocked = []
+    revoked = []
     for ach_def in gc.ACHIEVEMENT_DEFS:
         slug = ach_def["slug"]
         met = gc.achievement_met(stats, ach_def)
@@ -576,8 +577,9 @@ def reconcile_standard_achievements(
                 unlocked_slugs.add(slug)
         elif not met and slug in unlocked_slugs:
             revoke_standard_achievement(user.id, slug, db)
+            revoked.append({"slug": slug, "title": ach_def["title"], "icon": ach_def["icon"]})
             unlocked_slugs.discard(slug)
-    return newly_unlocked
+    return {"newly_unlocked": newly_unlocked, "revoked": revoked}
 
 
 def remove_rewards_for_task(user: models.User, task: models.Task, db: Session) -> None:
@@ -872,16 +874,16 @@ def unlock_exclusive_with_history(user: models.User, ea_def: dict, task: models.
 
 def grant_completion_rewards(user: models.User, task: models.Task, db: Session) -> dict:
     """Natychmiast tylko standardowe osiągnięcia; znajdźki i ekskluzywne po 24h."""
-    achievements = reconcile_standard_achievements(user, db, task=task)
-    return {"achievements": achievements, "exclusive_achievements": [], "earned_drop": None}
+    result = reconcile_standard_achievements(user, db, task=task)
+    return {"achievements": result["newly_unlocked"], "revoked_achievements": result["revoked"], "exclusive_achievements": [], "earned_drop": None}
 
 
 def refresh_player_rewards(user: models.User, db: Session, task: Optional[models.Task] = None) -> dict:
     """Pełna synchronizacja standardowych osiągnięć (GET /achievements)."""
-    achievements = reconcile_standard_achievements(user, db, task=task)
-    if achievements:
+    result = reconcile_standard_achievements(user, db, task=task)
+    if result["newly_unlocked"] or result["revoked"]:
         db.commit()
-    return {"achievements": achievements, "exclusive_achievements": []}
+    return {"achievements": result["newly_unlocked"], "revoked_achievements": result["revoked"], "exclusive_achievements": []}
 
 
 def refresh_all_player_rewards(db: Session) -> None:
@@ -1212,6 +1214,16 @@ def update_task(task_id: int, task_update: TaskUpdate,
             print(f"[uncheck] Recalculated streak: {streak}, last_date: {last_date}")
             
             remove_rewards_for_task(current_user, task, db)
+            # Get revoked achievements after removing rewards
+            stats = gc.gather_user_stats(current_user, db, models)
+            unlocked_slugs_before = get_unlocked_slugs(current_user.id, db)
+            reconcile_standard_achievements(current_user, db)
+            unlocked_slugs_after = get_unlocked_slugs(current_user.id, db)
+            revoked_achievements = []
+            for slug in unlocked_slugs_before - unlocked_slugs_after:
+                ach_def = gc.ACHIEVEMENT_BY_SLUG.get(slug)
+                if ach_def:
+                    revoked_achievements.append({"slug": slug, "title": ach_def["title"], "icon": ach_def["icon"]})
             level_ups.extend(record_level_ups(current_user, current_user.exp, db))
             
             # Revert daily bonus if no longer all quests complete
@@ -1225,6 +1237,10 @@ def update_task(task_id: int, task_update: TaskUpdate,
                     current_user.exp = max(0, current_user.exp - dq.TRIPLE_BONUS_EXP)
                     daily_bonus_reverted = dq.TRIPLE_BONUS_EXP
                     print(f"[uncheck] Reverted daily bonus {dq.TRIPLE_BONUS_EXP} EXP")
+            
+            # Initialize variables for the return statement
+            new_rewards = {"achievements": [], "exclusive_achievements": []}
+            earned_drop = None
             
         if task_update.completed and not was_completed:
             task.completed = True
@@ -1249,8 +1265,13 @@ def update_task(task_id: int, task_update: TaskUpdate,
                     else:
                         current_user.streak = 1
                     current_user.last_streak_date = today
+                
+                # Flush to ensure the newly completed task is visible to gather_user_stats
+                db.flush()
+                
                 new_rewards = grant_completion_rewards(current_user, task, db)
                 earned_drop = new_rewards.get("earned_drop")
+                revoked_achievements = new_rewards.get("revoked_achievements", [])
 
     db.commit()
     db.refresh(task)
@@ -1260,6 +1281,8 @@ def update_task(task_id: int, task_update: TaskUpdate,
         db.refresh(current_user)
         bonus_rewards = refresh_player_rewards(current_user, db)
         new_rewards["achievements"].extend(bonus_rewards["achievements"])
+        if bonus_rewards.get("revoked_achievements"):
+            revoked_achievements.extend(bonus_rewards["revoked_achievements"])
     delayed_rewards = process_delayed_task_rewards(current_user, db)
     if delayed_rewards.get("exclusive_achievements"):
         new_rewards["exclusive_achievements"].extend(delayed_rewards["exclusive_achievements"])
@@ -1281,6 +1304,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
         "task": task_to_dict(task),
         "challenges": build_challenges_payload(current_user, db),
         "new_achievements": new_rewards.get("achievements", []),
+        "revoked_achievements": revoked_achievements if 'revoked_achievements' in locals() else [],
         "new_exclusive_achievements": new_rewards.get("exclusive_achievements", []),
         "level_ups": level_ups,
         "earned_drop": earned_drop,

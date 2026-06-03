@@ -178,10 +178,13 @@ function countCompletedTasks(tasks) {
 function reconcileAchievementsOptimistic(tasks, achievements) {
   if (!achievements) return achievements;
   const completedCount = countCompletedTasks(tasks);
+  
+  // Filter unlocked achievements - only keep those whose conditions are still met
   const unlocked = (achievements.unlocked || []).filter((ach) => {
     const required = TASK_ACHIEVEMENT_REQUIREMENTS[ach.slug];
     return required == null || completedCount >= required;
   });
+  
   let next = achievements.next;
   if (next) {
     const required = TASK_ACHIEVEMENT_REQUIREMENTS[next.slug];
@@ -1684,16 +1687,29 @@ export default function App() {
   };
 
   const showToggleRewards = (data) => {
-    const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop } = data;
+    const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop, revoked_achievements } = data;
     if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
     if (earned_drop) {
       showToast(`✨ Zdobyto ${earned_drop.icon} ${earned_drop.name}! ${earned_drop.description}`);
       showAppNotification(`Nowa znajdźka: ${earned_drop.icon} ${earned_drop.name} — ${earned_drop.description}`);
     }
-    const freshAchievement = [...(new_achievements || []), ...(new_exclusive_achievements || [])][0];
-    if (freshAchievement) {
-      showToast(`🏆 Odblokowano: ${freshAchievement.title}! ${freshAchievement.icon}`);
-      showAppNotification(`Nowe osiągnięcie: ${freshAchievement.icon} ${freshAchievement.title} — ${freshAchievement.description}`);
+    // Show notifications for ALL newly unlocked achievements (not just the first one)
+    const allNewAchievements = [...(new_achievements || []), ...(new_exclusive_achievements || [])];
+    if (allNewAchievements.length > 0) {
+      allNewAchievements.forEach((ach, index) => {
+        setTimeout(() => {
+          showToast(`🏆 Odblokowano: ${ach.title}! ${ach.icon}`);
+          showAppNotification(`Nowe osiągnięcie: ${ach.icon} ${ach.title} — ${ach.description}`);
+        }, index * 500); // Stagger notifications if multiple achievements
+      });
+    }
+    // Show notifications for revoked achievements
+    if (revoked_achievements && revoked_achievements.length > 0) {
+      revoked_achievements.forEach((ach, index) => {
+        setTimeout(() => {
+          showToast(`⚠️ Osiągnięcie cofnięte: ${ach.title} ${ach.icon}`);
+        }, index * 300);
+      });
     }
   };
 
@@ -1783,11 +1799,18 @@ export default function App() {
     const taskKey = task.id;
     const requestId = startTaskRequest(taskKey);
     const gamSeq = beginGamificationUpdate();
-    const snapshot = { task: { ...task }, user: user ? { ...user } : null };
+    const snapshot = { task: { ...task }, user: user ? { ...user } : null, challenges: challenges ? { ...challenges } : null };
     const expPreview = getExpPreview(task.difficulty, task.due_date);
     const optimisticExpDelta = expPreview.amount;
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
+
+    // Check if completing this task would complete all daily challenges (for optimistic daily bonus)
+    const adjustedChallenges = adjustChallengesForTask(challenges, task, true);
+    const willCompleteAllDaily = adjustedChallenges?.goals?.length > 0 && adjustedChallenges.goals.every((g) => g.done || g.current >= g.target);
+    const dailyBonusExp = challenges?.triple_bonus_exp || 35;
+    const optimisticDailyBonus = willCompleteAllDaily && !challenges?.bonus_claimed ? dailyBonusExp : 0;
+    const totalOptimisticExp = expPreview.amount + optimisticDailyBonus;
 
     setTasks((prev) => {
       const nextTasks = sortTasks(prev.map((t) => (t.id === task.id ? {
@@ -1802,7 +1825,7 @@ export default function App() {
     });
     setUser((prev) => {
       if (!prev) return prev;
-      const newExp = (prev.exp || 0) + expPreview.amount;
+      const newExp = (prev.exp || 0) + totalOptimisticExp;
       const derived = getGamificationFromExp(newExp, levelsMetaRef.current, levelThresholdsRef.current);
       return {
         ...prev,
@@ -1813,8 +1836,8 @@ export default function App() {
         next_level_title: derived.next_level_title,
       };
     });
-    setChallenges((prev) => adjustChallengesForTask(prev, task, true));
-    showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
+    setChallenges(adjustedChallenges);
+    showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}${optimisticDailyBonus > 0 ? ` 🎉 Bonus dzienny +${optimisticDailyBonus} EXP` : ""}`);
 
     enqueueApiJob(async () => {
       try {
@@ -1822,13 +1845,17 @@ export default function App() {
         if (isStaleRequest(taskKey, requestId)) return;
         const data = res.data;
         if (data.task) patchTaskInState(task.id, data.task);
-        applyGamificationFromTaskResponse(data, { gamSeq, optimisticExpDelta });
+        // Apply API response, but subtract the optimistic daily bonus if we added it
+        const apiExpDelta = getExpDeltaFromApi(data);
+        const correctedOptimisticDelta = optimisticExpDelta + optimisticDailyBonus;
+        applyGamificationFromTaskResponse(data, { gamSeq, optimisticExpDelta: correctedOptimisticDelta });
         if (isLatestGamification(gamSeq)) showToggleRewards(data);
       } catch (err) {
         console.error("[toggleTask] API error:", err);
         if (!isStaleRequest(taskKey, requestId)) {
           setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? snapshot.task : t))));
           if (snapshot.user) setUser(snapshot.user);
+          if (snapshot.challenges) setChallenges(snapshot.challenges);
           showToast(err.response?.data?.detail || "Błąd aktualizacji");
         }
       } finally {
@@ -1878,9 +1905,16 @@ export default function App() {
     const taskKey = task.id;
     const requestId = startTaskRequest(taskKey);
     const gamSeq = beginGamificationUpdate();
-    const snapshot = { task: { ...task }, user: user ? { ...user } : null };
+    const snapshot = { task: { ...task }, user: user ? { ...user } : null, challenges: challenges ? { ...challenges } : null };
     const expToRevert = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     const optimisticExpDelta = -expToRevert;
+
+    // Check if unchecking this task would revoke the daily bonus
+    const adjustedChallenges = adjustChallengesForTask(challenges, task, false);
+    const willRevokeDailyBonus = challenges?.bonus_claimed && adjustedChallenges?.goals?.length > 0 && !adjustedChallenges.goals.every((g) => g.done || g.current >= g.target);
+    const dailyBonusExp = challenges?.triple_bonus_exp || 35;
+    const optimisticDailyBonusRevert = willRevokeDailyBonus ? dailyBonusExp : 0;
+    const totalOptimisticExpRevert = expToRevert + optimisticDailyBonusRevert;
 
     setTasks((prev) => {
       const nextTasks = sortTasks(prev.map((t) => (t.id === task.id ? {
@@ -1895,7 +1929,7 @@ export default function App() {
     });
     setUser((prev) => {
       if (!prev) return prev;
-      const newExp = Math.max(0, (prev.exp || 0) - expToRevert);
+      const newExp = Math.max(0, (prev.exp || 0) - totalOptimisticExpRevert);
       const derived = getGamificationFromExp(newExp, levelsMetaRef.current, levelThresholdsRef.current);
       return {
         ...prev,
@@ -1906,8 +1940,11 @@ export default function App() {
         next_level_title: derived.next_level_title,
       };
     });
-    setChallenges((prev) => adjustChallengesForTask(prev, task, false));
+    setChallenges(adjustedChallenges);
     showToast("✅ Cofnięto ukończenie zadania");
+    if (optimisticDailyBonusRevert > 0) {
+      setTimeout(() => showToast(`⚠️ Bonus dzienny cofnięty (-${optimisticDailyBonusRevert} EXP)`), 500);
+    }
 
     enqueueApiJob(async () => {
       try {
@@ -1915,12 +1952,15 @@ export default function App() {
         if (isStaleRequest(taskKey, requestId)) return;
         const data = res.data;
         if (data.task) patchTaskInState(task.id, data.task);
-        applyGamificationFromTaskResponse(data, { gamSeq, optimisticExpDelta });
+        // Apply API response, but account for the optimistic daily bonus revert
+        const correctedOptimisticDelta = -totalOptimisticExpRevert;
+        applyGamificationFromTaskResponse(data, { gamSeq, optimisticExpDelta: correctedOptimisticDelta });
       } catch (err) {
         console.error("[uncheckTask] API error:", err);
         if (!isStaleRequest(taskKey, requestId)) {
           setTasks((prev) => sortTasks(prev.map((t) => (t.id === task.id ? snapshot.task : t))));
           if (snapshot.user) setUser(snapshot.user);
+          if (snapshot.challenges) setChallenges(snapshot.challenges);
           showToast(err.response?.data?.detail || "Błąd cofania ukończenia");
         }
       } finally {
