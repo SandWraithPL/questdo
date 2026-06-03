@@ -3,7 +3,6 @@
 body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe; min-height: 100vh; }
 .app { max-width: 800px; margin: 0 auto; padding: 20px; }
 
-/* Auth */
 .auth-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 12px; }
 .auth-container h1 { font-size: 2.5rem; color: #ff8906; margin-bottom: 8px; }
 .auth-container input { width: 300px; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #1a1a2e; color: #fff; font-size: 1rem; }
@@ -11,17 +10,14 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .auth-container .switch { color: #aaa; font-size: 0.9rem; cursor: pointer; }
 .auth-container .switch span { color: #ff8906; }
 
-/* Password field */
 .password-field { position: relative; width: 300px; }
 .password-field input { width: 100%; padding: 12px; padding-right: 40px; border-radius: 8px; border: 1px solid #444; background: #1a1a2e; color: #fff; font-size: 1rem; box-sizing: border-box; }
 .auth-container .eye-icon { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #aaa; }
 .eye-icon:hover { background: #2a2a3e; }
 
-/* Header */
 .header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid #333; margin-bottom: 24px; }
 .header h1 { color: #ff8906; font-size: 1.5rem; }
 
-/* Profile card */
 .profile-card { background: #1a1a2e; border-radius: 12px; padding: 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 20px; }
 .profile-card--top { margin-bottom: 14px; border: 1px solid #2a2a3e; }
 .avatar { width: 60px; height: 60px; border-radius: 50%; background: #ff8906; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: bold; color: #0f0e17; }
@@ -37,7 +33,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .level-next-hint { font-size: 0.75rem; color: #ff8906; margin-top: 4px; opacity: 0.9; }
 .exp-tip { font-size: 0.72rem; color: #666; margin-top: 6px; line-height: 1.35; }
 
-/* Add task */
 .add-task { background: #1a1a2e; border-radius: 12px; padding: 20px; margin-bottom: 24px; overflow: visible; }
 .add-task h3 { margin-bottom: 12px; color: #ff8906; }
 .add-task input, .add-task select, .add-task textarea { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; font-size: 0.95rem; }
@@ -56,7 +51,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .exp-preview-hint { font-size: 0.8rem; color: #aaa; margin: -4px 0 12px; }
 .exp-preview-hint strong { color: #ff8906; }
 
-/* Tasks panel */
 .day-tasks-panel { margin-bottom: 24px; }
 .tasks-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .tasks-header h3 { font-size: 1.1rem; }
@@ -71,13 +65,11 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .stats-counter { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.85rem; color: #aaa; margin-bottom: 16px; }
 .stats-counter strong { color: #ff8906; }
 
-/* Loading spinner */
 .loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 20px; gap: 14px; color: #aaa; }
 .loading-state p { font-size: 0.95rem; margin: 0; }
 .spinner { width: 40px; height: 40px; border: 3px solid #2a2a3e; border-top-color: #ff8906; border-radius: 50%; animation: questdo-spin 0.75s linear infinite; }
 @keyframes questdo-spin { to { transform: rotate(360deg); } }
 
-/* Task card */
 .task-card { background: #1a1a2e; border-radius: 10px; padding: 16px; margin-bottom: 10px; display: flex; align-items: center; gap: 12px; border-left: 4px solid #333; transition: background 0.2s, opacity 0.2s, border-color 0.2s; }
 .task-card.easy { border-left-color: #4caf50; }
 .task-card.medium { border-left-color: #ff9800; }
@@ -137,7 +129,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .toast { position: fixed; bottom: 24px; right: 24px; background: #ff8906; color: #0f0e17; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 0.95rem; animation: slideIn 0.3s ease; }
 @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
-/* Calendar – collapsible section */
 .calendar-section { background: #1a1a2e; border-radius: 12px; margin-bottom: 18px; border: 1px solid #2a2a3e; overflow: hidden; }
 .calendar-section--collapsed { margin-bottom: 12px; }
 .calendar-section-bar { display: flex; align-items: stretch; gap: 8px; padding: 10px 12px; border-bottom: 1px solid transparent; }
@@ -152,7 +143,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .calendar-section-today:hover { border-color: #ff8906; color: #ffa040; }
 .calendar-section .calendar-container { background: transparent; border: none; border-radius: 0; margin-bottom: 0; padding: 12px 16px 16px; }
 
-/* Calendar */
 .calendar-container { background: #1a1a2e; border-radius: 12px; padding: 16px; margin-bottom: 18px; border: 1px solid #2a2a3e; overflow: hidden; }
 .calendar-header { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; margin-bottom: 14px; }
 .calendar-nav { display: grid; grid-template-columns: 36px minmax(0, 1fr) 36px; align-items: center; gap: 8px; min-width: 0; }
@@ -194,7 +184,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .week-task.completed { color: #777; text-decoration: line-through; }
 .week-empty, .week-more { font-size: 0.74rem; color: #666; }
 
-/* Day view */
 .day-view { padding: 4px 0 0; }
 .day-view h3 { text-align: center; margin-bottom: 14px; color: #ff8906; font-size: 1rem; text-transform: capitalize; }
 .day-task { display: flex; gap: 12px; padding: 12px; background: #0f0e17; border: 1px solid #2a2a3e; border-radius: 9px; margin-bottom: 8px; align-items: flex-start; }
@@ -204,7 +193,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .day-task-info p { font-size: 0.85rem; color: #aaa; margin-top: 4px; }
 .day-task > button:last-child { background: transparent; border: none; color: #777; cursor: pointer; font-size: 1.1rem; }
 
-/* Add task button */
 .add-task-btn { width: 100%; padding: 16px; background: #ff8906; color: #0f0e17; border: none; border-radius: 12px; font-weight: bold; font-size: 1rem; cursor: pointer; margin-bottom: 24px; transition: background 0.2s, transform 0.15s; }
 .add-task-btn:hover { background: #ffa040; transform: translateY(-1px); }
 .add-task-btn:active { transform: translateY(0); }
@@ -216,7 +204,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .profile-notifications-btn.enabled { color: #e57373; border-color: #3a1f1f; background: #1a1010; }
 .profile-notifications-btn.enabled:hover:not(:disabled) { border-color: #e57373; color: #ef9a9a; }
 
-/* PWA install banner */
 .pwa-install-banner { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
 .pwa-install-banner-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
 .pwa-install-banner-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0; border: none; background: transparent; color: #fff; cursor: pointer; text-align: left; }
@@ -234,7 +221,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .pwa-install-banner-hide:hover { color: #fff; border-color: #666; }
 .pwa-install-banner--collapsed .pwa-install-banner-bar { border-bottom: none; }
 
-/* Challenges – collapsible section */
 .challenges-section { background: #1a1a2e; border-radius: 12px; margin-bottom: 16px; border: 1px solid #2a2a3e; overflow: hidden; }
 .challenges-section--collapsed { margin-bottom: 12px; }
 .challenges-section-toggle { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: none; background: transparent; color: #fff; cursor: pointer; text-align: left; }
@@ -246,7 +232,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .challenges-section--expanded .challenges-section-toggle { border-bottom: 1px solid #2a2a3e; }
 .challenges-section .challenges-bar { background: transparent; border: none; border-radius: 0; margin-bottom: 0; padding: 12px 14px 14px; }
 
-/* Challenges */
 .challenges-bar { background: #1a1a2e; border-radius: 12px; padding: 16px; margin-bottom: 16px; }
 .challenges-header-row { margin-bottom: 8px; }
 .challenges-bar h4 { color: #ff8906; font-size: 0.95rem; margin: 0; }
@@ -267,7 +252,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .challenge-item.completed .challenge-label { text-decoration: line-through; }
 .challenge-item.completed .challenge-description { text-decoration: line-through; }
 
-/* Leaderboard */
 .leaderboard-panel { background: #1a1a2e; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
 .leaderboard-toggle { width: 100%; background: none; border: none; color: #ff8906; font-weight: bold; cursor: pointer; text-align: left; font-size: 0.95rem; padding: 4px 0; }
 .leaderboard-content { margin-top: 12px; }
@@ -305,7 +289,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .ach-progress { font-size: 0.75rem; color: #ff8906 !important; margin-top: 4px !important; }
 .achievements-list .muted { color: #666; font-size: 0.85rem; }
 
-/* Rare drops */
 .rare-drops-list { max-height: 200px; overflow-y: auto; margin-bottom: 12px; }
 .rare-drops-list h4 { margin-bottom: 8px; color: #ff8906; }
 .rare-drop-item { display: flex; gap: 8px; padding: 6px 0; font-size: 0.85rem; }
@@ -331,7 +314,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .delete-account-cancel { padding: 8px; background: #333; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
 .admin-btn { width: 100%; margin-top: 8px; padding: 8px; background: #ff8906; color: #0f0e17; border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: bold; }
 
-/* Admin panel */
 .admin-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .admin-panel { background: #1a1a2e; border-radius: 12px; padding: 24px; max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto; }
 .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #333; }
@@ -357,7 +339,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .delete-user-btn { padding: 8px 12px; background: #e74c3c; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
 .delete-user-btn:hover { background: #c0392b; }
 
-/* Date picker */
 .date-picker-wrap { position: relative; width: 100%; margin-bottom: 10px; overflow: visible !important; z-index: 999; }
 .date-picker-label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 6px; }
 .date-picker-trigger { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; font-size: 0.9rem; cursor: pointer; text-align: left; }
@@ -394,11 +375,9 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 @media (max-width: 600px) {
   .app { padding: 12px; }
   
-  /* Header */
   .header { padding: 12px 0; margin-bottom: 16px; }
   .header h1 { font-size: 1.2rem; }
   
-  /* Profile card */
   .profile-card { padding: 16px; gap: 12px; flex-direction: column; text-align: center; }
   .profile-card--top { margin-bottom: 12px; }
   .avatar { width: 50px; height: 50px; font-size: 1.5rem; }
@@ -408,13 +387,11 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .streak .flame { font-size: 1.5rem; }
   .streak .count { font-size: 1rem; }
   
-  /* Tasks header */
   .tasks-header { flex-direction: column; align-items: flex-start; gap: 10px; }
   .tasks-header h3 { font-size: 1rem; }
   .filter-group { width: 100%; justify-content: space-between; }
   .filter-btn { flex: 1; text-align: center; padding: 8px 8px; font-size: 0.8rem; }
   
-  /* Task cards */
   .task-card { padding: 12px; gap: 10px; }
   .task-check { width: 32px; height: 32px; }
   .task-info h4 { font-size: 0.95rem; }
@@ -424,7 +401,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .icon-btn { font-size: 1rem; padding: 6px; }
   .task-delete { font-size: 1.1rem; padding: 6px; }
   
-  /* Calendar */
   .calendar-section { border-radius: 10px; margin-bottom: 14px; }
   .calendar-section-bar { padding: 8px 10px; flex-wrap: wrap; }
   .calendar-section-toggle { gap: 8px; }
@@ -446,7 +422,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .day-number { font-size: 0.8rem; }
   .day-badge { min-width: 22px; font-size: 0.56rem; padding: 2px 3px; }
   
-  /* Week view */
   .week-view { grid-template-columns: 1fr; gap: 8px; }
   .week-day { min-height: auto; padding: 12px; }
   .week-day-header { grid-template-columns: 1fr auto auto; border-bottom: none; padding-bottom: 0; }
@@ -454,12 +429,10 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .week-day-tasks { margin-top: 2px; }
   .week-task { font-size: 0.82rem; }
   
-  /* Day view */
   .day-view { padding: 12px; }
   .day-view h3 { font-size: 1rem; }
   .day-task { padding: 10px; }
   
-  /* Challenges */
   .challenges-section { margin-bottom: 12px; }
   .challenges-section-toggle { padding: 10px 12px; gap: 8px; }
   .challenges-section-title { font-size: 0.88rem; }
@@ -474,14 +447,12 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .challenge-progress-small { width: 60px; }
   .challenge-description { font-size: 0.7rem; padding-left: 28px; }
   
-  /* Leaderboard */
   .leaderboard-panel { padding: 10px 12px; }
   .leaderboard-toggle { font-size: 0.85rem; }
   .leaderboard-categories { gap: 4px; }
   .rank-cat-btn { padding: 4px 8px; font-size: 0.7rem; }
   .leaderboard-list li { padding: 6px 0; font-size: 0.85rem; }
   
-  /* Add task */
   .add-task { padding: 16px; }
   .add-task h3 { font-size: 1rem; }
   .add-task input, .add-task select, .add-task textarea { font-size: 0.9rem; padding: 12px; }
@@ -491,7 +462,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .add-task .row button { width: 100%; }
   .add-task-btn { padding: 14px; font-size: 0.95rem; }
   
-  /* Date picker - mobile */
   .date-picker-popup {
     position: fixed !important;
     top: 50% !important;
@@ -503,28 +473,22 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
     max-width: 320px !important;
   }
   
-  /* Profile dropdown */
   .profile-menu { min-width: 220px; right: -50px; }
   .profile-info-dropdown p { font-size: 0.85rem; }
   .achievement-item { font-size: 0.8rem; }
   .rare-drop-item { font-size: 0.8rem; }
   .rare-drop-item span:first-child { font-size: 1rem; }
   
-  /* Stats counter */
   .stats-counter { gap: 12px; font-size: 0.8rem; }
   
-  /* Search input */
   .search-input { padding: 12px; font-size: 0.9rem; }
   
-  /* Toast */
   .toast { bottom: 12px; right: 12px; left: 12px; font-size: 0.85rem; padding: 10px 16px; }
   
-  /* Edit form */
   .task-edit-form { gap: 10px; }
   .input-edit { padding: 10px; font-size: 0.9rem; }
   .edit-actions button { padding: 10px; font-size: 0.9rem; }
 
-  /* Admin panel - mobile */
   .admin-panel { padding: 16px; width: 95%; max-height: 95vh; }
   .admin-header h2 { font-size: 1.2rem; }
   .admin-stats { grid-template-columns: repeat(2, 1fr); gap: 8px; }

@@ -32,7 +32,6 @@ function formatDisplay(value) {
   });
 }
 
-/** Interaktywny wybór daty — klik: dzień, miesiąc, rok */
 export default function DatePicker({ value, onChange, label = "Termin" }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState("days");
@@ -48,7 +47,6 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
     const onDoc = (e) => {
       if (!wrapRef.current?.contains(e.target)) setOpen(false);
     };
-    // Use capture-phase click to avoid ordering issues with button click handlers
     document.addEventListener("click", onDoc, true);
     return () => document.removeEventListener("click", onDoc, true);
   }, [open]);
