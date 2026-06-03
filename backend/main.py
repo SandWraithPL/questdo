@@ -87,6 +87,12 @@ def migrate_schema():
     if "player_rare_drops" not in insp.get_table_names():
         models.PlayerRareDrop.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę player_rare_drops")
+    elif "player_rare_drops" in insp.get_table_names():
+        prd_cols = {c["name"] for c in insp.get_columns("player_rare_drops")}
+        if "source_task_id" not in prd_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE player_rare_drops ADD COLUMN source_task_id INTEGER REFERENCES tasks(id)"))
+            print("Migracja: dodano kolumnę player_rare_drops.source_task_id")
 
     # Exclusive Achievements
     if "exclusive_achievements" not in insp.get_table_names():
@@ -294,6 +300,15 @@ def task_to_dict(t: models.Task) -> dict:
     return data
 
 
+def format_diary_message(body: str, occurred_at: Optional[datetime] = None) -> str:
+    at = occurred_at or datetime.utcnow()
+    return f"{at.day:02d}.{at.month:02d}.{at.year} - {body}"
+
+
+def history_key_task(user_id: int, task_id: int, kind: str, slug: str) -> str:
+    return f"user:{user_id}:task:{task_id}:{kind}:{slug}"
+
+
 def add_history_event(
     user_id: int,
     event_type: str,
@@ -304,15 +319,168 @@ def add_history_event(
 ) -> bool:
     if db.query(models.PlayerHistory).filter(models.PlayerHistory.event_key == event_key).first():
         return False
+    at = occurred_at or datetime.utcnow()
     db.add(models.PlayerHistory(
         user_id=user_id,
         event_type=event_type,
         event_key=event_key,
-        message=message,
-        occurred_at=occurred_at or datetime.utcnow(),
+        message=format_diary_message(message, at),
+        occurred_at=at,
     ))
     db.flush()
     return True
+
+
+def user_owns_rare_drop_slug(user_id: int, slug: str, db: Session) -> bool:
+    return db.query(models.PlayerRareDrop).join(models.RareDrop).filter(
+        models.PlayerRareDrop.user_id == user_id,
+        models.RareDrop.slug == slug,
+    ).first() is not None
+
+
+def build_rare_drops_inventory(user_id: int, db: Session) -> dict:
+    drops = db.query(models.PlayerRareDrop).filter(
+        models.PlayerRareDrop.user_id == user_id
+    ).all()
+
+    by_slug = {}
+    for drop in drops:
+        slug = drop.rare_drop.slug
+        if slug not in by_slug:
+            by_slug[slug] = {
+                "slug": drop.rare_drop.slug,
+                "name": drop.rare_drop.name,
+                "description": drop.rare_drop.description,
+                "icon": drop.rare_drop.icon,
+                "rarity": drop.rare_drop.rarity,
+                "count": 1,
+                "obtained_dates": [str(drop.obtained_date)],
+            }
+        else:
+            by_slug[slug]["obtained_dates"].append(str(drop.obtained_date))
+
+    items = list(by_slug.values())
+    rarity_counts = {}
+    for item in items:
+        rarity = item["rarity"]
+        rarity_counts[rarity] = rarity_counts.get(rarity, 0) + 1
+
+    return {
+        "total_items": len(items),
+        "unique_items": len(items),
+        "by_rarity": rarity_counts,
+        "items": items,
+    }
+
+
+def build_history_list(user_id: int, db: Session, limit: int = 200) -> list:
+    entries = db.query(models.PlayerHistory).filter(
+        models.PlayerHistory.user_id == user_id
+    ).order_by(models.PlayerHistory.occurred_at.desc()).limit(limit).all()
+    return [{
+        "id": entry.id,
+        "type": entry.event_type,
+        "message": entry.message,
+        "occurred_at": str(entry.occurred_at),
+    } for entry in entries]
+
+
+def build_achievements_payload(user: models.User, db: Session) -> dict:
+    user_achs = db.query(models.UserAchievement).filter(
+        models.UserAchievement.user_id == user.id
+    ).all()
+    stats = gc.gather_user_stats(user, db, models)
+    unlocked_slugs = get_unlocked_slugs(user.id, db)
+    unlocked = [{
+        "slug": ua.achievement.name,
+        "title": achievement_display(ua.achievement),
+        "description": ua.achievement.description,
+        "icon": ua.achievement.icon,
+        "unlocked_at": str(ua.unlocked_at),
+    } for ua in user_achs]
+    player_exclusive = db.query(models.PlayerExclusiveAchievement).filter(
+        models.PlayerExclusiveAchievement.user_id == user.id
+    ).all()
+    for pa in player_exclusive:
+        ea = pa.exclusive_achievement
+        unlocked.append({
+            "slug": ea.slug,
+            "title": ea.title,
+            "description": ea.description,
+            "icon": ea.icon,
+            "unlocked_at": str(pa.unlocked_at),
+        })
+    return {
+        "unlocked": unlocked,
+        "next": gc.get_next_achievement(stats, unlocked_slugs),
+    }
+
+
+def revoke_standard_achievement(user_id: int, slug: str, db: Session) -> None:
+    achievement = db.query(models.Achievement).filter(models.Achievement.name == slug).first()
+    if not achievement:
+        return
+    db.query(models.UserAchievement).filter(
+        models.UserAchievement.user_id == user_id,
+        models.UserAchievement.achievement_id == achievement.id,
+    ).delete(synchronize_session=False)
+
+
+def revoke_exclusive_achievement(user_id: int, slug: str, db: Session) -> None:
+    ach = db.query(models.ExclusiveAchievement).filter(models.ExclusiveAchievement.slug == slug).first()
+    if not ach:
+        return
+    db.query(models.PlayerExclusiveAchievement).filter(
+        models.PlayerExclusiveAchievement.user_id == user_id,
+        models.PlayerExclusiveAchievement.exclusive_achievement_id == ach.id,
+    ).delete(synchronize_session=False)
+
+
+def sync_achievements_after_uncheck(user: models.User, db: Session) -> None:
+    """Usuwa standardowe osiągnięcia, których warunki nie są już spełnione."""
+    stats = gc.gather_user_stats(user, db, models)
+    for ua in db.query(models.UserAchievement).filter(
+        models.UserAchievement.user_id == user.id
+    ).all():
+        slug = ua.achievement.name
+        ach_def = gc.ACHIEVEMENT_BY_SLUG.get(slug)
+        if ach_def and not gc.achievement_met(stats, ach_def):
+            db.delete(ua)
+
+
+def remove_rewards_for_task(user: models.User, task: models.Task, db: Session) -> None:
+    """Cofa znajdźki, wpisy historii i osiągnięcia powiązane z tym zadaniem."""
+    stats = gc.gather_user_stats(user, db, models)
+    prefix = f"user:{user.id}:task:{task.id}:"
+    entries = db.query(models.PlayerHistory).filter(
+        models.PlayerHistory.user_id == user.id,
+        models.PlayerHistory.event_key.like(f"{prefix}%"),
+    ).all()
+
+    for entry in entries:
+        parts = entry.event_key.split(":")
+        if len(parts) < 5:
+            continue
+        kind = parts[3]
+        slug = parts[4]
+        if kind == "achievement":
+            ach_def = gc.ACHIEVEMENT_BY_SLUG.get(slug)
+            if ach_def and not gc.achievement_met(stats, ach_def):
+                revoke_standard_achievement(user.id, slug, db)
+        elif kind == "exclusive":
+            revoke_exclusive_achievement(user.id, slug, db)
+
+    db.query(models.PlayerHistory).filter(
+        models.PlayerHistory.user_id == user.id,
+        models.PlayerHistory.event_key.like(f"{prefix}%"),
+    ).delete(synchronize_session=False)
+
+    db.query(models.PlayerRareDrop).filter(
+        models.PlayerRareDrop.user_id == user.id,
+        models.PlayerRareDrop.source_task_id == task.id,
+    ).delete(synchronize_session=False)
+
+    sync_achievements_after_uncheck(user, db)
 
 
 def record_level_ups(user: models.User, old_exp: int, db: Session) -> list[dict]:
@@ -424,7 +592,12 @@ def get_unlocked_slugs(user_id: int, db: Session) -> set:
     return slugs
 
 
-def unlock_achievement(user_id: int, ach_def: dict, db: Session) -> Union[dict, None]:
+def unlock_achievement(
+    user_id: int,
+    ach_def: dict,
+    db: Session,
+    task: Optional[models.Task] = None,
+) -> Union[dict, None]:
     slug = ach_def["slug"]
     if slug in get_unlocked_slugs(user_id, db):
         return None
@@ -446,61 +619,111 @@ def unlock_achievement(user_id: int, ach_def: dict, db: Session) -> Union[dict, 
         achievement.description = ach_def["description"]
         achievement.icon = ach_def["icon"]
 
-    if not db.query(models.UserAchievement).filter(
+    if db.query(models.UserAchievement).filter(
         models.UserAchievement.user_id == user_id,
         models.UserAchievement.achievement_id == achievement.id,
     ).first():
-        user_achievement = models.UserAchievement(user_id=user_id, achievement_id=achievement.id)
-        db.add(user_achievement)
-        db.flush()
-        title = achievement_display(achievement)
-        message = f"Zdobyto osiągnięcie '{title}' za {achievement.description}"
-        add_history_event(
-            user_id,
-            "achievement",
-            f"user:{user_id}:achievement:{slug}",
-            message,
-            db,
-            user_achievement.unlocked_at,
-        )
-        return {
-            "slug": slug,
-            "title": title,
-            "description": achievement.description,
-            "icon": achievement.icon,
-            "unlocked_at": str(user_achievement.unlocked_at),
-        }
-    return None
+        return None
+
+    user_achievement = models.UserAchievement(user_id=user_id, achievement_id=achievement.id)
+    db.add(user_achievement)
+    db.flush()
+    title = achievement_display(achievement)
+    if task:
+        body = f"Zdobyto osiągnięcie '{title}' za ukończenie zadania '{task.title}'"
+        event_key = history_key_task(user_id, task.id, "achievement", slug)
+    else:
+        body = f"Zdobyto osiągnięcie '{title}'"
+        event_key = f"user:{user_id}:achievement:{slug}"
+    add_history_event(
+        user_id,
+        "achievement",
+        event_key,
+        body,
+        db,
+        user_achievement.unlocked_at,
+    )
+    return {
+        "slug": slug,
+        "title": title,
+        "description": achievement.description,
+        "icon": achievement.icon,
+        "unlocked_at": str(user_achievement.unlocked_at),
+    }
 
 
-def check_achievements(user, db) -> list[dict]:
+def check_achievements(user, db, task: Optional[models.Task] = None, stop_at_first: bool = False) -> list[dict]:
     stats = gc.gather_user_stats(user, db, models)
     newly_unlocked = []
     for ach_def in gc.ACHIEVEMENT_DEFS:
         if gc.achievement_met(stats, ach_def):
-            unlocked = unlock_achievement(user.id, ach_def, db)
+            unlocked = unlock_achievement(user.id, ach_def, db, task=task)
             if unlocked:
                 newly_unlocked.append(unlocked)
-    if newly_unlocked:
-        db.commit()
+                if stop_at_first:
+                    return newly_unlocked
     return newly_unlocked
 
 
-def refresh_player_rewards(user: models.User, db: Session) -> dict:
-    achievements = check_achievements(user, db)
+def unlock_exclusive_with_history(user: models.User, ea_def: dict, task: models.Task, db: Session) -> dict:
+    title = ea_def["title"]
+    body = f"Zdobyto osiągnięcie '{title}' za ukończenie zadania '{task.title}'"
+    add_history_event(
+        user.id,
+        "achievement",
+        history_key_task(user.id, task.id, "exclusive", ea_def["slug"]),
+        body,
+        db,
+    )
+    return {
+        "slug": ea_def["slug"],
+        "title": title,
+        "description": ea_def["description"],
+        "icon": ea_def["icon"],
+    }
+
+
+def grant_completion_rewards(user: models.User, task: models.Task, db: Session) -> dict:
+    """Maksymalnie jedna nagroda na ukończenie: osiągnięcie, exclusive lub znajdźka."""
+    achievements = check_achievements(user, db, task=task, stop_at_first=True)
+    if achievements:
+        return {"achievements": achievements, "exclusive_achievements": [], "earned_drop": None}
+
+    newly_exclusive = gc.check_exclusive_achievements(user, db, models)
+    if newly_exclusive:
+        exclusive_payload = unlock_exclusive_with_history(user, newly_exclusive[0], task, db)
+        return {"achievements": [], "exclusive_achievements": [exclusive_payload], "earned_drop": None}
+
+    earned_drop = award_rare_drop_on_completion(user, task, db)
+    return {"achievements": [], "exclusive_achievements": [], "earned_drop": earned_drop}
+
+
+def refresh_player_rewards(user: models.User, db: Session, task: Optional[models.Task] = None) -> dict:
+    """Pełna synchronizacja (endpointy GET) — bez limitu jednej nagrody."""
+    achievements = check_achievements(user, db, task=task)
     exclusive = gc.check_exclusive_achievements(user, db, models)
+    exclusive_payload = []
     for ea_def in exclusive:
-        message = f"Zdobyto osiągnięcie '{ea_def['title']}' za {ea_def['description']}"
-        add_history_event(
-            user.id,
-            "achievement",
-            f"user:{user.id}:exclusive-achievement:{ea_def['slug']}",
-            message,
-            db,
-        )
-    if exclusive:
+        if task:
+            exclusive_payload.append(unlock_exclusive_with_history(user, ea_def, task, db))
+        else:
+            body = f"Zdobyto osiągnięcie '{ea_def['title']}'"
+            add_history_event(
+                user.id,
+                "achievement",
+                f"user:{user.id}:exclusive-achievement:{ea_def['slug']}",
+                body,
+                db,
+            )
+            exclusive_payload.append({
+                "slug": ea_def["slug"],
+                "title": ea_def["title"],
+                "description": ea_def["description"],
+                "icon": ea_def["icon"],
+            })
+    if achievements or exclusive:
         db.commit()
-    return {"achievements": achievements, "exclusive_achievements": exclusive}
+    return {"achievements": achievements, "exclusive_achievements": exclusive_payload}
 
 
 def refresh_all_player_rewards(db: Session) -> None:
@@ -520,58 +743,58 @@ def achievement_display(ach: models.Achievement) -> str:
 
 # --- Funkcja przyznająca drop po ukończeniu zadania ---
 def award_rare_drop_on_completion(user: models.User, task: models.Task, db: Session) -> Optional[dict]:
-    """Przyznaje losowy drop po ukończeniu zadania (szansa zależna od rzadkości)."""
-    # Użyj deterministycznego randoma na podstawie user_id + dnia + task_id
+    """Przyznaje losowy drop po ukończeniu zadania — tylko jeśli gracz nie ma już tego przedmiotu."""
     today = date.today()
     rng = random.Random(f"{user.id}-{today.isoformat()}-{task.id}")
-    
-    # Wszystkie dostępne dropy
-    all_drops = gc.RARE_DROPS
-    
-    # Losuj czy w ogóle drop wypadnie (sprawdzamy szanse po kolei)
-    for drop_def in all_drops:
-        if rng.random() * 100 <= drop_def["drop_chance"]:
-            rare_drop = db.query(models.RareDrop).filter(
-                models.RareDrop.slug == drop_def["slug"]
-            ).first()
-            if not rare_drop:
-                rare_drop = models.RareDrop(
-                    slug=drop_def["slug"],
-                    name=drop_def["name"],
-                    description=drop_def["description"],
-                    icon=drop_def["icon"],
-                    rarity=drop_def["rarity"],
-                    drop_chance_percent=drop_def["drop_chance"]
-                )
-                db.add(rare_drop)
-                db.flush()
-            
-            player_drop = models.PlayerRareDrop(
-                user_id=user.id,
-                rare_drop_id=rare_drop.id,
-                obtained_date=today
+
+    for drop_def in gc.RARE_DROPS:
+        if user_owns_rare_drop_slug(user.id, drop_def["slug"], db):
+            continue
+        if rng.random() * 100 > drop_def["drop_chance"]:
+            continue
+
+        rare_drop = db.query(models.RareDrop).filter(
+            models.RareDrop.slug == drop_def["slug"]
+        ).first()
+        if not rare_drop:
+            rare_drop = models.RareDrop(
+                slug=drop_def["slug"],
+                name=drop_def["name"],
+                description=drop_def["description"],
+                icon=drop_def["icon"],
+                rarity=drop_def["rarity"],
+                drop_chance_percent=drop_def["drop_chance"],
             )
-            db.add(player_drop)
+            db.add(rare_drop)
             db.flush()
-            
-            add_history_event(
-                user.id,
-                "rare_drop",
-                f"user:{user.id}:rare-drop:{player_drop.id}",
-                f"Znaleziono przedmiot '{drop_def['name']}' za ukończenie zadania '{task.title}'",
-                db,
-                player_drop.obtained_at,
-            )
-            db.commit()
-            
-            return {
-                "slug": drop_def["slug"],
-                "name": drop_def["name"],
-                "description": drop_def["description"],
-                "icon": drop_def["icon"],
-                "rarity": drop_def["rarity"]
-            }
-    
+
+        player_drop = models.PlayerRareDrop(
+            user_id=user.id,
+            rare_drop_id=rare_drop.id,
+            source_task_id=task.id,
+            obtained_date=today,
+        )
+        db.add(player_drop)
+        db.flush()
+
+        body = f"Znaleziono przedmiot '{drop_def['name']}' za ukończenie zadania '{task.title}'"
+        add_history_event(
+            user.id,
+            "rare_drop",
+            history_key_task(user.id, task.id, "rare_drop", drop_def["slug"]),
+            body,
+            db,
+            player_drop.obtained_at,
+        )
+
+        return {
+            "slug": drop_def["slug"],
+            "name": drop_def["name"],
+            "description": drop_def["description"],
+            "icon": drop_def["icon"],
+            "rarity": drop_def["rarity"],
+        }
+
     return None
 
 
@@ -729,6 +952,9 @@ def update_task(task_id: int, task_update: TaskUpdate,
             "new_exclusive_achievements": [],
             "level_ups": [],
             "earned_drop": None,
+            "rare_drops": build_rare_drops_inventory(current_user.id, db),
+            "history": build_history_list(current_user.id, db),
+            "achievements": build_achievements_payload(current_user, db),
         }
 
     if task_update.due_date is not None:
@@ -819,26 +1045,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
             
             print(f"[uncheck] Recalculated streak: {streak}, last_date: {last_date}")
             
-            # Remove rare drops obtained for this task
-            drops_to_remove = db.query(models.PlayerRareDrop).filter(
-                models.PlayerRareDrop.user_id == current_user.id,
-                models.PlayerRareDrop.obtained_date == task.due_date
-            ).all()
-            for drop in drops_to_remove:
-                db.delete(drop)
-                print(f"[uncheck] Removed rare drop {drop.id} for task {task.id}")
-            
-            # Remove history entries for this task
-            history_to_remove = db.query(models.PlayerHistory).filter(
-                models.PlayerHistory.user_id == current_user.id,
-                models.PlayerHistory.message.like(f"%{task.title}%")
-            ).all()
-            for hist in history_to_remove:
-                db.delete(hist)
-                print(f"[uncheck] Removed history entry {hist.id} for task {task.id}")
-            
-            # Recalculate achievements
-            new_rewards = refresh_player_rewards(current_user, db)
+            remove_rewards_for_task(current_user, task, db)
             level_ups.extend(record_level_ups(current_user, current_user.exp, db))
             
             # Revert daily bonus if no longer all quests complete
@@ -873,10 +1080,8 @@ def update_task(task_id: int, task_update: TaskUpdate,
                     else:
                         current_user.streak = 1
                     current_user.last_streak_date = today
-                new_rewards = refresh_player_rewards(current_user, db)
-                
-                # Przyznaj drop ZA UKOŃCZENIE zadania (nie za utworzenie)
-                earned_drop = award_rare_drop_on_completion(current_user, task, db)
+                new_rewards = grant_completion_rewards(current_user, task, db)
+                earned_drop = new_rewards.get("earned_drop")
 
     db.commit()
     db.refresh(task)
@@ -900,10 +1105,13 @@ def update_task(task_id: int, task_update: TaskUpdate,
         "exp_awarded": task.exp_awarded,
         "task": task_to_dict(task),
         "challenges": build_challenges_payload(current_user, db),
-        "new_achievements": new_rewards["achievements"],
-        "new_exclusive_achievements": new_rewards["exclusive_achievements"],
+        "new_achievements": new_rewards.get("achievements", []),
+        "new_exclusive_achievements": new_rewards.get("exclusive_achievements", []),
         "level_ups": level_ups,
         "earned_drop": earned_drop,
+        "rare_drops": build_rare_drops_inventory(current_user.id, db),
+        "history": build_history_list(current_user.id, db),
+        "achievements": build_achievements_payload(current_user, db),
     }
 
 
@@ -1045,53 +1253,12 @@ def list_levels():
 
 @app.get("/rare-drops/inventory")
 def get_rare_drops_inventory(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    drops = db.query(models.PlayerRareDrop).filter(
-        models.PlayerRareDrop.user_id == current_user.id
-    ).all()
-    
-    by_slug = {}
-    for drop in drops:
-        slug = drop.rare_drop.slug
-        if slug not in by_slug:
-            by_slug[slug] = {
-                "slug": drop.rare_drop.slug,
-                "name": drop.rare_drop.name,
-                "description": drop.rare_drop.description,
-                "icon": drop.rare_drop.icon,
-                "rarity": drop.rare_drop.rarity,
-                "count": 0,
-                "obtained_dates": []
-            }
-        by_slug[slug]["count"] += 1
-        by_slug[slug]["obtained_dates"].append(str(drop.obtained_date))
-    
-    items = list(by_slug.values())
-    total_count = len(drops)
-    
-    rarity_counts = {}
-    for item in items:
-        rarity = item["rarity"]
-        rarity_counts[rarity] = rarity_counts.get(rarity, 0) + item["count"]
-    
-    return {
-        "total_items": total_count,
-        "unique_items": len(items),
-        "by_rarity": rarity_counts,
-        "items": items
-    }
+    return build_rare_drops_inventory(current_user.id, db)
 
 
 @app.get("/history")
 def get_player_history(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    entries = db.query(models.PlayerHistory).filter(
-        models.PlayerHistory.user_id == current_user.id
-    ).order_by(models.PlayerHistory.occurred_at.desc()).limit(200).all()
-    return [{
-        "id": entry.id,
-        "type": entry.event_type,
-        "message": entry.message,
-        "occurred_at": str(entry.occurred_at),
-    } for entry in entries]
+    return build_history_list(current_user.id, db)
 
 
 # === EXCLUSIVE ACHIEVEMENTS ENDPOINTS ===

@@ -132,47 +132,9 @@ function makeRequestId(taskId) {
 
 function applyGamificationResponse(data, { setChallenges, setAchievements, setRareDrops, setHistory }) {
   if (data.challenges) setChallenges(data.challenges);
-  const newAch = [...(data.new_achievements || []), ...(data.new_exclusive_achievements || [])];
-  if (newAch.length > 0) {
-    setAchievements((prev) => {
-      const unlocked = prev?.unlocked ?? [];
-      const seen = new Set(unlocked.map((a) => a.slug || a.title));
-      const merged = [...unlocked];
-      for (const ach of newAch) {
-        const key = ach.slug || ach.title;
-        if (!seen.has(key)) {
-          seen.add(key);
-          merged.push(ach);
-        }
-      }
-      return { ...prev, unlocked: merged };
-    });
-    setHistory((prev) => [
-      ...newAch.map((ach, i) => ({
-        id: `ach-${Date.now()}-${i}`,
-        occurred_at: new Date().toISOString(),
-        message: `Osiągnięcie: ${ach.title}`,
-      })),
-      ...prev,
-    ]);
-  }
-  if (data.earned_drop) {
-    const drop = data.earned_drop;
-    setRareDrops((prev) => {
-      const items = [...(prev?.items || [])];
-      const idx = items.findIndex((d) => d.slug === drop.slug);
-      if (idx >= 0) {
-        items[idx] = { ...items[idx], count: (items[idx].count || 1) + 1 };
-      } else {
-        items.push({ ...drop, count: 1 });
-      }
-      return { ...prev, items, total_items: (prev?.total_items || 0) + 1 };
-    });
-    setHistory((prev) => [
-      { id: `drop-${Date.now()}`, occurred_at: new Date().toISOString(), message: `Znajdźka: ${drop.name}` },
-      ...prev,
-    ]);
-  }
+  if (data.achievements) setAchievements(data.achievements);
+  if (data.rare_drops) setRareDrops(data.rare_drops);
+  if (data.history) setHistory(data.history);
 }
 
 function getTaskCheckState(task) {

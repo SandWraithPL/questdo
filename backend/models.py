@@ -82,6 +82,7 @@ class PlayerRareDrop(Base):
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
     rare_drop_id = Column(Integer, ForeignKey("rare_drops.id"))
+    source_task_id = Column(Integer, ForeignKey("tasks.id"), nullable=True, index=True)
     obtained_date = Column(Date, index=True)
     obtained_at = Column(DateTime, default=datetime.utcnow)
     user = relationship("User")
