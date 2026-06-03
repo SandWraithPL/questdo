@@ -253,7 +253,7 @@ function Auth({ onLogin }) {
   );
 }
 
-function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete }) {
+function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete, busyTaskIds = [] }) {
   const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
   const [view, setView] = useState("month");
   const selectedStr = toDateStr(selectedDate);
@@ -356,7 +356,9 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
         {dayTasks.length === 0 && <p className="empty">Brak zadań na ten dzień</p>}
         {dayTasks.map(task => (
           <div key={task.id} className={`day-task ${task.completed ? "completed" : ""}`}>
-            {task.completed ? <div className="task-check checked locked">✓</div> : <button type="button" className="task-check" onClick={() => onTaskToggle(task)} />}
+            {task.completed ? <div className="task-check checked locked">✓</div> : (
+              <button type="button" className="task-check" disabled={busyTaskIds.includes(task.id)} onClick={() => onTaskToggle(task)} />
+            )}
             <div className="day-task-info">
               <strong>{task.important ? "Ważne · " : ""}{task.title}</strong>
               {task.description && <p>{task.description}</p>}
@@ -366,7 +368,7 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
                 {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
               </div>
             </div>
-            <button type="button" onClick={() => onTaskDelete(task)}>🗑</button>
+            <button type="button" disabled={busyTaskIds.includes(task.id)} onClick={() => onTaskDelete(task)}>🗑</button>
           </div>
         ))}
       </div>
@@ -565,12 +567,11 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
-function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck }) {
+function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck, busyTaskIds = [] }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
-  const [isToggling, setIsToggling] = useState(false);
 
   const canUncheckTask = (task) => {
     if (!task.completed || !task.completed_at) return false;
@@ -580,25 +581,17 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
     return hoursSinceCompletion < 24;
   };
 
-  // Unified toggle function - handles both completing and uncompleting
   const handleToggleClick = (task) => {
-    // Prevent multiple simultaneous clicks on ANY task (global lock)
-    if (isToggling) {
-      return;
-    }
+    if (busyTaskIds.includes(task.id)) return;
 
     if (task.completed) {
-      // Task is completed - try to uncheck if within 24h
       if (canUncheckTask(task) && onUncheck) {
-        setIsToggling(true);
-        onUncheck(task).finally(() => setIsToggling(false));
+        onUncheck(task);
       } else if (!canUncheckTask(task)) {
         onError("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
       }
     } else {
-      // Task is not completed - complete it
-      setIsToggling(true);
-      onToggle(task).finally(() => setIsToggling(false));
+      onToggle(task);
     }
   };
 
@@ -686,10 +679,11 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
             </div>
           ) : (
             <>
-              <button 
-                className={`task-check ${task.completed && !canUncheckTask(task) ? "locked" : ""}`} 
+              <button
+                className={`task-check ${task.completed && !canUncheckTask(task) ? "locked" : ""}`}
+                disabled={busyTaskIds.includes(task.id)}
                 onClick={() => handleToggleClick(task)}
-                title={task.completed && !canUncheckTask(task) ? "Nie można odznaczyć (minęło więcej niż 24h)" : ""}
+                title={task.completed && !canUncheckTask(task) ? "Nie można odznaczyć (minęło więcej niż 24h)" : busyTaskIds.includes(task.id) ? "Trwa synchronizacja..." : ""}
               >
                 {task.completed ? "✓" : ""}
               </button>
@@ -707,7 +701,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
               </div>
               <div className="task-actions">
                 {!task.completed && <button className="icon-btn" onClick={() => startEdit(task)}>✏️</button>}
-                <button className="task-delete" onClick={() => onDelete(task)}>🗑</button>
+                <button className="task-delete" disabled={busyTaskIds.includes(task.id)} onClick={() => onDelete(task)}>🗑</button>
               </div>
             </>
           )}
@@ -889,8 +883,13 @@ export default function App() {
   const [reminderOffset, setReminderOffset] = useState("");
   const [notificationsEnabled, setNotificationsEnabled] = useState(() => ("Notification" in window ? Notification.permission === "granted" : false));
   const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [addingTask, setAddingTask] = useState(false);
+  const [busyTaskIds, setBusyTaskIds] = useState([]);
 
   const headers = { Authorization: `Bearer ${token}` };
+  const setTaskBusy = (id, busy) => {
+    setBusyTaskIds((prev) => (busy ? (prev.includes(id) ? prev : [...prev, id]) : prev.filter((x) => x !== id)));
+  };
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
   const enableNotifications = async () => {
     const permission = await ensureNotificationPermission();
@@ -965,68 +964,17 @@ export default function App() {
     }
   };
 
-  const refreshUserData = async () => {
-    if (!token) return;
-    
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] refreshUserData START - current_exp: ${user?.exp}, current_streak: ${user?.streak}`);
-    
-    const noCacheHeaders = {
-      ...headers,
-      'Cache-Control': 'no-cache',
-      'Pragma': 'no-cache'
-    };
-    
-    try {
-      const [userRes, achRes, rareDropsRes, historyRes] = await Promise.all([
-        axios.get(`${API}/me`, { headers: noCacheHeaders }),
-        axios.get(`${API}/achievements`, { headers: noCacheHeaders }),
-        axios.get(`${API}/rare-drops/inventory`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
-        axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
-      ]);
-      
-      const newUnlocked = achRes.data.unlocked || [];
-      
-      console.log(`[${timestamp}] refreshUserData API RESPONSE - server_exp: ${userRes.data.exp}, server_streak: ${userRes.data.streak}`);
-      
-      // Nie nadpisuj exp i streak, jeśli użytkownik ma już wyższe wartości (optimistic UI)
-      setUser(prev => {
-        if (!prev) return userRes.data;
-        const newExp = Math.max(prev.exp || 0, userRes.data.exp || 0);
-        const newStreak = Math.max(prev.streak || 0, userRes.data.streak || 0);
-        console.log(`[${timestamp}] refreshUserData PRESERVING - preserved_exp: ${newExp}, preserved_streak: ${newStreak}`);
-        return {
-          ...userRes.data,
-          // Zachowaj wyższe wartości (optymistyczne)
-          exp: newExp,
-          streak: newStreak,
-        };
-      });
-      setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
-      if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
-      setHistory(historyRes.data || []);
-      
-      console.log(`[${timestamp}] refreshUserData SUCCESS`);
-    } catch (err) {
-      console.error(`[${timestamp}] refreshUserData ERROR:`, err);
+  const showToggleRewards = (data) => {
+    const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop } = data;
+    if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
+    if (earned_drop) {
+      showToast(`✨ Zdobyto ${earned_drop.icon} ${earned_drop.name}! ${earned_drop.description}`);
+      showAppNotification("Nowa znajdźka", `${earned_drop.name}: ${earned_drop.description}`);
     }
-  };
-
-  const fetchChallenges = async () => {
-    if (!token) return;
-    
-    const noCacheHeaders = {
-      ...headers,
-      'Cache-Control': 'no-cache',
-      'Pragma': 'no-cache'
-    };
-    
-    try {
-      const chRes = await axios.get(`${API}/challenges`, { headers: noCacheHeaders });
-      console.log('[fetchChallenges] API response:', chRes.data);
-      setChallenges(chRes.data);
-    } catch (err) {
-      console.error("Fetch challenges error:", err);
+    const freshAchievement = [...(new_achievements || []), ...(new_exclusive_achievements || [])][0];
+    if (freshAchievement) {
+      showToast(`🏆 Odblokowano: ${freshAchievement.title}! ${freshAchievement.icon}`);
+      showAppNotification("Nowe osiągnięcie", `${freshAchievement.title}: ${freshAchievement.description}`);
     }
   };
 
@@ -1035,10 +983,10 @@ export default function App() {
 
   const addTask = async () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
-    
-    const tempId = `temp-${Date.now()}`;
-    const tempTask = {
-      id: tempId,
+    if (addingTask) return;
+
+    const savedDate = taskDate;
+    const apiPayload = {
       title,
       description: desc,
       difficulty,
@@ -1046,155 +994,63 @@ export default function App() {
       due_date: taskDate,
       important,
       reminder_offset_days: parseReminderValue(reminderOffset),
-      completed: false,
     };
-    
-    const apiPayload = { title, description: desc, difficulty, category, due_date: taskDate, important, reminder_offset_days: parseReminderValue(reminderOffset) };
-    setTitle(""); setDesc(""); setImportant(false); setReminderOffset(""); setShowAddTask(false);
-    
-    setTasks(prev => [...prev, tempTask]);
-    
+
+    setAddingTask(true);
+    setTitle("");
+    setDesc("");
+    setImportant(false);
+    setReminderOffset("");
+    setShowAddTask(false);
+
     try {
-      const res = await axios.post(`${API}/tasks`, apiPayload, { headers });
-      const serverTask = res.data;
-      showToast(`✅ Dodano quest na ${taskDate}`);
-      
-      setTasks(prev => prev.map(t => t.id === tempId ? { ...tempTask, id: serverTask.id } : t));
+      await axios.post(`${API}/tasks`, apiPayload, { headers });
+      showToast(`✅ Dodano quest na ${savedDate}`);
+      await fetchData();
     } catch (err) {
-      console.error('[addTask] API error:', err);
-      setTasks(prev => prev.filter(t => t.id !== tempId));
+      console.error("[addTask] API error:", err);
       showToast(err.response?.data?.detail || "Błąd dodawania");
+    } finally {
+      setAddingTask(false);
     }
   };
 
   const toggleTask = async (task) => {
-    if (task.completed) return;
-    
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] toggleTask START - task_id: ${task.id}, title: ${task.title}`);
-    
-    // Check if task is still in expected state before API call
-    const currentTask = tasks.find(t => t.id === task.id);
-    if (!currentTask || currentTask.completed) {
-      console.log(`[${timestamp}] toggleTask ABORT - task already completed or not found`);
-      return;
-    }
-    
-    // Save the expected state before API call to detect race conditions
-    const expectedCompletedState = false;
-    
+    if (task.completed || busyTaskIds.includes(task.id)) return;
+
     const expPreview = getExpPreview(task.difficulty, task.due_date);
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
-    
-    // 1. Optimistic UI update - set exp_awarded immediately and sort
-    setTasks(prev => {
-      const updated = prev.map(t => t.id === task.id ? { ...t, completed: true, exp_awarded: true, exp_awarded_amount: expPreview.amount, completed_at: new Date().toISOString() } : t);
-      return updated.sort((a, b) => {
-        if (a.completed !== b.completed) return a.completed ? 1 : -1;
-        return new Date(a.due_date) - new Date(b.due_date);
-      });
-    });
-    
-    // 2. Natychmiastowa aktualizacja EXP w stanie user (bez czekania na API)
-    setUser(prev => {
-      if (!prev) return prev;
-      const newExp = (prev.exp || 0) + expPreview.amount;
-      const level = getExpProgress(newExp, levelThresholds);
-      return { ...prev, exp: newExp, level: level.current };
-    });
-    
-    console.log(`[${timestamp}] toggleTask OPTIMISTIC - exp_preview: ${expPreview.amount}, new_exp: ${(user?.exp || 0) + expPreview.amount}`);
-    
+
+    setTaskBusy(task.id, true);
     showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
-    
+
     try {
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-      const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop, exp_gained, exp_timing, challenges, streak, level, exp: serverExp } = res.data;
-      
-      console.log(`[${timestamp}] toggleTask API RESPONSE - exp_gained: ${exp_gained}, streak: ${streak}, level: ${level}, server_exp: ${serverExp}`);
-      console.log(`[${timestamp}] toggleTask API RESPONSE - challenges:`, challenges);
-      
-      // Check if task state has changed since request was sent (race condition detection)
-      const taskAfterRequest = tasks.find(t => t.id === task.id);
-      if (!taskAfterRequest || taskAfterRequest.completed !== true) {
-        console.log(`[${timestamp}] toggleTask IGNORE STALE RESPONSE - task state changed since request was sent`);
-        return;
-      }
-      
-      // 3. Aktualizacja z danymi z API (tylko jeśli różne od optymistycznych)
-      setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true, exp_awarded: true, exp_awarded_amount: exp_gained || expPreview.amount } : t));
-      
-      // 4. Inkrementalna aktualizacja user.exp (poprawka ewentualnej różnicy)
-      // Skip correction if exp_gained is 0 or negative (indicates uncheck operation or stale response)
-      if (exp_gained && exp_gained > 0 && exp_gained !== expPreview.amount) {
-        const diff = exp_gained - expPreview.amount;
-        setUser(prev => {
-          if (!prev) return prev;
-          const newExp = (prev.exp || 0) + diff;
-          const levelInfo = getExpProgress(newExp, levelThresholds);
-          return { ...prev, exp: newExp, level: levelInfo.current };
-        });
-        console.log(`[${timestamp}] toggleTask EXP CORRECTION - diff: ${diff}, new_exp: ${(user?.exp || 0) + diff}`);
-      }
-      
-      // 5. Aktualizacja streaka z odpowiedzi API
-      if (streak !== undefined) {
-        setUser(prev => prev ? { ...prev, streak: streak } : prev);
-        console.log(`[${timestamp}] toggleTask STREAK UPDATE - streak: ${streak}`);
-      }
-      
-      // 6. Update challenges immediately from response
-      if (challenges) {
-        setChallenges(challenges);
-        console.log(`[${timestamp}] toggleTask CHALLENGES UPDATE`);
-      }
-      
-      // 7. Update level from API response
-      if (level !== undefined) {
-        setUser(prev => prev ? { ...prev, level: level } : prev);
-        console.log(`[${timestamp}] toggleTask LEVEL UPDATE - level: ${level}`);
-      }
-      
-      if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
-      
-      if (earned_drop) {
-        showToast(`✨ Zdobyto ${earned_drop.icon} ${earned_drop.name}! ${earned_drop.description}`);
-        showAppNotification("Nowa znajdźka", `${earned_drop.name}: ${earned_drop.description}`);
-      }
-      
-      const freshAchievement = [...(new_achievements || []), ...(new_exclusive_achievements || [])][0];
-      if (freshAchievement) {
-        showToast(`🏆 Odblokowano: ${freshAchievement.title}! ${freshAchievement.icon}`);
-        showAppNotification("Nowe osiągnięcie", `${freshAchievement.title}: ${freshAchievement.description}`);
-      }
-      
-      console.log(`[${timestamp}] toggleTask SUCCESS`);
+      showToggleRewards(res.data);
+      await fetchData();
     } catch (err) {
-      console.error(`[${timestamp}] toggleTask API ERROR:`, err);
-      // Rollback on error - przywróć poprzednie wartości
-      setTasks(prev => prev.map(t => t.id === task.id ? task : t));
-      setUser(prev => {
-        if (!prev) return prev;
-        const newExp = (prev.exp || 0) - expPreview.amount;
-        const levelInfo = getExpProgress(newExp, levelThresholds);
-        return { ...prev, exp: newExp, level: levelInfo.current };
-      });
+      console.error("[toggleTask] API error:", err);
       showToast(err.response?.data?.detail || "Błąd aktualizacji");
+      await fetchData();
+    } finally {
+      setTaskBusy(task.id, false);
     }
   };
 
   const saveTask = async (id, updates) => {
-    // Optimistic update
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    
+    if (busyTaskIds.includes(id)) return;
+
+    setTaskBusy(id, true);
     try {
       await axios.patch(`${API}/tasks/${id}`, updates, { headers });
       showToast("💾 Zapisano zmiany");
+      await fetchData();
     } catch (err) {
-      // Rollback
-      setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
       showToast(err.response?.data?.detail || "Błąd zapisu");
+      await fetchData();
+    } finally {
+      setTaskBusy(id, false);
     }
   };
 
@@ -1211,93 +1067,20 @@ export default function App() {
       showToast("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
       return;
     }
+    if (busyTaskIds.includes(task.id)) return;
 
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] uncheckTask START - task_id: ${task.id}, title: ${task.title}`);
-
-    // Check if task is still in expected state before API call
-    const currentTask = tasks.find(t => t.id === task.id);
-    if (!currentTask || !currentTask.completed) {
-      console.log(`[${timestamp}] uncheckTask ABORT - task already uncompleted or not found`);
-      return;
-    }
-
-    // Save the expected state before API call to detect race conditions
-    const expectedCompletedState = true;
-
-    const originalTask = { ...task };
-    const expToRevert = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
-    
-    // Optimistic update
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: false, exp_awarded: false, exp_awarded_amount: 0 } : t));
-    
-    // Optimistic EXP revert with level recalculation
-    setUser(prev => {
-      if (!prev) return prev;
-      const newExp = Math.max(0, (prev.exp || 0) - expToRevert);
-      const levelInfo = getExpProgress(newExp, levelThresholds);
-      return { ...prev, exp: newExp, level: levelInfo.current };
-    });
-    
-    console.log(`[${timestamp}] uncheckTask OPTIMISTIC - exp_to_revert: ${expToRevert}, new_exp: ${Math.max(0, (user?.exp || 0) - expToRevert)}`);
-    
-    showToast("🔄 Cofanie ukończenia...");
+    setTaskBusy(task.id, true);
+    showToast("✅ Cofnięto ukończenie zadania");
 
     try {
-      const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
-      const { challenges, streak, exp: serverExp, level } = res.data;
-      
-      console.log(`[${timestamp}] uncheckTask API RESPONSE - streak: ${streak}, server_exp: ${serverExp}, level: ${level}`);
-      console.log(`[${timestamp}] uncheckTask API RESPONSE - challenges:`, challenges);
-      
-      // Check if task state has changed since request was sent (race condition detection)
-      const taskAfterRequest = tasks.find(t => t.id === task.id);
-      if (!taskAfterRequest || taskAfterRequest.completed !== false) {
-        console.log(`[${timestamp}] uncheckTask IGNORE STALE RESPONSE - task state changed since request was sent`);
-        return;
-      }
-      
-      // Update challenges immediately from response
-      if (challenges) {
-        setChallenges(challenges);
-        console.log(`[${timestamp}] uncheckTask CHALLENGES UPDATE`);
-      }
-      
-      // Update streak from API response
-      if (streak !== undefined) {
-        setUser(prev => prev ? { ...prev, streak: streak } : prev);
-        console.log(`[${timestamp}] uncheckTask STREAK UPDATE - streak: ${streak}`);
-      }
-      
-      // Update level from API response
-      if (level !== undefined) {
-        setUser(prev => prev ? { ...prev, level: level } : prev);
-        console.log(`[${timestamp}] uncheckTask LEVEL UPDATE - level: ${level}`);
-      }
-      
-      // Correct EXP if server value differs
-      if (serverExp !== undefined && user?.exp !== serverExp) {
-        setUser(prev => {
-          if (!prev) return prev;
-          const levelInfo = getExpProgress(serverExp, levelThresholds);
-          return { ...prev, exp: serverExp, level: levelInfo.current };
-        });
-        console.log(`[${timestamp}] uncheckTask EXP CORRECTION - server_exp: ${serverExp}`);
-      }
-      
-      console.log(`[${timestamp}] uncheckTask SUCCESS`);
-      showToast("✅ Cofnięto ukończenie zadania");
+      await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
+      await fetchData();
     } catch (err) {
-      console.error(`[${timestamp}] uncheckTask API ERROR:`, err);
-      // Rollback on error
-      setTasks(prev => prev.map(t => t.id === task.id ? originalTask : t));
-      setUser(prev => {
-        if (!prev) return prev;
-        const newExp = (prev.exp || 0) + expToRevert;
-        const levelInfo = getExpProgress(newExp, levelThresholds);
-        return { ...prev, exp: newExp, level: levelInfo.current };
-      });
+      console.error("[uncheckTask] API error:", err);
       showToast(err.response?.data?.detail || "Błąd cofania ukończenia");
+      await fetchData();
+    } finally {
+      setTaskBusy(task.id, false);
     }
   };
   
@@ -1316,67 +1099,26 @@ export default function App() {
   };
   
   const deleteTask = async (task) => {
-    const timestamp = new Date().toISOString();
-    console.log(`[${timestamp}] deleteTask START - task_id: ${task.id}, title: ${task.title}`);
-    
+    if (busyTaskIds.includes(task.id)) return;
+
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
-    
-    // Optimistic delete
-    setTasks(prev => prev.filter(t => t.id !== task.id));
-    
-    // Optimistic EXP revert with level recalculation
-    if (task.exp_awarded) {
-      setUser(prev => {
-        if (!prev) return prev;
-        const newExp = Math.max(0, (prev.exp || 0) - exp);
-        const levelInfo = getExpProgress(newExp, levelThresholds);
-        return { ...prev, exp: newExp, level: levelInfo.current };
-      });
-      console.log(`[${timestamp}] deleteTask OPTIMISTIC - exp_to_revert: ${exp}, new_exp: ${Math.max(0, (user?.exp || 0) - exp)}`);
-    }
-    
+
+    setTaskBusy(task.id, true);
     try {
       const res = await axios.delete(`${API}/tasks/${task.id}`, { headers });
-      const { exp_removed, exp: serverExp, level } = res.data;
-      
-      console.log(`[${timestamp}] deleteTask API RESPONSE - exp_removed: ${exp_removed}, server_exp: ${serverExp}, level: ${level}`);
-      
-      // Update level from API response
-      if (level !== undefined) {
-        setUser(prev => prev ? { ...prev, level: level } : prev);
-        console.log(`[${timestamp}] deleteTask LEVEL UPDATE - level: ${level}`);
-      }
-      
-      // Correct EXP if server value differs
-      if (serverExp !== undefined && user?.exp !== serverExp) {
-        setUser(prev => {
-          if (!prev) return prev;
-          const levelInfo = getExpProgress(serverExp, levelThresholds);
-          return { ...prev, exp: serverExp, level: levelInfo.current };
-        });
-        console.log(`[${timestamp}] deleteTask EXP CORRECTION - server_exp: ${serverExp}`);
-      }
-      
       showToast(res.data.exp_removed > 0 ? `🗑️ Usunięto quest (-${res.data.exp_removed} EXP)` : "🗑️ Usunięto quest");
-      console.log(`[${timestamp}] deleteTask SUCCESS`);
+      await fetchData();
     } catch (err) {
-      console.error(`[${timestamp}] deleteTask API ERROR:`, err);
+      console.error("[deleteTask] API error:", err);
       if (err.response?.status === 404) {
         showToast("Zadanie już nie istnieje");
-        return;
+      } else {
+        showToast(err.response?.data?.detail || "Błąd usuwania");
       }
-      // Rollback - restore task and EXP
-      setTasks(prev => [...prev, task]);
-      if (task.exp_awarded) {
-        setUser(prev => {
-          if (!prev) return prev;
-          const newExp = (prev.exp || 0) + exp;
-          const levelInfo = getExpProgress(newExp, levelThresholds);
-          return { ...prev, exp: newExp, level: levelInfo.current };
-        });
-      }
-      showToast(err.response?.data?.detail || "Błąd usuwania");
+      await fetchData();
+    } finally {
+      setTaskBusy(task.id, false);
     }
   };
   
@@ -1391,8 +1133,8 @@ export default function App() {
   return (
     <div className="app">
       <div className="header"><h1>⚔️ QuestDo</h1><Profile user={user} onLogout={logout} onDeleteAccount={deleteAccount} achievements={achievements} rareDrops={rareDrops} history={history} onOpenAdmin={() => setShowAdminPanel(true)} /></div>
-      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} />
+      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} busyTaskIds={busyTaskIds} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} busyTaskIds={busyTaskIds} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">
@@ -1410,7 +1152,10 @@ export default function App() {
             </select>
           </div>
           {(() => { const p = getExpPreview(difficulty, taskDate); const info = EXP_TIMING_LABELS[p.timing]; return <p className="exp-preview-hint">Ukończ dziś: <strong>+{p.amount} EXP</strong> ({info.text})</p>; })()}
-          <div className="row"><button onClick={addTask}>Dodaj Quest</button><button onClick={() => setShowAddTask(false)} className="cancel-btn">Anuluj</button></div>
+          <div className="row">
+            <button onClick={addTask} disabled={addingTask}>{addingTask ? "Dodawanie…" : "Dodaj Quest"}</button>
+            <button onClick={() => setShowAddTask(false)} className="cancel-btn" disabled={addingTask}>Anuluj</button>
+          </div>
         </div>
       )}
       <button type="button" className={`notifications-btn ${notificationsEnabled ? "enabled" : ""}`} onClick={enableNotifications}>
