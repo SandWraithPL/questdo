@@ -570,7 +570,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
   const [filter, setFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
-  const [togglingTaskId, setTogglingTaskId] = useState(null);
+  const [isToggling, setIsToggling] = useState(false);
 
   const canUncheckTask = (task) => {
     if (!task.completed || !task.completed_at) return false;
@@ -582,23 +582,23 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
 
   // Unified toggle function - handles both completing and uncompleting
   const handleToggleClick = (task) => {
-    // Prevent multiple simultaneous clicks on the same task
-    if (togglingTaskId === task.id) {
+    // Prevent multiple simultaneous clicks on ANY task (global lock)
+    if (isToggling) {
       return;
     }
 
     if (task.completed) {
       // Task is completed - try to uncheck if within 24h
       if (canUncheckTask(task) && onUncheck) {
-        setTogglingTaskId(task.id);
-        onUncheck(task).finally(() => setTogglingTaskId(null));
+        setIsToggling(true);
+        onUncheck(task).finally(() => setIsToggling(false));
       } else if (!canUncheckTask(task)) {
         onError("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
       }
     } else {
       // Task is not completed - complete it
-      setTogglingTaskId(task.id);
-      onToggle(task).finally(() => setTogglingTaskId(null));
+      setIsToggling(true);
+      onToggle(task).finally(() => setIsToggling(false));
     }
   };
 
@@ -1089,7 +1089,7 @@ export default function App() {
     
     // 1. Optimistic UI update - set exp_awarded immediately and sort
     setTasks(prev => {
-      const updated = prev.map(t => t.id === task.id ? { ...t, completed: true, exp_awarded: true, exp_awarded_amount: expPreview.amount } : t);
+      const updated = prev.map(t => t.id === task.id ? { ...t, completed: true, exp_awarded: true, exp_awarded_amount: expPreview.amount, completed_at: new Date().toISOString() } : t);
       return updated.sort((a, b) => {
         if (a.completed !== b.completed) return a.completed ? 1 : -1;
         return new Date(a.due_date) - new Date(b.due_date);
