@@ -189,6 +189,9 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .challenge-description { font-size: 0.75rem; color: #aaa; padding-left: 34px; }
 .challenge-item.done .challenge-label { color: #4caf50; }
 .challenge-item.done .challenge-description { color: #666; text-decoration: line-through; }
+.challenge-item.completed { opacity: 0.6; }
+.challenge-item.completed .challenge-label { text-decoration: line-through; }
+.challenge-item.completed .challenge-description { text-decoration: line-through; }
 
 /* Leaderboard */
 .leaderboard-panel { background: #1a1a2e; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }

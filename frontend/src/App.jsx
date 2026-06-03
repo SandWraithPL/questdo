@@ -452,9 +452,9 @@ function ChallengesBar({ challenges }) {
           const pct = g.target > 0 ? Math.min(100, Math.round((g.current / g.target) * 100)) : 0;
           const done = g.done || g.current >= g.target;
           return (
-            <div key={g.id} className={`challenge-item ${done ? "done" : ""}`}>
+            <div key={g.id} className={`challenge-item ${done ? "done completed" : ""}`}>
               <div className="challenge-row-top">
-                <span className="challenge-icon">{g.icon}</span>
+                <span className="challenge-icon">{done ? "✅" : g.icon}</span>
                 <span className="challenge-label">{g.label}</span>
                 <div className="challenge-progress-small"><div className="challenge-fill-small" style={{ width: `${pct}%` }} /></div>
                 <span className="challenge-count-small">{g.current}/{g.target}</span>
@@ -955,6 +955,23 @@ export default function App() {
     }
   };
 
+  const fetchChallenges = async () => {
+    if (!token) return;
+    
+    const noCacheHeaders = {
+      ...headers,
+      'Cache-Control': 'no-cache',
+      'Pragma': 'no-cache'
+    };
+    
+    try {
+      const chRes = await axios.get(`${API}/challenges`, { headers: noCacheHeaders });
+      setChallenges(chRes.data);
+    } catch (err) {
+      console.error("Fetch challenges error:", err);
+    }
+  };
+
   useEffect(() => { if (token) fetchData(); }, [token]);
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
 
@@ -1032,8 +1049,9 @@ export default function App() {
         showAppNotification("Nowe osiągnięcie", `${freshAchievement.title}: ${freshAchievement.description}`);
       }
       
-      // Refresh user data in background (don't block UI, don't overwrite tasks)
+      // Refresh user data and challenges in background (don't block UI, don't overwrite tasks)
       refreshUserData();
+      fetchChallenges();
     } catch (err) {
       console.error('[toggleTask] API error:', err);
       // Rollback on error
