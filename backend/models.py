@@ -21,14 +21,14 @@ class Task(Base):
     id = Column(Integer, primary_key=True, index=True)
     title = Column(String)
     description = Column(String, default="")
-    difficulty = Column(String, default="easy")  # easy, medium, hard
+    difficulty = Column(String, default="easy")
     category = Column(String, default="Inne")
-    due_date = Column(Date, default=date.today)  # DATA zadania
+    due_date = Column(Date, default=date.today)
     important = Column(Boolean, default=False)
-    reminder_offset_days = Column(Integer, nullable=True)  # ile dni przed terminem przypomnieć
+    reminder_offset_days = Column(Integer, nullable=True)
     completed = Column(Boolean, default=False)
-    exp_awarded = Column(Boolean, default=False)  # Czy EXP już przyznany
-    exp_awarded_amount = Column(Integer, default=0)  # Faktycznie przyznane EXP (z bonusem/karą)
+    exp_awarded = Column(Boolean, default=False)
+    exp_awarded_amount = Column(Integer, default=0)
     completed_at = Column(DateTime, nullable=True)
     delayed_rewards_claimed = Column(Boolean, default=False)
     delayed_rewards_forfeited = Column(Boolean, default=False)
@@ -39,12 +39,12 @@ class Task(Base):
 class Achievement(Base):
     __tablename__ = "achievements"
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String, unique=True)  # slug (np. first_step)
-    title = Column(String, nullable=True)  # wyświetlana nazwa (np. First Step)
+    name = Column(String, unique=True)
+    title = Column(String, nullable=True)
     description = Column(String)
     icon = Column(String, default="🏆")
-    requirement_type = Column(String)  # "tasks_count", "streak", "exp", "category_master"
-    requirement_value = Column(Integer)  # np. 10 zadań
+    requirement_type = Column(String)
+    requirement_value = Column(Integer)
     
 class UserAchievement(Base):
     __tablename__ = "user_achievements"
@@ -57,29 +57,26 @@ class UserAchievement(Base):
 
 
 class DailyQuestAssignment(Base):
-    """3 losowe wyzwania przypisane użytkownikowi na dany dzień."""
     __tablename__ = "daily_quest_assignments"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
     quest_date = Column(Date, index=True)
-    quest_ids = Column(String)  # np. "c3,hard1,studia"
+    quest_ids = Column(String)
     bonus_claimed = Column(Boolean, default=False)
 
 
 class RareDrop(Base):
-    """Definicja rzadkiego przedmiotu — jedno źródło prawdy."""
     __tablename__ = "rare_drops"
     id = Column(Integer, primary_key=True, index=True)
-    slug = Column(String, unique=True, index=True)  # np. "platinum_coin"
-    name = Column(String)  # Platinum Coin
+    slug = Column(String, unique=True, index=True)
+    name = Column(String)
     description = Column(String)
-    icon = Column(String)  # 🪙
-    rarity = Column(String)  # "common", "rare", "epic", "legendary"
-    drop_chance_percent = Column(Integer, default=5)  # % szansa dziennie
+    icon = Column(String)
+    rarity = Column(String)
+    drop_chance_percent = Column(Integer, default=5)
 
 
 class PlayerRareDrop(Base):
-    """Przedmiot zdobyty przez gracza."""
     __tablename__ = "player_rare_drops"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
@@ -92,18 +89,16 @@ class PlayerRareDrop(Base):
 
 
 class ExclusiveAchievement(Base):
-    """Specjalne osiągnięcia z warunkami czasowymi/czułymi."""
     __tablename__ = "exclusive_achievements"
     id = Column(Integer, primary_key=True, index=True)
     slug = Column(String, unique=True, index=True)
     title = Column(String)
     description = Column(String)
     icon = Column(String, default="⭐")
-    requirement_type = Column(String)  # "founding_titan", "speedrunner", "night_owl", etc.
+    requirement_type = Column(String)
 
 
 class PlayerExclusiveAchievement(Base):
-    """Specjalne osiągnięcie zdobyte przez gracza."""
     __tablename__ = "player_exclusive_achievements"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
@@ -114,22 +109,20 @@ class PlayerExclusiveAchievement(Base):
 
 
 class PlayerBadge(Base):
-    """Odznaki/rangi gracza — zebraane z kolekcji."""
     __tablename__ = "player_badges"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
-    badge_type = Column(String)  # "collector", "speedrunner", "veteran", "completionist"
-    badge_tier = Column(Integer, default=1)  # 1, 2, 3, 4, 5
+    badge_type = Column(String)
+    badge_tier = Column(Integer, default=1)
     acquired_at = Column(DateTime, default=datetime.utcnow)
     user = relationship("User")
 
 
 class PlayerHistory(Base):
-    """Chronologiczny dziennik rzeczy zdobytych przez gracza."""
     __tablename__ = "player_history"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
-    event_type = Column(String, index=True)  # "achievement", "rare_drop", "level"
+    event_type = Column(String, index=True)
     event_key = Column(String, unique=True, index=True)
     message = Column(String)
     occurred_at = Column(DateTime, default=datetime.utcnow, index=True)
@@ -137,7 +130,6 @@ class PlayerHistory(Base):
 
 
 class PushSubscription(Base):
-    """Subskrypcja Web Push (powiadomienia gdy aplikacja zamknięta)."""
     __tablename__ = "push_subscriptions"
     id = Column(Integer, primary_key=True, index=True)
     user_id = Column(Integer, ForeignKey("users.id"), index=True)
@@ -148,7 +140,6 @@ class PushSubscription(Base):
 
 
 class SentTaskReminder(Base):
-    """Wysłane przypomnienia push (jedno na zadanie i dzień przypomnienia)."""
     __tablename__ = "sent_task_reminders"
     id = Column(Integer, primary_key=True, index=True)
     task_id = Column(Integer, ForeignKey("tasks.id"), index=True)

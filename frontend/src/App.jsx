@@ -179,7 +179,6 @@ function computeAchievementsOptimistic(tasks, achievements) {
   if (!achievements) return achievements;
   const completedCount = countCompletedTasks(tasks);
 
-  // Achievement definitions for count-based achievements
   const ACHIEVEMENT_DEFS_TASK = [
     { slug: "first_step", title: "Pierwszy krok", description: "Ukończ pierwszy quest.", icon: "🌟", value: 1 },
     { slug: "second_bite", title: "Dobry start", description: "Ukończ 3 questy.", icon: "✨", value: 3 },
@@ -190,15 +189,11 @@ function computeAchievementsOptimistic(tasks, achievements) {
     { slug: "invincible_grind", title: "Dwieście zadań", description: "Ukończ 200 questów.", icon: "💥", value: 200 },
   ];
 
-  // Filter unlocked achievements - only keep count-based ones whose conditions are still met
   const unlocked = (achievements.unlocked || []).filter((ach) => {
     const required = TASK_ACHIEVEMENT_REQUIREMENTS[ach.slug];
-    // Keep if it's not a count-based achievement (we can't validate those optimistically)
-    // or if it's count-based and the condition is still met
     return required == null || completedCount >= required;
   });
 
-  // Add newly-met task-count achievements that are not yet in unlocked
   const unlockedSlugs = new Set(unlocked.map((a) => a.slug));
   for (const def of ACHIEVEMENT_DEFS_TASK) {
     if (!unlockedSlugs.has(def.slug) && completedCount >= def.value) {
@@ -207,7 +202,6 @@ function computeAchievementsOptimistic(tasks, achievements) {
     }
   }
 
-  // Find the next count-based achievement that is not yet unlocked
   let next = null;
   for (const def of ACHIEVEMENT_DEFS_TASK) {
     if (!unlockedSlugs.has(def.slug)) {
@@ -232,13 +226,11 @@ function reconcileAchievementsOptimistic(tasks, achievements) {
   if (!achievements) return achievements;
   const completedCount = countCompletedTasks(tasks);
   
-  // Filter unlocked achievements - only keep those whose conditions are still met
   const unlocked = (achievements.unlocked || []).filter((ach) => {
     const required = TASK_ACHIEVEMENT_REQUIREMENTS[ach.slug];
     return required == null || completedCount >= required;
   });
 
-  // Add newly-met task-count achievements that are not yet in unlocked
   const unlockedSlugs = new Set(unlocked.map((a) => a.slug));
   const ACHIEVEMENT_DEFS_TASK = [
     { slug: "first_step", title: "Pierwszy krok", description: "Ukończ pierwszy quest.", icon: "🌟", value: 1 },
@@ -370,7 +362,6 @@ function computeChallengesOptimistic(tasks, challenges) {
 
   const today = toDateStr(new Date());
 
-  // Count tasks completed today (local date)
   const done_today = tasks.filter((t) => {
     if (!t.completed || !t.completed_at) return false;
     const completedDate = new Date(t.completed_at);
@@ -378,10 +369,8 @@ function computeChallengesOptimistic(tasks, challenges) {
     return completedLocalDate === today;
   }).length;
 
-  // Count tasks due today
   const total_today = tasks.filter((t) => t.due_date === today).length;
 
-  // Count tasks completed today by difficulty
   const hard_done = tasks.filter((t) => {
     if (!t.completed || !t.completed_at) return false;
     const completedDate = new Date(t.completed_at);
@@ -403,7 +392,6 @@ function computeChallengesOptimistic(tasks, challenges) {
     return completedLocalDate === today && t.difficulty === "easy";
   }).length;
 
-  // Count distinct categories of tasks completed today
   const categories_done = new Set(
     tasks.filter((t) => {
       if (!t.completed || !t.completed_at) return false;
@@ -413,10 +401,8 @@ function computeChallengesOptimistic(tasks, challenges) {
     }).map((t) => t.category)
   );
 
-  // Count tasks due today that are completed
   const done_due_today = tasks.filter((t) => t.due_date === today && t.completed).length;
 
-  // Evaluate each goal
   const goals = challenges.goals.map((goal) => {
     const qtype = goal.type;
     const target = goal.target || 1;
@@ -443,7 +429,6 @@ function computeChallengesOptimistic(tasks, challenges) {
     } else if (qtype === "complete_categories_distinct") {
       current = categories_done.size;
     } else {
-      // Skip types we can't compute optimistically: add_tasks, streak_min
       return goal;
     }
 

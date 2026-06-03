@@ -1,10 +1,8 @@
-"""Pula wyzwań dziennych — codziennie losowane 3 na użytkownika."""
 import random
 from datetime import date
 from typing import Any
 
 DAILY_QUEST_POOL: list[dict[str, Any]] = [
-    # Liczba ukończeń
     {"id": "c1", "icon": "✅", "label": "Jeden krok", "description": "Ukończ 1 zadanie", "type": "complete_count", "target": 1},
     {"id": "c2", "icon": "⚔️", "label": "Podwójny wysiłek", "description": "Ukończ 2 zadania", "type": "complete_count", "target": 2},
     {"id": "c3", "icon": "🗡️", "label": "Trzy przed zmierzchem", "description": "Ukończ 3 zadania", "type": "complete_count", "target": 3},
@@ -12,8 +10,6 @@ DAILY_QUEST_POOL: list[dict[str, Any]] = [
     {"id": "c5", "icon": "🏆", "label": "Pięć na liście", "description": "Ukończ 5 zadań", "type": "complete_count", "target": 5},
     {"id": "c6", "icon": "🌊", "label": "Sześć do celu", "description": "Ukończ 6 zadań", "type": "complete_count", "target": 6},
     {"id": "c8", "icon": "⚙️", "label": "Osiem jak w harmonogramie", "description": "Ukończ 8 zadań", "type": "complete_count", "target": 8},
-
-    # Trudność
     {"id": "hard1", "icon": "💀", "label": "Pojedynek z trudnym", "description": "Ukończ 1 trudne zadanie", "type": "complete_difficulty", "difficulty": "hard", "target": 1},
     {"id": "hard2", "icon": "☠️", "label": "Dwa wyzwania", "description": "Ukończ 2 trudne zadania", "type": "complete_difficulty", "difficulty": "hard", "target": 2},
     {"id": "hard3", "icon": "👹", "label": "Trzy ciężkie", "description": "Ukończ 3 trudne zadania", "type": "complete_difficulty", "difficulty": "hard", "target": 3},
@@ -23,8 +19,6 @@ DAILY_QUEST_POOL: list[dict[str, Any]] = [
     {"id": "easy2", "icon": "🌱", "label": "Łatwa para", "description": "Ukończ 2 łatwe zadania", "type": "complete_difficulty", "difficulty": "easy", "target": 2},
     {"id": "easy4", "icon": "🍃", "label": "Cztery lekkie", "description": "Ukończ 4 łatwe zadania", "type": "complete_difficulty", "difficulty": "easy", "target": 4},
     {"id": "boss", "icon": "🎯", "label": "Poważniejszy krok", "description": "Ukończ 1 średnie lub trudne zadanie", "type": "complete_difficulty_any", "target": 1},
-
-    # Kategorie
     {"id": "studia", "icon": "📚", "label": "Nauka w bibliotece", "description": "Ukończ 1 zadanie ze Studiów", "type": "complete_category", "category": "Studia", "target": 1},
     {"id": "nauka", "icon": "📖", "label": "Nowa wiedza", "description": "Ukończ 1 zadanie z Nauki", "type": "complete_category", "category": "Nauka", "target": 1},
     {"id": "praca", "icon": "💼", "label": "Zmiana w biurze", "description": "Ukończ 1 zadanie z Pracy", "type": "complete_category", "category": "Praca", "target": 1},
@@ -34,14 +28,10 @@ DAILY_QUEST_POOL: list[dict[str, Any]] = [
     {"id": "zdrowie", "icon": "💊", "label": "Zdrowy nawyk", "description": "Ukończ 1 zadanie ze Zdrowia", "type": "complete_category", "category": "Zdrowie", "target": 1},
     {"id": "zakupy", "icon": "🛒", "label": "Szybkie zakupy", "description": "Ukończ 1 zadanie z Zakupów", "type": "complete_category", "category": "Zakupy", "target": 1},
     {"id": "inne", "icon": "📦", "label": "Pozostałe sprawy", "description": "Ukończ 1 zadanie z Innych", "type": "complete_category", "category": "Inne", "target": 1},
-
-    # Planowanie
     {"id": "add1", "icon": "📝", "label": "Nowy wpis", "description": "Dodaj 1 nowe zadanie", "type": "add_tasks", "target": 1},
     {"id": "add2", "icon": "📋", "label": "Dwa plany", "description": "Dodaj 2 nowe zadania", "type": "add_tasks", "target": 2},
     {"id": "add3", "icon": "🗒️", "label": "Trzy zadania", "description": "Dodaj 3 nowe zadania", "type": "add_tasks", "target": 3},
     {"id": "add5", "icon": "📑", "label": "Pięć notatek", "description": "Dodaj 5 nowych zadań", "type": "add_tasks", "target": 5},
-
-    # Specjalne
     {"id": "all", "icon": "🌟", "label": "Wszystko dziś", "description": "Ukończ wszystkie dzisiejsze zadania", "type": "complete_all"},
     {"id": "streak", "icon": "🔥", "label": "Płomień motywacji", "description": "Utrzymaj serię przynajmniej 1 dzień", "type": "streak_min", "target": 1},
     {"id": "streak3", "icon": "🧱", "label": "Trzy dni z rzędu", "description": "Utrzymaj serię przynajmniej 3 dni", "type": "streak_min", "target": 3},
@@ -117,9 +107,11 @@ def pick_three_quests(user_id: int, day: date) -> list[dict]:
         types_seen.add(qtype)
 
     if len(selected) < 3:
+        selected_ids = {q["id"] for q in selected}
         for quest in shuffled:
-            if quest["id"] not in {q["id"] for q in selected}:
+            if quest["id"] not in selected_ids:
                 selected.append(quest)
+                selected_ids.add(quest["id"])
             if len(selected) >= 3:
                 break
 
@@ -128,18 +120,11 @@ def pick_three_quests(user_id: int, day: date) -> list[dict]:
 
 def build_day_stats(user, all_tasks, day: date) -> dict:
     today_tasks = [t for t in all_tasks if t.due_date == day]
-    completed_on_day = [
-        t for t in all_tasks
-        if t.completed and t.completed_at and t.completed_at.date() == day
-    ]
-    added_today = [
-        t for t in all_tasks
-        if t.created_at and t.created_at.date() == day
-    ]
-
+    completed_on_day = [t for t in all_tasks if t.completed and t.completed_at and t.completed_at.date() == day]
+    added_today = [t for t in all_tasks if t.created_at and t.created_at.date() == day]
     done_due_today = [t for t in today_tasks if t.completed]
 
-    stats = {
+    return {
         "done_today": len(completed_on_day),
         "done_due_today": len(done_due_today),
         "total_today": len(today_tasks),
@@ -151,13 +136,6 @@ def build_day_stats(user, all_tasks, day: date) -> dict:
         "streak": user.streak or 0,
     }
 
-    print(
-        f"[build_day_stats] day={day}, due_today={len(today_tasks)}, "
-        f"completed_on_day={len(completed_on_day)}, stats={stats}"
-    )
-
-    return stats
-
 
 def evaluate_quest(quest: dict, stats: dict) -> dict:
     qtype = quest["type"]
@@ -166,35 +144,23 @@ def evaluate_quest(quest: dict, stats: dict) -> dict:
 
     if qtype == "complete_count":
         current = stats["done_today"]
-        target = quest["target"]
     elif qtype == "complete_difficulty":
         diff = quest["difficulty"]
-        if diff == "hard":
-            current = stats["hard_done"]
-        elif diff == "medium":
-            current = stats["medium_done"]
-        else:
-            current = stats["easy_done"]
-        target = quest["target"]
+        current = stats["hard_done"] if diff == "hard" else stats["medium_done"] if diff == "medium" else stats["easy_done"]
     elif qtype == "complete_difficulty_any":
         current = stats["hard_done"] + stats["medium_done"]
-        target = quest.get("target", 1)
     elif qtype == "complete_category":
-        cat = quest["category"]
-        current = 1 if cat in stats["categories_done"] else 0
+        current = 1 if quest["category"] in stats["categories_done"] else 0
         target = 1
     elif qtype == "add_tasks":
         current = stats["added_today"]
-        target = quest["target"]
     elif qtype == "complete_all":
         target = max(stats["total_today"], 1)
         current = stats["done_due_today"]
     elif qtype == "streak_min":
         current = stats["streak"]
-        target = quest.get("target", 1)
     elif qtype == "complete_categories_distinct":
         current = len(stats["categories_done"])
-        target = quest["target"]
 
     current = min(current, target) if target > 0 else current
     done = current >= target
@@ -212,12 +178,7 @@ def evaluate_quest(quest: dict, stats: dict) -> dict:
 
 
 def evaluate_assigned_quests(quest_ids: list[str], stats: dict) -> list[dict]:
-    goals = []
-    for qid in quest_ids:
-        quest = QUEST_BY_ID.get(qid)
-        if quest:
-            goals.append(evaluate_quest(quest, stats))
-    return goals
+    return [evaluate_quest(QUEST_BY_ID[qid], stats) for qid in quest_ids if qid in QUEST_BY_ID]
 
 
 def all_goals_complete(goals: list[dict]) -> bool:

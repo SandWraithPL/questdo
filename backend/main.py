@@ -46,7 +46,6 @@ def create_tables():
 
 
 def migrate_schema():
-    """Dodaje brakujące kolumny w istniejącej bazie (np. exp_awarded)."""
     insp = inspect(engine)
     if "tasks" not in insp.get_table_names():
         return
@@ -86,7 +85,6 @@ def migrate_schema():
                 conn.execute(text("ALTER TABLE achievements ADD COLUMN title VARCHAR"))
             print("Migracja: dodano kolumnę achievements.title")
 
-    # Users - last_streak_date for proper streak tracking
     if "users" in insp.get_table_names():
         user_cols = {c["name"] for c in insp.get_columns("users")}
         if "last_streak_date" not in user_cols:
@@ -102,7 +100,6 @@ def migrate_schema():
                 conn.execute(text("ALTER TABLE users ADD COLUMN exp_at_progress_reset INTEGER DEFAULT 0"))
             print("Migracja: dodano kolumnę users.exp_at_progress_reset")
 
-    # Rare Drops
     if "rare_drops" not in insp.get_table_names():
         models.RareDrop.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę rare_drops")
@@ -116,7 +113,6 @@ def migrate_schema():
                 conn.execute(text("ALTER TABLE player_rare_drops ADD COLUMN source_task_id INTEGER REFERENCES tasks(id)"))
             print("Migracja: dodano kolumnę player_rare_drops.source_task_id")
 
-    # Exclusive Achievements
     if "exclusive_achievements" not in insp.get_table_names():
         models.ExclusiveAchievement.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę exclusive_achievements")
@@ -124,17 +120,14 @@ def migrate_schema():
         models.PlayerExclusiveAchievement.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę player_exclusive_achievements")
     
-    # Badges
     if "player_badges" not in insp.get_table_names():
         models.PlayerBadge.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę player_badges")
 
-    # Player history
     if "player_history" not in insp.get_table_names():
         models.PlayerHistory.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę player_history")
     
-    # Seed rare drops
     db = next(get_db())
     rare_drop_count = db.query(models.RareDrop).count()
     if rare_drop_count == 0:
@@ -161,7 +154,6 @@ def migrate_schema():
                 rare_drop.drop_chance_percent = drop_def["drop_chance"]
         db.commit()
     
-    # Seed exclusive achievements
     exclusive_ach_count = db.query(models.ExclusiveAchievement).count()
     if exclusive_ach_count == 0:
         for ea_def in gc.EXCLUSIVE_ACHIEVEMENTS:
@@ -375,15 +367,12 @@ def task_can_reschedule(task: models.Task) -> bool:
 def calculate_exp_reward(difficulty: str, due_date: date, completed_on: date) -> tuple[int, str]:
     base = EXP_REWARDS.get(difficulty, 10)
     if completed_on < due_date:
-        # Early completion - bonus (always round down)
         amount = max(MIN_EXP_REWARD, math.floor(base * EARLY_EXP_MULTIPLIER))
         timing = "early"
     elif completed_on > due_date:
-        # Late completion - penalty (always round down)
         amount = max(MIN_EXP_REWARD, math.floor(base * LATE_EXP_MULTIPLIER))
         timing = "late"
     else:
-        # On time - no bonus, no penalty
         amount = base
         timing = "ontime"
     return amount, timing
@@ -562,7 +551,6 @@ def reconcile_standard_achievements(
     db: Session,
     task: Optional[models.Task] = None,
 ) -> dict:
-    """Synchronizuje standardowe osiągnięcia ze statystykami (odblokowuje i cofa)."""
     stats = gc.gather_user_stats(user, db, models)
     unlocked_slugs = get_unlocked_slugs(user.id, db)
     newly_unlocked = []
@@ -583,7 +571,6 @@ def reconcile_standard_achievements(
 
 
 def remove_rewards_for_task(user: models.User, task: models.Task, db: Session) -> None:
-    """Cofa znajdźki, wpisy historii i osiągnięcia powiązane z tym zadaniem."""
     stats = gc.gather_user_stats(user, db, models)
     prefix = f"user:{user.id}:task:{task.id}:"
     entries = db.query(models.PlayerHistory).filter(
@@ -618,7 +605,6 @@ def remove_rewards_for_task(user: models.User, task: models.Task, db: Session) -
 
 
 def grant_delayed_completion_rewards(user: models.User, task: models.Task, db: Session) -> dict:
-    """Znajdźki i osiągnięcia ekskluzywne — dopiero po 24h od ukończenia zadania."""
     if task.delayed_rewards_forfeited or task.delayed_rewards_claimed:
         return {"exclusive_achievements": [], "earned_drop": None}
 
@@ -634,7 +620,6 @@ def grant_delayed_completion_rewards(user: models.User, task: models.Task, db: S
 
 
 def process_delayed_task_rewards(user: models.User, db: Session) -> dict:
-    """Przyznaje opóźnione nagrody za zadania ukończone ≥24h temu (jeśli nie cofnięte wcześniej)."""
     now = datetime.utcnow()
     cutoff = timedelta(hours=DELAYED_REWARD_HOURS)
     result = {"exclusive_achievements": [], "earned_drop": None, "new_achievements": []}
@@ -675,7 +660,6 @@ def record_level_ups(user: models.User, old_exp: int, db: Session) -> list[dict]
                 unlocked.append({"level": level, "title": title, "message": message})
     return unlocked
 
-# --- Schematy ---
 class UserCreate(BaseModel):
     username: str
     password: str
@@ -717,7 +701,6 @@ class PushSubscriptionIn(BaseModel):
     keys: PushKeysIn
     expirationTime: Optional[int] = None
 
-# --- Auth helpers ---
 def verify_password(plain, hashed):
     return pwd_context.verify(plain, hashed)
 
@@ -748,7 +731,6 @@ def get_current_admin_user(current_user: models.User = Depends(get_current_user)
         raise HTTPException(status_code=403, detail="Admin access only")
     return current_user
 
-# --- Funkcje osiągnięć ---
 def has_achievement(user_id, achievement_name, db):
     achievement = db.query(models.Achievement).filter(models.Achievement.name == achievement_name).first()
     if not achievement:
@@ -873,13 +855,11 @@ def unlock_exclusive_with_history(user: models.User, ea_def: dict, task: models.
 
 
 def grant_completion_rewards(user: models.User, task: models.Task, db: Session) -> dict:
-    """Natychmiast tylko standardowe osiągnięcia; znajdźki i ekskluzywne po 24h."""
     result = reconcile_standard_achievements(user, db, task=task)
     return {"achievements": result["newly_unlocked"], "revoked_achievements": result["revoked"], "exclusive_achievements": [], "earned_drop": None}
 
 
 def refresh_player_rewards(user: models.User, db: Session, task: Optional[models.Task] = None) -> dict:
-    """Pełna synchronizacja standardowych osiągnięć (GET /achievements)."""
     result = reconcile_standard_achievements(user, db, task=task)
     if result["newly_unlocked"] or result["revoked"]:
         db.commit()
@@ -901,9 +881,7 @@ def achievement_display(ach: models.Achievement) -> str:
         return gc.ACHIEVEMENT_BY_SLUG[ach.name]["title"]
     return ach.name.replace("_", " ").title()
 
-# --- Funkcja przyznająca drop po ukończeniu zadania ---
 def award_rare_drop_on_completion(user: models.User, task: models.Task, db: Session) -> Optional[dict]:
-    """Przyznaje losowy drop po ukończeniu zadania — tylko jeśli gracz nie ma już tego przedmiotu."""
     today = date.today()
     rng = random.Random(f"{user.id}-{today.isoformat()}-{task.id}")
 
@@ -958,7 +936,6 @@ def award_rare_drop_on_completion(user: models.User, task: models.Task, db: Sess
     return None
 
 
-# --- Endpointy ---
 @app.post("/register")
 def register(user: UserCreate, db: Session = Depends(get_db)):
     username, password = validate_account_credentials(user.username, user.password)
@@ -1095,7 +1072,6 @@ def update_task(task_id: int, task_update: TaskUpdate,
     earned_drop = None
     fields_set = getattr(task_update, "model_fields_set", getattr(task_update, "__fields_set__", set()))
 
-    # Idempotent check: if task is already in target state, return current state without changes
     if task_update.completed is not None and task_update.completed == was_completed:
         print(f"[update_task] Task {task_id} already in target completed state: {was_completed}")
         process_delayed_task_rewards(current_user, db)
@@ -1154,7 +1130,6 @@ def update_task(task_id: int, task_update: TaskUpdate,
 
     if task_update.completed is not None:
         if not task_update.completed and was_completed:
-            # Unchecking task - validate 24h time limit
             if not task.completed_at:
                 raise HTTPException(status_code=400, detail="Task has no completion timestamp")
             
@@ -1165,7 +1140,6 @@ def update_task(task_id: int, task_update: TaskUpdate,
                     detail="Nie można odznaczyć zadania po upływie 24 godzin od ukończenia"
                 )
             
-            # Revert EXP
             exp_to_revert = task.exp_awarded_amount or EXP_REWARDS.get(task.difficulty, 10)
             current_user.exp = max(0, current_user.exp - exp_to_revert)
             task.exp_awarded = False
@@ -1175,18 +1149,14 @@ def update_task(task_id: int, task_update: TaskUpdate,
             task.delayed_rewards_forfeited = True
             task.delayed_rewards_claimed = False
             
-            # Set exp_gained to negative value to indicate EXP was removed
             exp_gained = -exp_to_revert
             
             print(f"[uncheck] Reverting {exp_to_revert} EXP for task {task.id}")
             
-            # Revert streak - recalculate based on remaining completed tasks
             all_tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
             completed_tasks = [t for t in all_tasks if t.completed and t.completed_at]
-            # Sort by completion date (newest first)
             completed_tasks.sort(key=lambda t: t.completed_at, reverse=True)
             
-            # Recalculate streak: count consecutive days from today backwards
             today = date.today()
             streak = 0
             last_date = None
@@ -1194,14 +1164,12 @@ def update_task(task_id: int, task_update: TaskUpdate,
             for t in completed_tasks:
                 task_date = t.completed_at.date()
                 if last_date is None:
-                    # First completed task
                     if task_date == today or task_date == today - timedelta(days=1):
                         streak = 1
                         last_date = task_date
                     else:
                         break
                 else:
-                    # Check if this task was completed on the day before last_date
                     if task_date == last_date - timedelta(days=1):
                         streak += 1
                         last_date = task_date
@@ -1214,7 +1182,6 @@ def update_task(task_id: int, task_update: TaskUpdate,
             print(f"[uncheck] Recalculated streak: {streak}, last_date: {last_date}")
             
             remove_rewards_for_task(current_user, task, db)
-            # Get revoked achievements after removing rewards
             stats = gc.gather_user_stats(current_user, db, models)
             unlocked_slugs_before = get_unlocked_slugs(current_user.id, db)
             reconcile_standard_achievements(current_user, db)
@@ -1226,7 +1193,6 @@ def update_task(task_id: int, task_update: TaskUpdate,
                     revoked_achievements.append({"slug": slug, "title": ach_def["title"], "icon": ach_def["icon"]})
             level_ups.extend(record_level_ups(current_user, current_user.exp, db))
             
-            # Revert daily bonus if no longer all quests complete
             assignment = get_or_create_daily_assignment(current_user, db, date.today())
             if assignment.bonus_claimed:
                 stats = dq.build_day_stats(current_user, all_tasks, date.today())
@@ -1238,7 +1204,6 @@ def update_task(task_id: int, task_update: TaskUpdate,
                     daily_bonus_reverted = dq.TRIPLE_BONUS_EXP
                     print(f"[uncheck] Reverted daily bonus {dq.TRIPLE_BONUS_EXP} EXP")
             
-            # Initialize variables for the return statement
             new_rewards = {"achievements": [], "exclusive_achievements": []}
             earned_drop = None
             
@@ -1257,7 +1222,6 @@ def update_task(task_id: int, task_update: TaskUpdate,
                 task.exp_awarded_amount = exp_gained
                 level_ups.extend(record_level_ups(current_user, old_exp, db))
 
-                # Streak: only increment once per day
                 today = date.today()
                 if current_user.last_streak_date != today:
                     if current_user.last_streak_date == today - timedelta(days=1):
@@ -1266,7 +1230,6 @@ def update_task(task_id: int, task_update: TaskUpdate,
                         current_user.streak = 1
                     current_user.last_streak_date = today
                 
-                # Flush to ensure the newly completed task is visible to gather_user_stats
                 db.flush()
                 
                 new_rewards = grant_completion_rewards(current_user, task, db)
@@ -1357,7 +1320,6 @@ def build_challenges_payload(user: models.User, db: Session, day: Union[date, No
     stats = dq.build_day_stats(user, all_tasks, day)
     goals = dq.evaluate_assigned_quests(quest_ids, stats)
     
-    # Debug logging
     print(f"[build_challenges_payload] user={user.id}, day={day}, stats={stats}, goals_current={[g['current'] for g in goals]}")
     
     return {
@@ -1516,9 +1478,6 @@ def list_levels():
     ]
 
 
-# === RARE DROPS ENDPOINTS ===
-# UWAGA: Usunąłem automatyczne claimowanie dropu przy ładowaniu strony.
-# Drop jest teraz przyznawany TYLKO po ukończeniu zadania (w endpointcie PATCH /tasks/{task_id}).
 
 
 @app.get("/rare-drops/inventory")
@@ -1531,7 +1490,6 @@ def get_player_history(current_user: models.User = Depends(get_current_user), db
     return build_history_list(current_user.id, db)
 
 
-# === EXCLUSIVE ACHIEVEMENTS ENDPOINTS ===
 @app.get("/exclusive-achievements")
 def get_exclusive_achievements(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     refresh_player_rewards(current_user, db)
@@ -1571,7 +1529,6 @@ def get_exclusive_achievements(current_user: models.User = Depends(get_current_u
     }
 
 
-# === RANKING ENDPOINTS ===
 @app.get("/rankings/exp")
 def ranking_exp(db: Session = Depends(get_db)):
     users = db.query(models.User).order_by(models.User.exp.desc()).limit(10).all()
