@@ -1572,10 +1572,6 @@ export default function App() {
       reminder_offset_days: parseReminderValue(reminderOffset),
     };
 
-    const snapshot = {
-      tasks: [...tasks],
-    };
-
     const newTask = {
       id: tempId,
       title,
@@ -1603,25 +1599,13 @@ export default function App() {
         showToast(`✅ Dodano quest na ${savedDate}`);
       } catch (err) {
         console.error("[addTask] API error:", err);
-        setTasks(snapshot.tasks);
-        setTitle(title);
-        setDesc(desc);
-        setImportant(important);
-        setReminderOffset(reminderOffset);
-        setShowAddTask(true);
-        showToast(err.response?.data?.detail || "Błąd dodawania");
+        showToast(err.response?.data?.detail || "Błąd dodawania – odśwież stronę (F5)");
       }
     });
   };
 
   const toggleTask = (task) => {
     if (task.completed) return;
-
-    const snapshot = {
-      task: { ...task },
-      user: { ...user },
-      challenges: challenges ? { ...challenges } : null,
-    };
 
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
@@ -1652,10 +1636,7 @@ export default function App() {
         showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
       } catch (err) {
         console.error("[toggleTask] API error:", err);
-        setTasks(prev => prev.map(t => t.id === task.id ? snapshot.task : t));
-        setUser(snapshot.user);
-        if (snapshot.challenges) setChallenges(snapshot.challenges);
-        showToast(err.response?.data?.detail || "Błąd aktualizacji");
+        showToast(err.response?.data?.detail || "Błąd aktualizacji – odśwież stronę (F5)");
       }
     });
   };
@@ -1663,10 +1644,6 @@ export default function App() {
   const saveTask = (id, updates) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
-
-    const snapshot = {
-      task: { ...task },
-    };
 
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
 
@@ -1677,8 +1654,7 @@ export default function App() {
         showToast("💾 Zapisano zmiany");
       } catch (err) {
         console.error("[saveTask] API error:", err);
-        setTasks(prev => prev.map(t => t.id === id ? snapshot.task : t));
-        showToast(err.response?.data?.detail || "Błąd zapisu");
+        showToast(err.response?.data?.detail || "Błąd zapisu – odśwież stronę (F5)");
       }
     });
   };
@@ -1688,12 +1664,6 @@ export default function App() {
       showToast("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
       return;
     }
-
-    const snapshot = {
-      task: { ...task },
-      user: { ...user },
-      challenges: challenges ? { ...challenges } : null,
-    };
 
     const expAwarded = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
 
@@ -1722,10 +1692,7 @@ export default function App() {
         showToast("✅ Cofnięto ukończenie zadania");
       } catch (err) {
         console.error("[uncheckTask] API error:", err);
-        setTasks(prev => prev.map(t => t.id === task.id ? snapshot.task : t));
-        setUser(snapshot.user);
-        if (snapshot.challenges) setChallenges(snapshot.challenges);
-        showToast(err.response?.data?.detail || "Błąd cofania ukończenia");
+        showToast(err.response?.data?.detail || "Błąd cofania ukończenia – odśwież stronę (F5)");
       }
     });
   };
@@ -1747,13 +1714,6 @@ export default function App() {
   const deleteTask = (task) => {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
-
-    const snapshot = {
-      task: { ...task },
-      user: { ...user },
-      challenges: challenges ? { ...challenges } : null,
-      tasks: [...tasks],
-    };
 
     setTasks(prev => prev.filter(t => t.id !== task.id));
     if (task.exp_awarded) {
@@ -1782,11 +1742,8 @@ export default function App() {
         showToast("🗑️ Usunięto quest");
       } catch (err) {
         console.error("[deleteTask] API error:", err);
-        setTasks(snapshot.tasks);
-        setUser(snapshot.user);
-        if (snapshot.challenges) setChallenges(snapshot.challenges);
         if (err.response?.status === 404) showToast("Zadanie już nie istnieje");
-        else showToast(err.response?.data?.detail || "Błąd usuwania");
+        else showToast(err.response?.data?.detail || "Błąd usuwania – odśwież stronę (F5)");
       }
     });
   };
