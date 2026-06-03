@@ -564,14 +564,12 @@ function readCalendarCollapsedPreference() {
   return true;
 }
 
-function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete, loadingTaskIds }) {
+function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete }) {
   const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
   const [view, setView] = useState("month");
   const [collapsed, setCollapsed] = useState(readCalendarCollapsedPreference);
   const selectedStr = toDateStr(selectedDate);
   const selectedDateObj = selectedDate instanceof Date ? selectedDate : new Date(selectedStr + "T12:00:00");
-
-  const isTaskLoading = loadingTaskIds ? (id) => loadingTaskIds.has(id) : () => false;
 
   const getTasksForDate = (dateStr) => tasks.filter((t) => t.due_date === dateStr);
   const taskStats = (dateStr) => {
@@ -683,7 +681,7 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
         {dayTasks.map(task => (
           <div key={task.id} className={`day-task ${task.completed ? "completed" : ""}`}>
             {task.completed ? <div className="task-check checked locked">✓</div> : (
-              <button type="button" className="task-check" onClick={() => onTaskToggle(task)} disabled={isTaskLoading(task.id)} />
+              <button type="button" className="task-check" onClick={() => onTaskToggle(task)} />
             )}
             <div className="day-task-info">
               <strong>{task.important ? "Ważne · " : ""}{task.title}</strong>
@@ -694,7 +692,7 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
                 {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
               </div>
             </div>
-            <button type="button" onClick={() => onTaskDelete(task)} disabled={isTaskLoading(task.id)}>🗑</button>
+            <button type="button" onClick={() => onTaskDelete(task)}>🗑</button>
           </div>
         ))}
       </div>
@@ -974,7 +972,7 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
-function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck, loadingTaskIds }) {
+function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
@@ -1039,8 +1037,6 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
     } catch (e) { onError(e.response?.data?.detail || "Błąd zapisu"); }
   };
 
-  const isTaskLoading = loadingTaskIds ? (id) => loadingTaskIds.has(id) : () => false;
-
   return (
     <div className="day-tasks-panel">
       <div className="tasks-header"><h3>Questy · {dateLabel}</h3>
@@ -1083,12 +1079,12 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
               <button
                 type="button"
                 className={`task-check ${checkState.className}`}
-                disabled={checkState.disabled || isTaskLoading(task.id)}
+                disabled={checkState.disabled}
                 onClick={() => handleToggleClick(task)}
                 title={checkState.title}
                 aria-label={checkState.title}
               >
-                {isTaskLoading(task.id) ? "⏳" : (task.completed ? "✓" : "")}
+                {task.completed ? "✓" : ""}
               </button>
               <div className="task-info">
                 <h4 className={task.completed ? "done" : ""}>{task.important && <span className="important-mark">Ważne · </span>}{task.title}</h4>
@@ -1104,8 +1100,8 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
                 </div>
               </div>
               <div className="task-actions">
-                {!task.completed && <button className="icon-btn" onClick={() => startEdit(task)} disabled={isTaskLoading(task.id)}>✏️</button>}
-                <button className="task-delete" onClick={() => onDelete(task)} disabled={isTaskLoading(task.id)}>🗑</button>
+                {!task.completed && <button className="icon-btn" onClick={() => startEdit(task)}>✏️</button>}
+                <button className="task-delete" onClick={() => onDelete(task)}>🗑</button>
               </div>
             </>
           )}
@@ -1401,8 +1397,6 @@ export default function App() {
   const [standalonePwa, setStandalonePwa] = useState(false);
   const notificationsUnsupported = !("Notification" in window);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [loadingTaskIds, setLoadingTaskIds] = useState(new Set());
-  const [isAddingTask, setIsAddingTask] = useState(false);
 
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -1563,11 +1557,8 @@ export default function App() {
       reminder_offset_days: parseReminderValue(reminderOffset),
     };
 
-    setIsAddingTask(true);
-
     try {
       await axios.post(`${API}/tasks`, apiPayload, { headers });
-      // Fetch all data from API on success
       await fetchData();
       setTitle("");
       setDesc("");
@@ -1578,8 +1569,6 @@ export default function App() {
     } catch (err) {
       console.error("[addTask] API error:", err);
       showToast(err.response?.data?.detail || "Błąd dodawania");
-    } finally {
-      setIsAddingTask(false);
     }
   };
 
@@ -1589,42 +1578,24 @@ export default function App() {
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
 
-    setLoadingTaskIds((prev) => new Set([...prev, task.id]));
-
     try {
       await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-      // Fetch all data from API on success
       await fetchData();
       const expPreview = getExpPreview(task.difficulty, task.due_date);
       showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
     } catch (err) {
       console.error("[toggleTask] API error:", err);
       showToast(err.response?.data?.detail || "Błąd aktualizacji");
-    } finally {
-      setLoadingTaskIds((prev) => {
-        const next = new Set(prev);
-        next.delete(task.id);
-        return next;
-      });
     }
   };
 
   const saveTask = async (id, updates) => {
-    setLoadingTaskIds((prev) => new Set([...prev, id]));
-
     try {
       await axios.patch(`${API}/tasks/${id}`, updates, { headers });
-      // Fetch all data from API on success
       await fetchData();
       showToast("💾 Zapisano zmiany");
     } catch (err) {
       showToast(err.response?.data?.detail || "Błąd zapisu");
-    } finally {
-      setLoadingTaskIds((prev) => {
-        const next = new Set(prev);
-        next.delete(id);
-        return next;
-      });
     }
   };
 
@@ -1634,22 +1605,13 @@ export default function App() {
       return;
     }
 
-    setLoadingTaskIds((prev) => new Set([...prev, task.id]));
-
     try {
       await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
-      // Fetch all data from API on success
       await fetchData();
       showToast("✅ Cofnięto ukończenie zadania");
     } catch (err) {
       console.error("[uncheckTask] API error:", err);
       showToast(err.response?.data?.detail || "Błąd cofania ukończenia");
-    } finally {
-      setLoadingTaskIds((prev) => {
-        const next = new Set(prev);
-        next.delete(task.id);
-        return next;
-      });
     }
   };
   
@@ -1671,23 +1633,14 @@ export default function App() {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
 
-    setLoadingTaskIds((prev) => new Set([...prev, task.id]));
-
     try {
       await axios.delete(`${API}/tasks/${task.id}`, { headers });
-      // Fetch all data from API on success
       await fetchData();
       showToast("🗑️ Usunięto quest");
     } catch (err) {
       console.error("[deleteTask] API error:", err);
       if (err.response?.status === 404) showToast("Zadanie już nie istnieje");
       else showToast(err.response?.data?.detail || "Błąd usuwania");
-    } finally {
-      setLoadingTaskIds((prev) => {
-        const next = new Set(prev);
-        next.delete(task.id);
-        return next;
-      });
     }
   };
   
@@ -1725,8 +1678,8 @@ export default function App() {
       />
       <PlayerSummary user={user} progress={progress} />
       <ChallengesBar challenges={challenges} />
-      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} loadingTaskIds={loadingTaskIds} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} />
+      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">
@@ -1745,8 +1698,8 @@ export default function App() {
           </div>
           {(() => { const p = getExpPreview(difficulty, taskDate); const info = EXP_TIMING_LABELS[p.timing]; return <p className="exp-preview-hint">Ukończ dziś: <strong>+{p.amount} EXP</strong> ({info.text})</p>; })()}
           <div className="row">
-            <button onClick={addTask} disabled={isAddingTask}>{isAddingTask ? "⏳ Dodawanie..." : "Dodaj Quest"}</button>
-            <button onClick={() => setShowAddTask(false)} className="cancel-btn" disabled={isAddingTask}>Anuluj</button>
+            <button onClick={addTask}>Dodaj Quest</button>
+            <button onClick={() => setShowAddTask(false)} className="cancel-btn">Anuluj</button>
           </div>
         </div>
       )}
