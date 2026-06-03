@@ -134,7 +134,7 @@ def build_day_stats(user, all_tasks, day: date) -> dict:
         if t.created_at and t.created_at.date() == day
     ]
 
-    return {
+    stats = {
         "done_today": len(done),
         "total_today": len(today_tasks),
         "hard_done": sum(1 for t in done if t.difficulty == "hard"),
@@ -144,6 +144,11 @@ def build_day_stats(user, all_tasks, day: date) -> dict:
         "added_today": len(added_today),
         "streak": user.streak or 0,
     }
+    
+    # Debug logging
+    print(f"[build_day_stats] day={day}, today_tasks={len(today_tasks)}, done={len(done)}, stats={stats}")
+    
+    return stats
 
 
 def evaluate_quest(quest: dict, stats: dict) -> dict:

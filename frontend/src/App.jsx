@@ -565,7 +565,7 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
-function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError }) {
+function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
@@ -669,6 +669,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
               </div>
               <div className="task-actions">
                 {!task.completed && <button className="icon-btn" onClick={() => startEdit(task)}>✏️</button>}
+                {task.completed && onUncheck && canUncheckTask(task) && <button className="icon-btn" onClick={() => onUncheck(task)} title="Cofnij ukończenie">🔄</button>}
                 <button className="task-delete" onClick={() => onDelete(task)}>🗑</button>
               </div>
             </>
@@ -966,6 +967,7 @@ export default function App() {
     
     try {
       const chRes = await axios.get(`${API}/challenges`, { headers: noCacheHeaders });
+      console.log('[fetchChallenges] API response:', chRes.data);
       setChallenges(chRes.data);
     } catch (err) {
       console.error("Fetch challenges error:", err);
@@ -1031,10 +1033,17 @@ export default function App() {
     
     try {
       const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-      const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop, exp_gained, exp_timing } = res.data;
+      const { daily_bonus, new_achievements, new_exclusive_achievements, earned_drop, exp_gained, exp_timing, challenges } = res.data;
+      
+      console.log('[toggleTask] PATCH response challenges:', challenges);
       
       // Update with real data from API (if different from optimistic)
       setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true, exp_awarded: true, exp_awarded_amount: exp_gained || expPreview.amount } : t));
+      
+      // Update challenges immediately from response
+      if (challenges) {
+        setChallenges(challenges);
+      }
       
       if (daily_bonus > 0) showToast(`🎉 Wszystkie wyzwania dziś! +${daily_bonus} EXP bonus`);
       
@@ -1071,6 +1080,49 @@ export default function App() {
       // Rollback
       setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
       showToast(err.response?.data?.detail || "Błąd zapisu");
+    }
+  };
+
+  const canUncheckTask = (task) => {
+    if (!task.completed || !task.completed_at) return false;
+    const completedAt = new Date(task.completed_at);
+    const now = new Date();
+    const hoursSinceCompletion = (now - completedAt) / (1000 * 60 * 60);
+    return hoursSinceCompletion < 24;
+  };
+
+  const uncheckTask = async (task) => {
+    if (!canUncheckTask(task)) {
+      showToast("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
+      return;
+    }
+
+    const originalTask = { ...task };
+    
+    // Optimistic update
+    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: false, exp_awarded: false, exp_awarded_amount: 0 } : t));
+    showToast("🔄 Cofanie ukończenia...");
+
+    try {
+      const res = await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
+      const { challenges } = res.data;
+      
+      console.log('[uncheckTask] PATCH response challenges:', challenges);
+      
+      // Update challenges immediately from response
+      if (challenges) {
+        setChallenges(challenges);
+      }
+      
+      // Refresh user data
+      refreshUserData();
+      
+      showToast("✅ Cofnięto ukończenie zadania");
+    } catch (err) {
+      console.error('[uncheckTask] API error:', err);
+      // Rollback on error
+      setTasks(prev => prev.map(t => t.id === task.id ? originalTask : t));
+      showToast(err.response?.data?.detail || "Błąd cofania ukończenia");
     }
   };
   
@@ -1123,7 +1175,7 @@ export default function App() {
     <div className="app">
       <div className="header"><h1>⚔️ QuestDo</h1><Profile user={user} onLogout={logout} onDeleteAccount={deleteAccount} achievements={achievements} rareDrops={rareDrops} history={history} onOpenAdmin={() => setShowAdminPanel(true)} /></div>
       <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">

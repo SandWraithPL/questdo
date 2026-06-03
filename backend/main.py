@@ -740,10 +740,79 @@ def update_task(task_id: int, task_update: TaskUpdate,
 
     if task_update.completed is not None:
         if not task_update.completed and was_completed:
-            raise HTTPException(
-                status_code=400,
-                detail="Nie można odznaczyć ukończonego zadania — usuń je, aby cofnąć EXP",
-            )
+            # Unchecking task - validate 24h time limit
+            if not task.completed_at:
+                raise HTTPException(status_code=400, detail="Task has no completion timestamp")
+            
+            time_since_completion = datetime.utcnow() - task.completed_at
+            if time_since_completion > timedelta(hours=24):
+                raise HTTPException(
+                    status_code=400,
+                    detail="Nie można odznaczyć zadania po upływie 24 godzin od ukończenia"
+                )
+            
+            # Revert EXP
+            exp_to_revert = task.exp_awarded_amount or EXP_REWARDS.get(task.difficulty, 10)
+            current_user.exp = max(0, current_user.exp - exp_to_revert)
+            task.exp_awarded = False
+            task.exp_awarded_amount = 0
+            task.completed = False
+            task.completed_at = None
+            
+            print(f"[uncheck] Reverting {exp_to_revert} EXP for task {task.id}")
+            
+            # Revert streak - recalculate based on remaining completed tasks
+            all_tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
+            completed_dates = sorted({t.due_date for t in all_tasks if t.completed}, reverse=True)
+            if completed_dates:
+                latest_date = completed_dates[0]
+                if latest_date == date.today():
+                    # Still have tasks completed today, keep streak
+                    pass
+                elif latest_date == date.today() - timedelta(days=1):
+                    # Latest completed task was yesterday, streak might need adjustment
+                    current_user.streak = len(completed_dates)
+                else:
+                    # Gap in completion, reset streak
+                    current_user.streak = len(completed_dates)
+                current_user.last_streak_date = latest_date
+            else:
+                current_user.streak = 0
+                current_user.last_streak_date = None
+            
+            # Remove rare drops obtained for this task
+            drops_to_remove = db.query(models.PlayerRareDrop).filter(
+                models.PlayerRareDrop.user_id == current_user.id,
+                models.PlayerRareDrop.obtained_date == task.due_date
+            ).all()
+            for drop in drops_to_remove:
+                db.delete(drop)
+                print(f"[uncheck] Removed rare drop {drop.id} for task {task.id}")
+            
+            # Remove history entries for this task
+            history_to_remove = db.query(models.PlayerHistory).filter(
+                models.PlayerHistory.user_id == current_user.id,
+                models.PlayerHistory.message.like(f"%{task.title}%")
+            ).all()
+            for hist in history_to_remove:
+                db.delete(hist)
+                print(f"[uncheck] Removed history entry {hist.id} for task {task.id}")
+            
+            # Recalculate achievements
+            new_rewards = refresh_player_rewards(current_user, db)
+            level_ups.extend(record_level_ups(current_user, current_user.exp, db))
+            
+            # Revert daily bonus if no longer all quests complete
+            assignment = get_or_create_daily_assignment(current_user, db, task.due_date)
+            if assignment.bonus_claimed:
+                stats = dq.build_day_stats(current_user, all_tasks, task.due_date)
+                quest_ids = [x.strip() for x in assignment.quest_ids.split(",") if x.strip()]
+                goals = dq.evaluate_assigned_quests(quest_ids, stats)
+                if not dq.all_goals_complete(goals):
+                    assignment.bonus_claimed = False
+                    current_user.exp = max(0, current_user.exp - dq.TRIPLE_BONUS_EXP)
+                    print(f"[uncheck] Reverted daily bonus {dq.TRIPLE_BONUS_EXP} EXP")
+            
         if task_update.completed and not was_completed:
             task.completed = True
             task.completed_at = datetime.utcnow()
@@ -840,6 +909,10 @@ def build_challenges_payload(user: models.User, db: Session, day: Union[date, No
     all_tasks = db.query(models.Task).filter(models.Task.owner_id == user.id).all()
     stats = dq.build_day_stats(user, all_tasks, day)
     goals = dq.evaluate_assigned_quests(quest_ids, stats)
+    
+    # Debug logging
+    print(f"[build_challenges_payload] user={user.id}, day={day}, stats={stats}, goals_current={[g['current'] for g in goals]}")
+    
     return {
         "today_total": stats["total_today"],
         "today_done": stats["done_today"],
