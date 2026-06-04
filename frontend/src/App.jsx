@@ -1399,19 +1399,42 @@ export default function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const apiQueue = useRef([]);
   const isProcessingQueue = useRef(false);
+  const toastQueue = useRef([]);
+  const isToastVisible = useRef(false);
 
   const headers = { Authorization: `Bearer ${token}` };
 
-  const enqueueRequest = async (requestFn) => {
-    apiQueue.current.push(requestFn);
+  const enqueueRequest = async (requestFn, metadata = null) => {
+    apiQueue.current.push({ fn: requestFn, metadata });
     if (!isProcessingQueue.current) {
       isProcessingQueue.current = true;
       while (apiQueue.current.length > 0) {
         const next = apiQueue.current.shift();
-        await next();
+        await next.fn();
       }
       isProcessingQueue.current = false;
     }
+  };
+
+  const showToastQueued = (message) => {
+    toastQueue.current.push(message);
+    if (!isToastVisible.current) {
+      processToastQueue();
+    }
+  };
+
+  const processToastQueue = () => {
+    if (toastQueue.current.length === 0) {
+      isToastVisible.current = false;
+      return;
+    }
+    isToastVisible.current = true;
+    const message = toastQueue.current.shift();
+    setToast(message);
+    setTimeout(() => {
+      setToast(null);
+      processToastQueue();
+    }, 3000);
   };
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
@@ -1549,6 +1572,67 @@ export default function App() {
   useEffect(() => { if (token) fetchData(); }, [token]);
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
 
+  // Restore pending requests from sessionStorage on mount
+  useEffect(() => {
+    const saved = sessionStorage.getItem("pendingRequests");
+    if (saved && token) {
+      try {
+        const requests = JSON.parse(saved);
+        requests.forEach(req => {
+          // Re-enqueue the request
+          enqueueRequest(async () => {
+            try {
+              let response;
+              if (req.method === "PATCH") {
+                response = await axios.patch(`${API}${req.endpoint}`, req.payload, { headers });
+              } else if (req.method === "POST") {
+                response = await axios.post(`${API}${req.endpoint}`, req.payload, { headers });
+              } else if (req.method === "DELETE") {
+                response = await axios.delete(`${API}${req.endpoint}`, { headers });
+              }
+              const data = response.data;
+              // Sync state with API response
+              if (data.exp !== undefined) {
+                setUser(prev => ({ ...prev, exp: data.exp, level: data.level, title: data.title, next_level_exp: data.next_level_exp, next_level_title: data.next_level_title, streak: data.streak }));
+              }
+              if (data.challenges) {
+                setChallenges(data.challenges);
+              }
+              if (data.achievements) {
+                setAchievements(data.achievements);
+              }
+              if (data.rare_drops) {
+                setRareDrops(data.rare_drops);
+              }
+              if (data.history) {
+                setHistory(data.history);
+              }
+            } catch (err) {
+              console.error("[restored request] API error:", err);
+            }
+          }, req.metadata);
+        });
+        sessionStorage.removeItem("pendingRequests");
+      } catch (err) {
+        console.error("[sessionStorage restore] error:", err);
+      }
+    }
+  }, [token]);
+
+  // Save pending requests to sessionStorage before unload
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      const pendingRequests = apiQueue.current
+        .filter(item => item.metadata)
+        .map(item => item.metadata);
+      if (pendingRequests.length > 0) {
+        sessionStorage.setItem("pendingRequests", JSON.stringify(pendingRequests));
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, []);
+
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const dateParam = params.get("date");
@@ -1623,7 +1707,7 @@ export default function App() {
         setTasks(prev => prev.filter(t => t.id !== tempId));
         showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
       }
-    });
+    }, { endpoint: "/tasks", method: "POST", payload: apiPayload, taskId: tempId });
   };
 
   const toggleTask = (task) => {
@@ -1632,6 +1716,10 @@ export default function App() {
     const today = toDateStr(new Date());
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
     const expPreview = getExpPreview(task.difficulty, task.due_date);
+
+    // Check for first task achievement
+    const completedCount = countCompletedTasks(tasks);
+    const isFirstTask = completedCount === 0;
 
     // Immediate optimistic UI update
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true, completed_at: new Date().toISOString(), exp_awarded: true, exp_awarded_amount: expPreview.amount } : t));
@@ -1652,8 +1740,17 @@ export default function App() {
       }));
     }
 
+    // Optimistic achievement update for first task
+    if (isFirstTask) {
+      setAchievements(prev => ({
+        ...prev,
+        unlocked: [...(prev.unlocked || []), { slug: "first_step", title: "Pierwszy krok", icon: "🎯", description: "Ukończ pierwsze zadanie" }]
+      }));
+      setHistory(prev => [...prev, { id: Date.now(), occurred_at: new Date().toISOString(), message: "🏆 Zdobyto osiągnięcie 'Pierwszy krok'" }]);
+    }
+
     // Immediate toast (optimistic)
-    showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
+    showToastQueued(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
 
     enqueueRequest(async () => {
       try {
@@ -1681,7 +1778,7 @@ export default function App() {
         console.error("[toggleTask] API error:", err);
         showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
       }
-    });
+    }, { endpoint: `/tasks/${task.id}`, method: "PATCH", payload: { completed: true }, taskId: task.id });
   };
 
   const saveTask = (id, updates) => {
@@ -1717,7 +1814,7 @@ export default function App() {
         console.error("[saveTask] API error:", err);
         showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
       }
-    });
+    }, { endpoint: `/tasks/${id}`, method: "PATCH", payload: updates, taskId: id });
   };
 
   const uncheckTask = (task) => {
@@ -1728,9 +1825,22 @@ export default function App() {
 
     const expAwarded = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
 
+    // Check if daily bonus should be revoked
+    const today = toDateStr(new Date());
+    const todayTasks = tasks.filter(t => t.due_date === today);
+    const completedTodayTasks = todayTasks.filter(t => t.completed && t.id !== task.id);
+    const willRevokeDailyBonus = challenges && !challenges.bonus_claimed && completedTodayTasks.length < 3;
+
     // Immediate optimistic UI update
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: false, completed_at: null, exp_awarded: false, exp_awarded_amount: null } : t));
     setUser(prev => ({ ...prev, exp: Math.max(0, prev.exp - expAwarded) }));
+    
+    // Optimistic daily bonus revocation
+    if (willRevokeDailyBonus) {
+      setUser(prev => ({ ...prev, exp: Math.max(0, (prev.exp || 0) - 35) }));
+      showToastQueued("⚠️ Bonus dzienny cofnięty (-35 EXP)");
+    }
+    
     if (challenges && challenges.goals) {
       setChallenges(prev => ({
         ...prev,
@@ -1746,6 +1856,9 @@ export default function App() {
         }),
       }));
     }
+
+    // Immediate toast
+    showToastQueued("🔄 Cofnięto ukończenie zadania");
 
     enqueueRequest(async () => {
       try {
@@ -1773,7 +1886,7 @@ export default function App() {
         console.error("[uncheckTask] API error:", err);
         showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
       }
-    });
+    }, { endpoint: `/tasks/${task.id}`, method: "PATCH", payload: { completed: false }, taskId: task.id });
   };
   
   const deleteAccount = async (password, onDone) => { 
@@ -1842,7 +1955,7 @@ export default function App() {
         if (err.response?.status === 404) showToast("Zadanie już nie istnieje");
         else showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
       }
-    });
+    }, { endpoint: `/tasks/${task.id}`, method: "DELETE", payload: null, taskId: task.id });
   };
   
   const logout = () => { localStorage.removeItem("token"); setToken(null); setUser(null); };
