@@ -1229,6 +1229,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
             unlocked_slugs_before = get_unlocked_slugs(current_user.id, db)
             reconcile_standard_achievements(current_user, db)
             unlocked_slugs_after = get_unlocked_slugs(current_user.id, db)
+            history_data = build_history_list(current_user.id, db)
             revoked_achievements = []
             for slug in unlocked_slugs_before - unlocked_slugs_after:
                 ach_def = gc.ACHIEVEMENT_BY_SLUG.get(slug)
@@ -1316,7 +1317,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
         "level_ups": level_ups,
         "earned_drop": earned_drop,
         "rare_drops": build_rare_drops_inventory(current_user.id, db),
-        "history": build_history_list(current_user.id, db),
+        "history": history_data if 'history_data' in locals() else build_history_list(current_user.id, db),
         "achievements": build_achievements_payload(current_user, db),
     }
 

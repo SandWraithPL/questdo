@@ -1156,11 +1156,15 @@ function AdminPanel({ isOpen, onClose, headers, onRefreshAppData, onShowToast })
     const confirmMsg = "Zresetować WSZYSTKO (osiągnięcia, znajdźki, serie, EXP i historię) dla wszystkich użytkowników? Ta operacja jest nieodwracalna.";
     if (!window.confirm(confirmMsg)) return;
     try {
-      const res = await axios.post(`${API}/admin/reset-all-progress`, {}, { headers });
+      await axios.post(`${API}/admin/reset-all-progress`, {}, { headers });
       onShowToast("✅ Reset wykonano, dane odświeżone");
-      await onRefreshAppData(); // Odświeżenie wszystkich danych aplikacji
-      fetchData(); // Odświeżenie danych panelu admina
-      onClose(); // Zamknięcie panelu admina
+      await onRefreshAppData(); // fetchData
+      // Dodatkowo wymuś odświeżenie konkretnych stanów
+      setHistory([]);
+      setAchievements({ unlocked: [], next: null });
+      setRareDrops(null);
+      setChallenges(null);
+      onClose();
     } catch (err) {
       onShowToast(err.response?.data?.detail || "Błąd resetowania");
     }
@@ -1711,7 +1715,14 @@ export default function App() {
 
         // Add level ups to history
         if (data.level_ups && data.level_ups.length > 0) {
-          setHistory(prev => [...(prev || []), ...data.level_ups]);
+          const now = new Date();
+          const formattedDate = `${now.getDate().toString().padStart(2, '0')}.${(now.getMonth()+1).toString().padStart(2, '0')}.${now.getFullYear()}`;
+          const levelUpEntries = data.level_ups.map(lv => ({
+            id: Date.now() + lv.level,
+            message: `${formattedDate} - ${lv.message}`,
+            occurred_at: now.toISOString(),
+          }));
+          setHistory(prev => [...(prev || []), ...levelUpEntries]);
         }
 
         const expPreview = getExpPreview(task.difficulty, task.due_date);
