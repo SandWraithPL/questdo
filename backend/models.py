@@ -29,6 +29,7 @@ class Task(Base):
     completed = Column(Boolean, default=False)
     exp_awarded = Column(Boolean, default=False)
     exp_awarded_amount = Column(Integer, default=0)
+    exp_timing = Column(String, nullable=True)
     completed_at = Column(DateTime, nullable=True)
     delayed_rewards_claimed = Column(Boolean, default=False)
     delayed_rewards_forfeited = Column(Boolean, default=False)

@@ -1093,6 +1093,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
                   <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>
                   <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>
                   <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>
+                  {task.exp_awarded && task.exp_timing && (() => { const info = EXP_TIMING_LABELS[task.exp_timing]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
                   {!task.exp_awarded && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = EXP_TIMING_LABELS[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
                   {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
                   {checkState.showUncheckBadge && <span className="badge uncheck-badge">↩️ Można odznaczyć (24h)</span>}

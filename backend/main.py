@@ -75,6 +75,9 @@ def migrate_schema():
         if "delayed_rewards_forfeited" not in cols:
             conn.execute(text("ALTER TABLE tasks ADD COLUMN delayed_rewards_forfeited BOOLEAN DEFAULT FALSE"))
             print("Migracja: dodano kolumnę delayed_rewards_forfeited")
+        if "exp_timing" not in cols:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN exp_timing VARCHAR"))
+            print("Migracja: dodano kolumnę exp_timing")
     if "daily_quest_assignments" not in insp.get_table_names():
         models.DailyQuestAssignment.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę daily_quest_assignments")
@@ -406,6 +409,8 @@ def task_to_dict(t: models.Task) -> dict:
     }
     if t.completed and t.exp_awarded and t.completed_at:
         data["completed_at"] = str(t.completed_at)
+    if t.exp_awarded and t.exp_timing:
+        data["exp_timing"] = t.exp_timing
     if not t.completed and t.due_date:
         preview, timing = calculate_exp_reward(t.difficulty, t.due_date, datetime.utcnow())
         data["exp_preview"] = preview
@@ -1253,6 +1258,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
                 current_user.exp += exp_gained
                 task.exp_awarded = True
                 task.exp_awarded_amount = exp_gained
+                task.exp_timing = exp_timing
                 level_ups.extend(record_level_ups(current_user, old_exp, db))
 
                 today = date.today()
