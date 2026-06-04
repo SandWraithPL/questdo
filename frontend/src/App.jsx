@@ -1625,33 +1625,98 @@ export default function App() {
     enqueueRequest(async () => {
       try {
         const response = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-        await fetchData(); // Refresh ALL data from API
+        const data = response.data;
+
+        // Update user with data from response
+        setUser(prev => ({
+          ...prev,
+          exp: data.exp,
+          streak: data.streak,
+          level: data.level,
+          title: data.title,
+          next_level_exp: data.next_level_exp,
+          next_level_title: data.next_level_title,
+        }));
+
+        // Update tasks - replace the changed task
+        setTasks(prev => {
+          const sorted = [...prev];
+          const idx = sorted.findIndex(t => t.id === data.task.id);
+          if (idx !== -1) {
+            sorted[idx] = data.task;
+          }
+          // Sort: uncompleted on top (by date ascending), completed at bottom (by date ascending)
+          return sorted.sort((a, b) => {
+            if (a.completed !== b.completed) {
+              return a.completed ? 1 : -1;
+            }
+            return new Date(a.due_date) - new Date(b.due_date);
+          });
+        });
+
+        // Add new achievements
+        if (data.new_achievements && data.new_achievements.length > 0) {
+          setAchievements(prev => ({
+            ...prev,
+            unlocked: [...(prev.unlocked || []), ...data.new_achievements],
+          }));
+        }
+
+        // Add earned drop to rareDrops
+        if (data.earned_drop) {
+          setRareDrops(prev => {
+            if (!prev) return { total_items: 1, items: [data.earned_drop] };
+            const existingItem = prev.items?.find(i => i.slug === data.earned_drop.slug);
+            if (existingItem) {
+              return {
+                ...prev,
+                items: prev.items.map(i => i.slug === data.earned_drop.slug ? { ...i, count: i.count + 1 } : i),
+              };
+            }
+            return {
+              ...prev,
+              total_items: (prev.total_items || 0) + 1,
+              items: [...(prev.items || []), data.earned_drop],
+            };
+          });
+        }
+
+        // Add level ups to history
+        if (data.level_ups && data.level_ups.length > 0) {
+          setHistory(prev => [...(prev || []), ...data.level_ups]);
+        }
+
+        // Apply daily bonus to user.exp
+        if (data.daily_bonus > 0) {
+          setUser(prev => ({ ...prev, exp: data.exp + data.daily_bonus }));
+        }
+
         const expPreview = getExpPreview(task.difficulty, task.due_date);
         const today = toDateStr(new Date());
         const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
         showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
 
         // Show toasts for new achievements
-        const newAchievements = response.data.new_achievements || [];
+        const newAchievements = data.new_achievements || [];
         newAchievements.forEach((ach) => {
           showToast(`🏆 Osiągnięcie: ${ach.icon} ${ach.title}`);
         });
 
         // Show toasts for new exclusive achievements
-        const newExclusiveAchievements = response.data.new_exclusive_achievements || [];
+        const newExclusiveAchievements = data.new_exclusive_achievements || [];
         newExclusiveAchievements.forEach((ach) => {
           showToast(`⭐ Osiągnięcie ekskluzywne: ${ach.icon} ${ach.title}`);
         });
 
         // Show toast for earned rare drop
-        if (response.data.earned_drop) {
-          const drop = response.data.earned_drop;
+        if (data.earned_drop) {
+          const drop = data.earned_drop;
           showToast(`💎 Znalazłeś: ${drop.icon} ${drop.name} (${drop.rarity})!`);
         }
 
         // Show toast for daily bonus
-        if (response.data.daily_bonus > 0) {
-          showToast(`🎁 Bonus dzienny: +${response.data.daily_bonus} EXP`);
+        if (data.daily_bonus > 0) {
+          showToast(`🎁 Bonus dzienny: +${data.daily_bonus} EXP`);
         }
       } catch (err) {
         showToast(err.response?.data?.detail || "Błąd aktualizacji – spróbuj ponownie");
@@ -1694,8 +1759,65 @@ export default function App() {
     // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
-        await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
-        await fetchData(); // Refresh ALL data from API
+        const response = await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
+        const data = response.data;
+
+        // Update user with data from response
+        setUser(prev => ({
+          ...prev,
+          exp: data.exp,
+          streak: data.streak,
+          level: data.level,
+          title: data.title,
+          next_level_exp: data.next_level_exp,
+          next_level_title: data.next_level_title,
+        }));
+
+        // Update tasks - replace the changed task
+        setTasks(prev => {
+          const sorted = [...prev];
+          const idx = sorted.findIndex(t => t.id === data.task.id);
+          if (idx !== -1) {
+            sorted[idx] = data.task;
+          }
+          // Sort: uncompleted on top (by date ascending), completed at bottom (by date ascending)
+          return sorted.sort((a, b) => {
+            if (a.completed !== b.completed) {
+              return a.completed ? 1 : -1;
+            }
+            return new Date(a.due_date) - new Date(b.due_date);
+          });
+        });
+
+        // Remove revoked achievements
+        if (data.revoked_achievements && data.revoked_achievements.length > 0) {
+          setAchievements(prev => ({
+            ...prev,
+            unlocked: (prev.unlocked || []).filter(ach => 
+              !data.revoked_achievements.some(rev => rev.slug === ach.slug || rev.title === ach.title)
+            ),
+          }));
+        }
+
+        // Handle earned drop if present (unlikely for uncheck, but handle if exists)
+        if (data.earned_drop) {
+          setRareDrops(prev => {
+            if (!prev) return { total_items: 1, items: [data.earned_drop] };
+            const existingItem = prev.items?.find(i => i.slug === data.earned_drop.slug);
+            if (existingItem) {
+              return {
+                ...prev,
+                items: prev.items.map(i => i.slug === data.earned_drop.slug ? { ...i, count: i.count + 1 } : i),
+              };
+            }
+            return {
+              ...prev,
+              total_items: (prev.total_items || 0) + 1,
+              items: [...(prev.items || []), data.earned_drop],
+            };
+          });
+        }
+
         showToast("🔄 Cofnięto ukończenie zadania");
       } catch (err) {
         showToast(err.response?.data?.detail || "Błąd aktualizacji – spróbuj ponownie");
@@ -1729,8 +1851,27 @@ export default function App() {
     // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
-        await axios.delete(`${API}/tasks/${task.id}`, { headers });
-        await fetchData(); // Refresh ALL data from API
+        const response = await axios.delete(`${API}/tasks/${task.id}`, { headers });
+        const data = response.data;
+
+        // Update user with data from response
+        setUser(prev => ({
+          ...prev,
+          exp: data.exp,
+          level: data.level,
+          title: data.title,
+          next_level_exp: data.next_level_exp,
+          next_level_title: data.next_level_title,
+        }));
+
+        // Remove task from local list
+        setTasks(prev => prev.filter(t => t.id !== task.id));
+
+        // Update achievements with response data
+        if (data.achievements) {
+          setAchievements(data.achievements);
+        }
+
         showToast("🗑️ Zadanie usunięte");
       } catch (err) {
         if (err.response?.status === 404) {
