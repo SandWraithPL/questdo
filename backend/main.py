@@ -414,8 +414,7 @@ def task_to_dict(t: models.Task) -> dict:
 
 
 def format_diary_message(body: str, occurred_at: Optional[datetime] = None) -> str:
-    at = occurred_at or datetime.utcnow()
-    return f"{at.day:02d}.{at.month:02d}.{at.year} - {body}"
+    return body
 
 
 def history_key_task(user_id: int, task_id: int, kind: str, slug: str) -> str:
@@ -537,6 +536,11 @@ def revoke_standard_achievement(user_id: int, slug: str, db: Session) -> None:
         models.UserAchievement.user_id == user_id,
         models.UserAchievement.achievement_id == achievement.id,
     ).delete(synchronize_session=False)
+    # Delete history entry for this achievement
+    db.query(models.PlayerHistory).filter(
+        models.PlayerHistory.user_id == user_id,
+        models.PlayerHistory.event_key == f"user:{user_id}:achievement:{slug}"
+    ).delete(synchronize_session=False)
 
 
 def revoke_exclusive_achievement(user_id: int, slug: str, db: Session) -> None:
@@ -546,6 +550,11 @@ def revoke_exclusive_achievement(user_id: int, slug: str, db: Session) -> None:
     db.query(models.PlayerExclusiveAchievement).filter(
         models.PlayerExclusiveAchievement.user_id == user_id,
         models.PlayerExclusiveAchievement.exclusive_achievement_id == ach.id,
+    ).delete(synchronize_session=False)
+    # Delete history entry for this exclusive achievement
+    db.query(models.PlayerHistory).filter(
+        models.PlayerHistory.user_id == user_id,
+        models.PlayerHistory.event_key == f"user:{user_id}:exclusive:{slug}"
     ).delete(synchronize_session=False)
 
 
