@@ -1714,11 +1714,6 @@ export default function App() {
           setHistory(prev => [...(prev || []), ...data.level_ups]);
         }
 
-        // Apply daily bonus to user.exp
-        if (data.daily_bonus > 0) {
-          setUser(prev => ({ ...prev, exp: data.exp + data.daily_bonus }));
-        }
-
         const expPreview = getExpPreview(task.difficulty, task.due_date);
         const today = toDateStr(new Date());
         const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
@@ -1857,6 +1852,11 @@ export default function App() {
             };
           });
         }
+
+        // Update history, achievements, and rareDrops from backend response
+        if (data.history) setHistory(data.history);
+        if (data.achievements) setAchievements(data.achievements);
+        if (data.rare_drops) setRareDrops(data.rare_drops);
 
         showToast("🔄 Cofnięto ukończenie zadania");
 
