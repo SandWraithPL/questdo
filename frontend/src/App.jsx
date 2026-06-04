@@ -1526,15 +1526,15 @@ export default function App() {
     };
     
     try {
-      const [userRes, tasksRes, achRes, chRes, levelsRes, rareDropsRes, historyRes] = await Promise.all([
+      const [userRes, tasksRes, chRes, levelsRes, rareDropsRes] = await Promise.all([
         axios.get(`${API}/me`, { headers: noCacheHeaders }),
         axios.get(`${API}/tasks`, { headers: noCacheHeaders }),
-        axios.get(`${API}/achievements`, { headers: noCacheHeaders }),
         axios.get(`${API}/challenges`, { headers: noCacheHeaders }),
         axios.get(`${API}/game/levels`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
         axios.get(`${API}/rare-drops/inventory`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
-        axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
       ]);
+      const achRes = await axios.get(`${API}/achievements`, { headers: noCacheHeaders });
+      const historyRes = await axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] }));
       
       const newUnlocked = achRes.data.unlocked || [];
       
@@ -1713,16 +1713,8 @@ export default function App() {
           });
         }
 
-        // Update history from backend response
+        if (data.achievements) setAchievements(data.achievements);
         if (data.history) setHistory(data.history);
-
-        // Refresh history from API to ensure consistency
-        try {
-          const historyRes = await axios.get(`${API}/history`, { headers });
-          setHistory(historyRes.data);
-        } catch (err) {
-          console.error("Failed to refresh history:", err);
-        }
 
         const expPreview = getExpPreview(task.difficulty, task.due_date);
         const today = toDateStr(new Date());
@@ -1863,18 +1855,9 @@ export default function App() {
           });
         }
 
-        // Update history, achievements, and rareDrops from backend response
         if (data.history) setHistory(data.history);
         if (data.achievements) setAchievements(data.achievements);
         if (data.rare_drops) setRareDrops(data.rare_drops);
-
-        // Refresh history from API to ensure consistency
-        try {
-          const historyRes = await axios.get(`${API}/history`, { headers });
-          setHistory(historyRes.data);
-        } catch (err) {
-          console.error("Failed to refresh history:", err);
-        }
 
         showToast("🔄 Cofnięto ukończenie zadania");
 
@@ -1933,28 +1916,9 @@ export default function App() {
         // Remove task from local list
         setTasks(prev => prev.filter(t => t.id !== task.id));
 
-        // Update achievements with response data
-        if (data.achievements) {
-          setAchievements(data.achievements);
-        }
-
-        // Update history from response if available, otherwise fetch from API
-        if (data.history) {
-          setHistory(data.history);
-        } else {
-          try {
-            const historyRes = await axios.get(`${API}/history`, { headers });
-            setHistory(historyRes.data);
-          } catch (err) {
-            console.error("Failed to refresh history:", err);
-          }
-        }
-
         showToast("🗑️ Zadanie usunięte");
 
-        // Refresh challenges
-        const challengesRes = await axios.get(`${API}/challenges`, { headers });
-        setChallenges(challengesRes.data);
+        await fetchData();
       } catch (err) {
         if (err.response?.status === 404) {
           showToast("Zadanie już nie istnieje");

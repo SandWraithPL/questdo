@@ -1182,7 +1182,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
                 )
             
             exp_to_revert = task.exp_awarded_amount or EXP_REWARDS.get(task.difficulty, 10)
-            old_exp = current_user.exp
+            exp_before_changes = current_user.exp
             current_user.exp = max(0, current_user.exp - exp_to_revert)
             task.exp_awarded = False
             task.exp_awarded_amount = 0
@@ -1194,9 +1194,6 @@ def update_task(task_id: int, task_update: TaskUpdate,
             exp_gained = -exp_to_revert
             
             print(f"[uncheck] Reverting {exp_to_revert} EXP for task {task.id}")
-            
-            # Remove level-up history if level dropped
-            remove_level_up_history(current_user, old_exp, db)
             
             all_tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
             completed_tasks = [t for t in all_tasks if t.completed and t.completed_at]
@@ -1231,13 +1228,11 @@ def update_task(task_id: int, task_update: TaskUpdate,
             unlocked_slugs_before = get_unlocked_slugs(current_user.id, db)
             reconcile_standard_achievements(current_user, db)
             unlocked_slugs_after = get_unlocked_slugs(current_user.id, db)
-            history_data = build_history_list(current_user.id, db)
             revoked_achievements = []
             for slug in unlocked_slugs_before - unlocked_slugs_after:
                 ach_def = gc.ACHIEVEMENT_BY_SLUG.get(slug)
                 if ach_def:
                     revoked_achievements.append({"slug": slug, "title": ach_def["title"], "icon": ach_def["icon"]})
-            level_ups.extend(record_level_ups(current_user, current_user.exp, db))
             
             assignment = get_or_create_daily_assignment(current_user, db, date.today())
             if assignment.bonus_claimed:
@@ -1249,6 +1244,8 @@ def update_task(task_id: int, task_update: TaskUpdate,
                     current_user.exp = max(0, current_user.exp - dq.TRIPLE_BONUS_EXP)
                     daily_bonus_reverted = dq.TRIPLE_BONUS_EXP
                     print(f"[uncheck] Reverted daily bonus {dq.TRIPLE_BONUS_EXP} EXP")
+
+            remove_level_up_history(current_user, exp_before_changes, db)
             
             new_rewards = {"achievements": [], "exclusive_achievements": []}
             earned_drop = None
@@ -1282,7 +1279,6 @@ def update_task(task_id: int, task_update: TaskUpdate,
                 new_rewards = grant_completion_rewards(current_user, task, db)
                 earned_drop = new_rewards.get("earned_drop")
                 revoked_achievements = new_rewards.get("revoked_achievements", [])
-                history_data = build_history_list(current_user.id, db)
 
     db.commit()
     db.refresh(task)
@@ -1320,7 +1316,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
         "level_ups": level_ups,
         "earned_drop": earned_drop,
         "rare_drops": build_rare_drops_inventory(current_user.id, db),
-        "history": history_data if 'history_data' in locals() else build_history_list(current_user.id, db),
+        "history": build_history_list(current_user.id, db),
         "achievements": build_achievements_payload(current_user, db),
     }
 
@@ -1475,54 +1471,51 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
     if not task:
         raise HTTPException(status_code=404, detail="Task not found")
 
+    exp_before_changes = current_user.exp
     exp_removed = 0
     if task.exp_awarded:
         exp_removed = task.exp_awarded_amount or EXP_REWARDS.get(task.difficulty, 10)
 
-    # Sprawdź czy daily bonus powinien być cofnięty PRZED usunięciem taska
     assignment = get_or_create_daily_assignment(current_user, db, date.today())
-    daily_bonus_reverted = 0
     if assignment.bonus_claimed:
         all_tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
-        stats = dq.build_day_stats(current_user, all_tasks, date.today())
-        quest_ids = [x.strip() for x in assignment.quest_ids.split(",") if x.strip()]
-        goals = dq.evaluate_assigned_quests(quest_ids, stats)
-        # Sprawdź czy po usunięciu tego taska cele nadal będą spełnione
-        # Symulujemy usunięcie taska z stats
         if task.completed:
-            stats_without_task = dq.build_day_stats(current_user, [t for t in all_tasks if t.id != task_id], date.today())
+            stats_without_task = dq.build_day_stats(
+                current_user, [t for t in all_tasks if t.id != task_id], date.today()
+            )
+            quest_ids = [x.strip() for x in assignment.quest_ids.split(",") if x.strip()]
             goals_without_task = dq.evaluate_assigned_quests(quest_ids, stats_without_task)
             if not dq.all_goals_complete(goals_without_task):
                 assignment.bonus_claimed = False
                 current_user.exp = max(0, current_user.exp - dq.TRIPLE_BONUS_EXP)
-                daily_bonus_reverted = dq.TRIPLE_BONUS_EXP
                 print(f"[delete_task] Reverted daily bonus {dq.TRIPLE_BONUS_EXP} EXP before deleting task")
 
-    # Teraz odejmij EXP za zadanie
     if task.exp_awarded:
         current_user.exp = max(0, current_user.exp - exp_removed)
 
-    # Zapamiętaj stary EXP przed odjęciem
-    old_exp_for_level = current_user.exp + exp_removed  # EXP przed odjęciem
+    if task.completed or task.exp_awarded:
+        remove_rewards_for_task(current_user, task, db)
+    else:
+        db.query(models.PlayerHistory).filter(
+            models.PlayerHistory.user_id == current_user.id,
+            models.PlayerHistory.event_key.like(f"user:{current_user.id}:task:{task_id}:%"),
+        ).delete(synchronize_session=False)
+        db.query(models.PlayerRareDrop).filter(
+            models.PlayerRareDrop.user_id == current_user.id,
+            models.PlayerRareDrop.source_task_id == task.id,
+        ).delete(synchronize_session=False)
 
-    # Usuń wpisy o awansie jeśli poziom spadł
-    remove_level_up_history(current_user, old_exp_for_level, db)
-
-    # Pobierz świeżą historię po ewentualnym usunięciu wpisów
-    history_data = build_history_list(current_user.id, db)
-
-    # Usuń wszystkie wpisy historii powiązane z tym taskiem
-    deleted_history_count = db.query(models.PlayerHistory).filter(
-        models.PlayerHistory.user_id == current_user.id,
-        models.PlayerHistory.event_key.like(f"user:{current_user.id}:task:{task_id}:%")
-    ).delete(synchronize_session=False)
-    print(f"[delete_task] Deleted {deleted_history_count} history entries for task {task_id}")
+    remove_level_up_history(current_user, exp_before_changes, db)
 
     db.delete(task)
-    if exp_removed:
-        reconcile_standard_achievements(current_user, db)
-    
+    db.flush()
+
+    reconcile_standard_achievements(current_user, db)
     db.commit()
+
+    history_data = build_history_list(current_user.id, db)
+    achievements_payload = build_achievements_payload(current_user, db)
+    
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
         "message": "Deleted",
@@ -1532,7 +1525,7 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
         "title": title,
         "next_level_exp": next_exp,
         "next_level_title": next_title,
-        "achievements": build_achievements_payload(current_user, db),
+        "achievements": achievements_payload,
         "history": history_data,
     }
 
