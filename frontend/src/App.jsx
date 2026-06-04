@@ -1572,9 +1572,9 @@ export default function App() {
   useEffect(() => { if (token) fetchData(); }, [token]);
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
 
-  // Restore pending requests from sessionStorage on mount
+  // Restore pending requests from localStorage on mount
   useEffect(() => {
-    const saved = sessionStorage.getItem("pendingRequests");
+    const saved = localStorage.getItem("questdo_pendingRequests");
     if (saved && token) {
       try {
         const requests = JSON.parse(saved);
@@ -1612,25 +1612,48 @@ export default function App() {
             }
           }, req.metadata);
         });
-        sessionStorage.removeItem("pendingRequests");
+        localStorage.removeItem("questdo_pendingRequests");
       } catch (err) {
-        console.error("[sessionStorage restore] error:", err);
+        console.error("[localStorage restore] error:", err);
       }
     }
   }, [token]);
 
-  // Save pending requests to sessionStorage before unload
+  // Save pending requests to localStorage before unload
   useEffect(() => {
     const handleBeforeUnload = () => {
       const pendingRequests = apiQueue.current
         .filter(item => item.metadata)
         .map(item => item.metadata);
       if (pendingRequests.length > 0) {
-        sessionStorage.setItem("pendingRequests", JSON.stringify(pendingRequests));
+        localStorage.setItem("questdo_pendingRequests", JSON.stringify(pendingRequests));
       }
+      // Save visual state
+      const stateToSave = {
+        tasks: tasks.map(t => ({ id: t.id, completed: t.completed })),
+      };
+      localStorage.setItem("questdo_visualState", JSON.stringify(stateToSave));
     };
     window.addEventListener("beforeunload", handleBeforeUnload);
     return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+  }, [tasks]);
+
+  // Restore visual state from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem("questdo_visualState");
+    if (saved) {
+      try {
+        const { tasks: savedTasks } = JSON.parse(saved);
+        // Restore checkboxes
+        setTasks(prev => prev.map(t => {
+          const savedTask = savedTasks.find(st => st.id === t.id);
+          return savedTask ? { ...t, completed: savedTask.completed } : t;
+        }));
+        localStorage.removeItem("questdo_visualState");
+      } catch (err) {
+        console.error("[localStorage visual restore] error:", err);
+      }
+    }
   }, []);
 
   useEffect(() => {
