@@ -1276,10 +1276,11 @@ def update_task(task_id: int, task_update: TaskUpdate,
                     current_user.last_streak_date = today
                 
                 db.flush()
-                
+
                 new_rewards = grant_completion_rewards(current_user, task, db)
                 earned_drop = new_rewards.get("earned_drop")
                 revoked_achievements = new_rewards.get("revoked_achievements", [])
+                history_data = build_history_list(current_user.id, db)
 
     db.commit()
     db.refresh(task)

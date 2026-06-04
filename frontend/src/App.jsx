@@ -1713,17 +1713,8 @@ export default function App() {
           });
         }
 
-        // Add level ups to history
-        if (data.level_ups && data.level_ups.length > 0) {
-          const now = new Date();
-          const formattedDate = `${now.getDate().toString().padStart(2, '0')}.${(now.getMonth()+1).toString().padStart(2, '0')}.${now.getFullYear()}`;
-          const levelUpEntries = data.level_ups.map(lv => ({
-            id: Date.now() + lv.level,
-            message: `${formattedDate} - ${lv.message}`,
-            occurred_at: now.toISOString(),
-          }));
-          setHistory(prev => [...(prev || []), ...levelUpEntries]);
-        }
+        // Update history from backend response
+        if (data.history) setHistory(data.history);
 
         const expPreview = getExpPreview(task.difficulty, task.due_date);
         const today = toDateStr(new Date());
