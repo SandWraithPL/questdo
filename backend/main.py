@@ -689,11 +689,13 @@ def remove_level_up_history(user: models.User, old_exp: int, db: Session) -> lis
     removed_levels = []
     for _, level, _ in gc.LEVELS:
         if new_level < level <= old_level:
-            db.query(models.PlayerHistory).filter(
+            deleted_count = db.query(models.PlayerHistory).filter(
                 models.PlayerHistory.user_id == user.id,
                 models.PlayerHistory.event_key == f"user:{user.id}:level:{level}"
             ).delete(synchronize_session=False)
-            removed_levels.append(level)
+            if deleted_count > 0:
+                removed_levels.append(level)
+                print(f"[remove_level_up_history] Removed level {level} history entry for user {user.id}")
     return removed_levels
 
 class UserCreate(BaseModel):
@@ -1476,6 +1478,28 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
     exp_removed = 0
     if task.exp_awarded:
         exp_removed = task.exp_awarded_amount or EXP_REWARDS.get(task.difficulty, 10)
+
+    # Sprawdź czy daily bonus powinien być cofnięty PRZED usunięciem taska
+    assignment = get_or_create_daily_assignment(current_user, db, date.today())
+    daily_bonus_reverted = 0
+    if assignment.bonus_claimed:
+        all_tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
+        stats = dq.build_day_stats(current_user, all_tasks, date.today())
+        quest_ids = [x.strip() for x in assignment.quest_ids.split(",") if x.strip()]
+        goals = dq.evaluate_assigned_quests(quest_ids, stats)
+        # Sprawdź czy po usunięciu tego taska cele nadal będą spełnione
+        # Symulujemy usunięcie taska z stats
+        if task.completed:
+            stats_without_task = dq.build_day_stats(current_user, [t for t in all_tasks if t.id != task_id], date.today())
+            goals_without_task = dq.evaluate_assigned_quests(quest_ids, stats_without_task)
+            if not dq.all_goals_complete(goals_without_task):
+                assignment.bonus_claimed = False
+                current_user.exp = max(0, current_user.exp - dq.TRIPLE_BONUS_EXP)
+                daily_bonus_reverted = dq.TRIPLE_BONUS_EXP
+                print(f"[delete_task] Reverted daily bonus {dq.TRIPLE_BONUS_EXP} EXP before deleting task")
+
+    # Teraz odejmij EXP za zadanie
+    if task.exp_awarded:
         current_user.exp = max(0, current_user.exp - exp_removed)
 
     # Usuń wszystkie wpisy historii powiązane z tym taskiem
@@ -1488,17 +1512,6 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
     db.delete(task)
     if exp_removed:
         reconcile_standard_achievements(current_user, db)
-    
-    # Sprawdź czy daily bonus powinien być cofnięty
-    assignment = get_or_create_daily_assignment(current_user, db, date.today())
-    if assignment.bonus_claimed:
-        all_tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
-        stats = dq.build_day_stats(current_user, all_tasks, date.today())
-        quest_ids = [x.strip() for x in assignment.quest_ids.split(",") if x.strip()]
-        goals = dq.evaluate_assigned_quests(quest_ids, stats)
-        if not dq.all_goals_complete(goals):
-            assignment.bonus_claimed = False
-            current_user.exp = max(0, current_user.exp - dq.TRIPLE_BONUS_EXP)
     
     db.commit()
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
