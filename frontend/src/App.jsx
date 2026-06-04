@@ -1916,6 +1916,9 @@ export default function App() {
         // Remove task from local list
         setTasks(prev => prev.filter(t => t.id !== task.id));
 
+        if (data.achievements) setAchievements(data.achievements);
+        if (data.history) setHistory(data.history);
+
         showToast("🗑️ Zadanie usunięte");
 
         await fetchData();

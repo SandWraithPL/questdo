@@ -1493,19 +1493,16 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
     if task.exp_awarded:
         current_user.exp = max(0, current_user.exp - exp_removed)
 
-    if task.completed or task.exp_awarded:
-        remove_rewards_for_task(current_user, task, db)
-    else:
-        db.query(models.PlayerHistory).filter(
-            models.PlayerHistory.user_id == current_user.id,
-            models.PlayerHistory.event_key.like(f"user:{current_user.id}:task:{task_id}:%"),
-        ).delete(synchronize_session=False)
-        db.query(models.PlayerRareDrop).filter(
-            models.PlayerRareDrop.user_id == current_user.id,
-            models.PlayerRareDrop.source_task_id == task.id,
-        ).delete(synchronize_session=False)
-
     remove_level_up_history(current_user, exp_before_changes, db)
+
+    db.query(models.PlayerHistory).filter(
+        models.PlayerHistory.user_id == current_user.id,
+        models.PlayerHistory.event_key.like(f"user:{current_user.id}:task:{task_id}:%"),
+    ).delete(synchronize_session=False)
+    db.query(models.PlayerRareDrop).filter(
+        models.PlayerRareDrop.user_id == current_user.id,
+        models.PlayerRareDrop.source_task_id == task.id,
+    ).delete(synchronize_session=False)
 
     db.delete(task)
     db.flush()
