@@ -1418,7 +1418,6 @@ export default function App() {
   const [editingTaskIds, setEditingTaskIds] = useState(new Set());
   const apiQueue = useRef([]);
   const isProcessingQueue = useRef(false);
-  const prevAchievementsRef = useRef({ unlocked: [], rareDrops: null });
 
   const headers = { Authorization: `Bearer ${token}` };
 
@@ -1519,17 +1518,13 @@ export default function App() {
 
   const fetchData = async () => {
     if (!token) return;
-
+    
     const noCacheHeaders = {
       ...headers,
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache'
     };
-
-    // Zapamiętaj obecne stany przed requestami
-    const prevUnlockedSlugs = new Set((achievements.unlocked || []).map(a => a.slug));
-    const prevRareDropSlugs = new Set((rareDrops?.items || []).map(i => i.slug));
-
+    
     try {
       const [userRes, tasksRes, chRes, levelsRes, rareDropsRes] = await Promise.all([
         axios.get(`${API}/me`, { headers: noCacheHeaders }),
@@ -1562,18 +1557,6 @@ export default function App() {
       setChallenges(chRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
       setHistory(historyRes.data || []);
-
-      // Porównaj nowe dane ze starymi i wyświetl toasty dla nowych osiągnięć
-      const newAchievements = newUnlocked.filter(a => !prevUnlockedSlugs.has(a.slug));
-      newAchievements.forEach(ach => {
-        showToast(`🏆 Nowe osiągnięcie: ${ach.icon} ${ach.title}`);
-      });
-
-      // Porównaj nowe dane ze starymi i wyświetl toasty dla nowych znajdziek
-      const newRareDropsItems = (rareDropsRes.data?.items || []).filter(i => !prevRareDropSlugs.has(i.slug));
-      newRareDropsItems.forEach(drop => {
-        showToast(`💎 Nowa znajdźka: ${drop.icon} ${drop.name} (${drop.rarity})!`);
-      });
     } catch (err) {
       console.error("Fetch error:", err);
       localStorage.removeItem("token");
