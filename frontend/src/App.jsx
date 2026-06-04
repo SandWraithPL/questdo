@@ -980,7 +980,7 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
-function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck, loadingTaskId, deletingTaskId, editingTaskId }) {
+function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck, loadingTaskIds, deletingTaskIds, editingTaskIds }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
@@ -1080,19 +1080,19 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
               <select className="input-edit" value={editForm.reminder_offset_days ?? ""} onChange={(e) => setEditForm({ ...editForm, reminder_offset_days: e.target.value })}>
                 {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
-              <div className="edit-actions"><button className="btn-save" onClick={() => saveEdit(task)} disabled={editingTaskId === task.id}>{editingTaskId === task.id ? "⏳" : "✓ Zapisz"}</button><button className="btn-cancel-edit" onClick={cancelEdit}>✗ Anuluj</button></div>
+              <div className="edit-actions"><button className="btn-save" onClick={() => saveEdit(task)} disabled={editingTaskIds.has(task.id)}>{editingTaskIds.has(task.id) ? "⏳" : "✓ Zapisz"}</button><button className="btn-cancel-edit" onClick={cancelEdit}>✗ Anuluj</button></div>
             </div>
           ) : (
             <>
               <button
                 type="button"
-                className={`task-check ${checkState.className} ${loadingTaskId === task.id ? "loading" : ""}`}
-                disabled={checkState.disabled || loadingTaskId === task.id}
+                className={`task-check ${checkState.className} ${loadingTaskIds.has(task.id) ? "loading" : ""}`}
+                disabled={checkState.disabled || loadingTaskIds.has(task.id)}
                 onClick={() => handleToggleClick(task)}
                 title={checkState.title}
                 aria-label={checkState.title}
               >
-                {loadingTaskId === task.id ? "⏳" : (task.completed ? "✓" : "")}
+                {loadingTaskIds.has(task.id) ? "⏳" : (task.completed ? "✓" : "")}
               </button>
               <div className="task-info">
                 <h4 className={task.completed ? "done" : ""}>{task.important && <span className="important-mark">Ważne · </span>}{task.title}</h4>
@@ -1109,8 +1109,8 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
                 </div>
               </div>
               <div className="task-actions">
-                {!task.completed && <button className="icon-btn" onClick={() => startEdit(task)} disabled={editingTaskId === task.id}>✏️</button>}
-                <button className="task-delete" onClick={() => onDelete(task)} disabled={deletingTaskId === task.id}>{deletingTaskId === task.id ? "⏳" : "🗑"}</button>
+                {!task.completed && <button className="icon-btn" onClick={() => startEdit(task)} disabled={editingTaskIds.has(task.id)}>✏️</button>}
+                <button className="task-delete" onClick={() => onDelete(task)} disabled={deletingTaskIds.has(task.id)}>{deletingTaskIds.has(task.id) ? "⏳" : "🗑"}</button>
               </div>
             </>
           )}
@@ -1408,10 +1408,10 @@ export default function App() {
   const [standalonePwa, setStandalonePwa] = useState(false);
   const notificationsUnsupported = !("Notification" in window);
   const [showAdminPanel, setShowAdminPanel] = useState(false);
-  const [loadingTaskId, setLoadingTaskId] = useState(null);
+  const [loadingTaskIds, setLoadingTaskIds] = useState(new Set());
   const [isAddingTask, setIsAddingTask] = useState(false);
-  const [deletingTaskId, setDeletingTaskId] = useState(null);
-  const [editingTaskId, setEditingTaskId] = useState(null);
+  const [deletingTaskIds, setDeletingTaskIds] = useState(new Set());
+  const [editingTaskIds, setEditingTaskIds] = useState(new Set());
   const apiQueue = useRef([]);
   const isProcessingQueue = useRef(false);
 
@@ -1645,9 +1645,9 @@ export default function App() {
 
   const toggleTask = async (task) => {
     if (task.completed) return;
-    if (loadingTaskId === task.id) return; // Prevent multiple clicks
+    if (loadingTaskIds.has(task.id)) return; // Prevent multiple clicks
 
-    setLoadingTaskId(task.id);
+    setLoadingTaskIds(prev => new Set([...prev, task.id]));
 
     // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
@@ -1746,10 +1746,18 @@ export default function App() {
         if (data.daily_bonus > 0) {
           showToast(`🎁 Bonus dzienny: +${data.daily_bonus} EXP`);
         }
+
+        // Refresh challenges
+        const challengesRes = await axios.get(`${API}/challenges`, { headers });
+        setChallenges(challengesRes.data);
       } catch (err) {
         showToast(err.response?.data?.detail || "Błąd aktualizacji – spróbuj ponownie");
       } finally {
-        setLoadingTaskId(null);
+        setLoadingTaskIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(task.id);
+          return newSet;
+        });
       }
     });
   };
@@ -1757,9 +1765,9 @@ export default function App() {
   const saveTask = async (id, updates) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
-    if (editingTaskId === id) return; // Prevent multiple clicks
+    if (editingTaskIds.has(id)) return; // Prevent multiple clicks
 
-    setEditingTaskId(id);
+    setEditingTaskIds(prev => new Set([...prev, id]));
 
     // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
@@ -1770,7 +1778,11 @@ export default function App() {
       } catch (err) {
         showToast(err.response?.data?.detail || "Błąd zapisu – spróbuj ponownie");
       } finally {
-        setEditingTaskId(null);
+        setEditingTaskIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(id);
+          return newSet;
+        });
       }
     });
   };
@@ -1780,9 +1792,9 @@ export default function App() {
       showToast("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
       return;
     }
-    if (loadingTaskId === task.id) return; // Prevent multiple clicks
+    if (loadingTaskIds.has(task.id)) return; // Prevent multiple clicks
 
-    setLoadingTaskId(task.id);
+    setLoadingTaskIds(prev => new Set([...prev, task.id]));
 
     // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
@@ -1847,10 +1859,18 @@ export default function App() {
         }
 
         showToast("🔄 Cofnięto ukończenie zadania");
+
+        // Refresh challenges
+        const challengesRes = await axios.get(`${API}/challenges`, { headers });
+        setChallenges(challengesRes.data);
       } catch (err) {
         showToast(err.response?.data?.detail || "Błąd aktualizacji – spróbuj ponownie");
       } finally {
-        setLoadingTaskId(null);
+        setLoadingTaskIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(task.id);
+          return newSet;
+        });
       }
     });
   };
@@ -1872,9 +1892,9 @@ export default function App() {
   const deleteTask = async (task) => {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
-    if (deletingTaskId === task.id) return; // Prevent multiple clicks
+    if (deletingTaskIds.has(task.id)) return; // Prevent multiple clicks
 
-    setDeletingTaskId(task.id);
+    setDeletingTaskIds(prev => new Set([...prev, task.id]));
 
     // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
@@ -1901,6 +1921,10 @@ export default function App() {
         }
 
         showToast("🗑️ Zadanie usunięte");
+
+        // Refresh challenges
+        const challengesRes = await axios.get(`${API}/challenges`, { headers });
+        setChallenges(challengesRes.data);
       } catch (err) {
         if (err.response?.status === 404) {
           showToast("Zadanie już nie istnieje");
@@ -1909,7 +1933,11 @@ export default function App() {
           showToast(err.response?.data?.detail || "Błąd usuwania – spróbuj ponownie");
         }
       } finally {
-        setDeletingTaskId(null);
+        setDeletingTaskIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(task.id);
+          return newSet;
+        });
       }
     });
   };
@@ -1949,7 +1977,7 @@ export default function App() {
       <PlayerSummary user={user} progress={progress} />
       <ChallengesBar challenges={challenges} />
       <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} loadingTaskId={loadingTaskId} deletingTaskId={deletingTaskId} editingTaskId={editingTaskId} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} editingTaskIds={editingTaskIds} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">
