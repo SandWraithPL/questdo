@@ -1716,6 +1716,14 @@ export default function App() {
         // Update history from backend response
         if (data.history) setHistory(data.history);
 
+        // Refresh history from API to ensure consistency
+        try {
+          const historyRes = await axios.get(`${API}/history`, { headers });
+          setHistory(historyRes.data);
+        } catch (err) {
+          console.error("Failed to refresh history:", err);
+        }
+
         const expPreview = getExpPreview(task.difficulty, task.due_date);
         const today = toDateStr(new Date());
         const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
@@ -1860,6 +1868,14 @@ export default function App() {
         if (data.achievements) setAchievements(data.achievements);
         if (data.rare_drops) setRareDrops(data.rare_drops);
 
+        // Refresh history from API to ensure consistency
+        try {
+          const historyRes = await axios.get(`${API}/history`, { headers });
+          setHistory(historyRes.data);
+        } catch (err) {
+          console.error("Failed to refresh history:", err);
+        }
+
         showToast("🔄 Cofnięto ukończenie zadania");
 
         // Refresh challenges
@@ -1920,6 +1936,14 @@ export default function App() {
         // Update achievements with response data
         if (data.achievements) {
           setAchievements(data.achievements);
+        }
+
+        // Refresh history from API to ensure consistency
+        try {
+          const historyRes = await axios.get(`${API}/history`, { headers });
+          setHistory(historyRes.data);
+        } catch (err) {
+          console.error("Failed to refresh history:", err);
         }
 
         showToast("🗑️ Zadanie usunięte");

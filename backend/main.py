@@ -1488,6 +1488,18 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
     db.delete(task)
     if exp_removed:
         reconcile_standard_achievements(current_user, db)
+    
+    # Sprawdź czy daily bonus powinien być cofnięty
+    assignment = get_or_create_daily_assignment(current_user, db, date.today())
+    if assignment.bonus_claimed:
+        all_tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
+        stats = dq.build_day_stats(current_user, all_tasks, date.today())
+        quest_ids = [x.strip() for x in assignment.quest_ids.split(",") if x.strip()]
+        goals = dq.evaluate_assigned_quests(quest_ids, stats)
+        if not dq.all_goals_complete(goals):
+            assignment.bonus_claimed = False
+            current_user.exp = max(0, current_user.exp - dq.TRIPLE_BONUS_EXP)
+    
     db.commit()
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
