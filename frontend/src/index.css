@@ -80,6 +80,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .task-check:hover:not(:disabled) { border-color: #ff8906; transform: scale(1.05); }
 .task-check:active:not(:disabled) { transform: scale(0.96); }
 .task-check:disabled { cursor: not-allowed; opacity: 0.65; }
+.task-check.loading { cursor: wait; opacity: 0.7; }
 .task-check.checked { background: #ff8906; border-color: #ff8906; color: #0f0e17; }
 .task-check.checked.uncheckable { background: #2e5a35; border-color: #4caf50; box-shadow: 0 0 0 2px rgba(76, 175, 80, 0.28); }
 .task-check.checked.uncheckable:hover:not(:disabled) { background: #3a6b42; border-color: #66bb6a; }
