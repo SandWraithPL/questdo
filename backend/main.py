@@ -663,6 +663,23 @@ def record_level_ups(user: models.User, old_exp: int, db: Session) -> list[dict]
                 unlocked.append({"level": level, "title": title, "message": message})
     return unlocked
 
+
+def remove_level_up_history(user: models.User, old_exp: int, db: Session) -> list[int]:
+    old_level = gc.get_level(old_exp)[0]
+    new_level = gc.get_level(user.exp)[0]
+    if new_level >= old_level:
+        return []
+
+    removed_levels = []
+    for _, level, _ in gc.LEVELS:
+        if new_level < level <= old_level:
+            db.query(models.PlayerHistory).filter(
+                models.PlayerHistory.user_id == user.id,
+                models.PlayerHistory.event_key == f"user:{user.id}:level:{level}"
+            ).delete(synchronize_session=False)
+            removed_levels.append(level)
+    return removed_levels
+
 class UserCreate(BaseModel):
     username: str
     password: str
@@ -1144,6 +1161,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
                 )
             
             exp_to_revert = task.exp_awarded_amount or EXP_REWARDS.get(task.difficulty, 10)
+            old_exp = current_user.exp
             current_user.exp = max(0, current_user.exp - exp_to_revert)
             task.exp_awarded = False
             task.exp_awarded_amount = 0
@@ -1155,6 +1173,9 @@ def update_task(task_id: int, task_update: TaskUpdate,
             exp_gained = -exp_to_revert
             
             print(f"[uncheck] Reverting {exp_to_revert} EXP for task {task.id}")
+            
+            # Remove level-up history if level dropped
+            remove_level_up_history(current_user, old_exp, db)
             
             all_tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
             completed_tasks = [t for t in all_tasks if t.completed and t.completed_at]

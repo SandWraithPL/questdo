@@ -1585,6 +1585,7 @@ export default function App() {
       exp_awarded: false,
     };
 
+    // Immediate optimistic UI update
     setTasks(prev => [...prev, newTask]);
     setTitle("");
     setDesc("");
@@ -1594,12 +1595,33 @@ export default function App() {
 
     enqueueRequest(async () => {
       try {
-        await axios.post(`${API}/tasks`, apiPayload, { headers });
-        await fetchData();
-        showToast(`✅ Dodano quest na ${savedDate}`);
+        const response = await axios.post(`${API}/tasks`, apiPayload, { headers });
+        const data = response.data;
+
+        // Replace temp task with real task from API
+        setTasks(prev => prev.map(t => t.id === tempId ? { ...t, id: data.id } : t));
+
+        // Incremental state updates from API response (if any)
+        if (data.exp !== undefined) {
+          setUser(prev => ({ ...prev, exp: data.exp, level: data.level, title: data.title, next_level_exp: data.next_level_exp, next_level_title: data.next_level_title, streak: data.streak }));
+        }
+        if (data.challenges) {
+          setChallenges(data.challenges);
+        }
+        if (data.achievements) {
+          setAchievements(data.achievements);
+        }
+        if (data.rare_drops) {
+          setRareDrops(data.rare_drops);
+        }
+        if (data.history) {
+          setHistory(data.history);
+        }
       } catch (err) {
         console.error("[addTask] API error:", err);
-        showToast(err.response?.data?.detail || "Błąd dodawania – odśwież stronę (F5)");
+        // Remove temp task on error
+        setTasks(prev => prev.filter(t => t.id !== tempId));
+        showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
       }
     });
   };
@@ -1611,6 +1633,7 @@ export default function App() {
     const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
     const expPreview = getExpPreview(task.difficulty, task.due_date);
 
+    // Immediate optimistic UI update
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true, completed_at: new Date().toISOString(), exp_awarded: true, exp_awarded_amount: expPreview.amount } : t));
     setUser(prev => ({ ...prev, exp: prev.exp + expPreview.amount }));
     if (challenges && challenges.goals) {
@@ -1629,14 +1652,34 @@ export default function App() {
       }));
     }
 
+    // Immediate toast (optimistic)
+    showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
+
     enqueueRequest(async () => {
       try {
-        await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-        await fetchData();
-        showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
+        const response = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
+        const data = response.data;
+
+        // Incremental state updates from API response
+        if (data.exp !== undefined) {
+          setUser(prev => ({ ...prev, exp: data.exp, level: data.level, title: data.title, next_level_exp: data.next_level_exp, next_level_title: data.next_level_title, streak: data.streak }));
+        }
+        if (data.challenges) {
+          setChallenges(data.challenges);
+        }
+        if (data.achievements) {
+          setAchievements(data.achievements);
+        }
+        if (data.rare_drops) {
+          setRareDrops(data.rare_drops);
+        }
+        if (data.history) {
+          setHistory(data.history);
+        }
+        // Do NOT update tasks - checkbox is already correct
       } catch (err) {
         console.error("[toggleTask] API error:", err);
-        showToast(err.response?.data?.detail || "Błąd aktualizacji – odśwież stronę (F5)");
+        showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
       }
     });
   };
@@ -1645,16 +1688,34 @@ export default function App() {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
 
+    // Immediate optimistic UI update
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
 
     enqueueRequest(async () => {
       try {
-        await axios.patch(`${API}/tasks/${id}`, updates, { headers });
-        await fetchData();
-        showToast("💾 Zapisano zmiany");
+        const response = await axios.patch(`${API}/tasks/${id}`, updates, { headers });
+        const data = response.data;
+
+        // Incremental state updates from API response (if any)
+        if (data.exp !== undefined) {
+          setUser(prev => ({ ...prev, exp: data.exp, level: data.level, title: data.title, next_level_exp: data.next_level_exp, next_level_title: data.next_level_title, streak: data.streak }));
+        }
+        if (data.challenges) {
+          setChallenges(data.challenges);
+        }
+        if (data.achievements) {
+          setAchievements(data.achievements);
+        }
+        if (data.rare_drops) {
+          setRareDrops(data.rare_drops);
+        }
+        if (data.history) {
+          setHistory(data.history);
+        }
+        // Do NOT update tasks - task is already updated
       } catch (err) {
         console.error("[saveTask] API error:", err);
-        showToast(err.response?.data?.detail || "Błąd zapisu – odśwież stronę (F5)");
+        showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
       }
     });
   };
@@ -1667,6 +1728,7 @@ export default function App() {
 
     const expAwarded = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
 
+    // Immediate optimistic UI update
     setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: false, completed_at: null, exp_awarded: false, exp_awarded_amount: null } : t));
     setUser(prev => ({ ...prev, exp: Math.max(0, prev.exp - expAwarded) }));
     if (challenges && challenges.goals) {
@@ -1687,12 +1749,29 @@ export default function App() {
 
     enqueueRequest(async () => {
       try {
-        await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
-        await fetchData();
-        showToast("✅ Cofnięto ukończenie zadania");
+        const response = await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
+        const data = response.data;
+
+        // Incremental state updates from API response
+        if (data.exp !== undefined) {
+          setUser(prev => ({ ...prev, exp: data.exp, level: data.level, title: data.title, next_level_exp: data.next_level_exp, next_level_title: data.next_level_title, streak: data.streak }));
+        }
+        if (data.challenges) {
+          setChallenges(data.challenges);
+        }
+        if (data.achievements) {
+          setAchievements(data.achievements);
+        }
+        if (data.rare_drops) {
+          setRareDrops(data.rare_drops);
+        }
+        if (data.history) {
+          setHistory(data.history);
+        }
+        // Do NOT update tasks - checkbox is already correct
       } catch (err) {
         console.error("[uncheckTask] API error:", err);
-        showToast(err.response?.data?.detail || "Błąd cofania ukończenia – odśwież stronę (F5)");
+        showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
       }
     });
   };
@@ -1715,6 +1794,7 @@ export default function App() {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
 
+    // Immediate optimistic UI update
     setTasks(prev => prev.filter(t => t.id !== task.id));
     if (task.exp_awarded) {
       setUser(prev => ({ ...prev, exp: Math.max(0, prev.exp - exp) }));
@@ -1737,13 +1817,30 @@ export default function App() {
 
     enqueueRequest(async () => {
       try {
-        await axios.delete(`${API}/tasks/${task.id}`, { headers });
-        await fetchData();
-        showToast("🗑️ Usunięto quest");
+        const response = await axios.delete(`${API}/tasks/${task.id}`, { headers });
+        const data = response.data;
+
+        // Incremental state updates from API response
+        if (data.exp !== undefined) {
+          setUser(prev => ({ ...prev, exp: data.exp, level: data.level, title: data.title, next_level_exp: data.next_level_exp, next_level_title: data.next_level_title, streak: data.streak }));
+        }
+        if (data.challenges) {
+          setChallenges(data.challenges);
+        }
+        if (data.achievements) {
+          setAchievements(data.achievements);
+        }
+        if (data.rare_drops) {
+          setRareDrops(data.rare_drops);
+        }
+        if (data.history) {
+          setHistory(data.history);
+        }
+        // Do NOT update tasks - task is already removed
       } catch (err) {
         console.error("[deleteTask] API error:", err);
         if (err.response?.status === 404) showToast("Zadanie już nie istnieje");
-        else showToast(err.response?.data?.detail || "Błąd usuwania – odśwież stronę (F5)");
+        else showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
       }
     });
   };
