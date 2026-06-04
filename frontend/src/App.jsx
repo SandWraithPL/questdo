@@ -1399,13 +1399,11 @@ export default function App() {
   const [showAdminPanel, setShowAdminPanel] = useState(false);
   const apiQueue = useRef([]);
   const isProcessingQueue = useRef(false);
-  const toastQueue = useRef([]);
-  const isToastVisible = useRef(false);
 
   const headers = { Authorization: `Bearer ${token}` };
 
-  const enqueueRequest = async (requestFn, metadata = null) => {
-    apiQueue.current.push({ fn: requestFn, metadata });
+  const enqueueRequest = async (requestFn) => {
+    apiQueue.current.push({ fn: requestFn });
     if (!isProcessingQueue.current) {
       isProcessingQueue.current = true;
       while (apiQueue.current.length > 0) {
@@ -1414,27 +1412,6 @@ export default function App() {
       }
       isProcessingQueue.current = false;
     }
-  };
-
-  const showToastQueued = (message) => {
-    toastQueue.current.push(message);
-    if (!isToastVisible.current) {
-      processToastQueue();
-    }
-  };
-
-  const processToastQueue = () => {
-    if (toastQueue.current.length === 0) {
-      isToastVisible.current = false;
-      return;
-    }
-    isToastVisible.current = true;
-    const message = toastQueue.current.shift();
-    setToast(message);
-    setTimeout(() => {
-      setToast(null);
-      processToastQueue();
-    }, 3000);
   };
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
@@ -1572,90 +1549,6 @@ export default function App() {
   useEffect(() => { if (token) fetchData(); }, [token]);
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
 
-  // Restore pending requests from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem("questdo_pendingRequests");
-    if (saved && token) {
-      try {
-        const requests = JSON.parse(saved);
-        requests.forEach(req => {
-          // Re-enqueue the request
-          enqueueRequest(async () => {
-            try {
-              let response;
-              if (req.method === "PATCH") {
-                response = await axios.patch(`${API}${req.endpoint}`, req.payload, { headers });
-              } else if (req.method === "POST") {
-                response = await axios.post(`${API}${req.endpoint}`, req.payload, { headers });
-              } else if (req.method === "DELETE") {
-                response = await axios.delete(`${API}${req.endpoint}`, { headers });
-              }
-              const data = response.data;
-              // Sync state with API response
-              if (data.exp !== undefined) {
-                setUser(prev => ({ ...prev, exp: data.exp, level: data.level, title: data.title, next_level_exp: data.next_level_exp, next_level_title: data.next_level_title, streak: data.streak }));
-              }
-              if (data.challenges) {
-                setChallenges(data.challenges);
-              }
-              if (data.achievements) {
-                setAchievements(data.achievements);
-              }
-              if (data.rare_drops) {
-                setRareDrops(data.rare_drops);
-              }
-              if (data.history) {
-                setHistory(data.history);
-              }
-            } catch (err) {
-              console.error("[restored request] API error:", err);
-            }
-          }, req.metadata);
-        });
-        localStorage.removeItem("questdo_pendingRequests");
-      } catch (err) {
-        console.error("[localStorage restore] error:", err);
-      }
-    }
-  }, [token]);
-
-  // Save pending requests to localStorage before unload
-  useEffect(() => {
-    const handleBeforeUnload = () => {
-      const pendingRequests = apiQueue.current
-        .filter(item => item.metadata)
-        .map(item => item.metadata);
-      if (pendingRequests.length > 0) {
-        localStorage.setItem("questdo_pendingRequests", JSON.stringify(pendingRequests));
-      }
-      // Save visual state
-      const stateToSave = {
-        tasks: tasks.map(t => ({ id: t.id, completed: t.completed })),
-      };
-      localStorage.setItem("questdo_visualState", JSON.stringify(stateToSave));
-    };
-    window.addEventListener("beforeunload", handleBeforeUnload);
-    return () => window.removeEventListener("beforeunload", handleBeforeUnload);
-  }, [tasks]);
-
-  // Restore visual state from localStorage on mount
-  useEffect(() => {
-    const saved = localStorage.getItem("questdo_visualState");
-    if (saved) {
-      try {
-        const { tasks: savedTasks } = JSON.parse(saved);
-        // Restore checkboxes
-        setTasks(prev => prev.map(t => {
-          const savedTask = savedTasks.find(st => st.id === t.id);
-          return savedTask ? { ...t, completed: savedTask.completed } : t;
-        }));
-        localStorage.removeItem("questdo_visualState");
-      } catch (err) {
-        console.error("[localStorage visual restore] error:", err);
-      }
-    }
-  }, []);
-
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const dateParam = params.get("date");
@@ -1664,11 +1557,9 @@ export default function App() {
     }
   }, []);
 
-  const addTask = () => {
+  const addTask = async () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
 
-    const savedDate = taskDate;
-    const tempId = `temp-${Date.now()}`;
     const apiPayload = {
       title,
       description: desc,
@@ -1679,237 +1570,75 @@ export default function App() {
       reminder_offset_days: parseReminderValue(reminderOffset),
     };
 
-    const newTask = {
-      id: tempId,
-      title,
-      description: desc,
-      difficulty,
-      category,
-      due_date: taskDate,
-      important,
-      reminder_offset_days: parseReminderValue(reminderOffset),
-      completed: false,
-      exp_awarded: false,
-    };
-
-    // Immediate optimistic UI update
-    setTasks(prev => [...prev, newTask]);
+    // Clear form
     setTitle("");
     setDesc("");
     setImportant(false);
     setReminderOffset("");
     setShowAddTask(false);
 
+    // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
-        const response = await axios.post(`${API}/tasks`, apiPayload, { headers });
-        const data = response.data;
-
-        // Replace temp task with real task from API
-        setTasks(prev => prev.map(t => t.id === tempId ? { ...t, id: data.id } : t));
-
-        // Incremental state updates from API response (if any)
-        if (data.exp !== undefined) {
-          setUser(prev => ({ ...prev, exp: data.exp, level: data.level, title: data.title, next_level_exp: data.next_level_exp, next_level_title: data.next_level_title, streak: data.streak }));
-        }
-        if (data.challenges) {
-          setChallenges(data.challenges);
-        }
-        if (data.achievements) {
-          setAchievements(data.achievements);
-        }
-        if (data.rare_drops) {
-          setRareDrops(data.rare_drops);
-        }
-        if (data.history) {
-          setHistory(data.history);
-        }
+        await axios.post(`${API}/tasks`, apiPayload, { headers });
+        await fetchData(); // Refresh ALL data from API
+        showToast("✅ Zadanie dodane");
       } catch (err) {
-        console.error("[addTask] API error:", err);
-        // Remove temp task on error
-        setTasks(prev => prev.filter(t => t.id !== tempId));
-        showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
+        showToast(err.response?.data?.detail || "Błąd dodawania – spróbuj ponownie");
       }
-    }, { endpoint: "/tasks", method: "POST", payload: apiPayload, taskId: tempId });
+    });
   };
 
-  const toggleTask = (task) => {
+  const toggleTask = async (task) => {
     if (task.completed) return;
 
-    const today = toDateStr(new Date());
-    const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
-    const expPreview = getExpPreview(task.difficulty, task.due_date);
-
-    // Check for first task achievement
-    const completedCount = countCompletedTasks(tasks);
-    const isFirstTask = completedCount === 0;
-
-    // Immediate optimistic UI update
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: true, completed_at: new Date().toISOString(), exp_awarded: true, exp_awarded_amount: expPreview.amount } : t));
-    setUser(prev => ({ ...prev, exp: prev.exp + expPreview.amount }));
-    if (challenges && challenges.goals) {
-      setChallenges(prev => ({
-        ...prev,
-        goals: prev.goals.map(g => {
-          if (g.done) return g;
-          const matchesCategory = g.category_filter === task.category;
-          const matchesDifficulty = g.difficulty_filter === task.difficulty;
-          const matchesAny = !g.category_filter && !g.difficulty_filter;
-          if (matchesAny || matchesCategory || matchesDifficulty) {
-            return { ...g, current: g.current + 1 };
-          }
-          return g;
-        }),
-      }));
-    }
-
-    // Optimistic achievement update for first task
-    if (isFirstTask) {
-      setAchievements(prev => ({
-        ...prev,
-        unlocked: [...(prev.unlocked || []), { slug: "first_step", title: "Pierwszy krok", icon: "🎯", description: "Ukończ pierwsze zadanie" }]
-      }));
-      setHistory(prev => [...prev, { id: Date.now(), occurred_at: new Date().toISOString(), message: "🏆 Zdobyto osiągnięcie 'Pierwszy krok'" }]);
-    }
-
-    // Immediate toast (optimistic)
-    showToastQueued(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
-
+    // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
-        const response = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
-        const data = response.data;
-
-        // Incremental state updates from API response
-        if (data.exp !== undefined) {
-          setUser(prev => ({ ...prev, exp: data.exp, level: data.level, title: data.title, next_level_exp: data.next_level_exp, next_level_title: data.next_level_title, streak: data.streak }));
-        }
-        if (data.challenges) {
-          setChallenges(data.challenges);
-        }
-        if (data.achievements) {
-          setAchievements(data.achievements);
-        }
-        if (data.rare_drops) {
-          setRareDrops(data.rare_drops);
-        }
-        if (data.history) {
-          setHistory(data.history);
-        }
-        // Do NOT update tasks - checkbox is already correct
+        await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
+        await fetchData(); // Refresh ALL data from API
+        const expPreview = getExpPreview(task.difficulty, task.due_date);
+        const today = toDateStr(new Date());
+        const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
+        showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
       } catch (err) {
-        console.error("[toggleTask] API error:", err);
-        showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
+        showToast(err.response?.data?.detail || "Błąd aktualizacji – spróbuj ponownie");
       }
-    }, { endpoint: `/tasks/${task.id}`, method: "PATCH", payload: { completed: true }, taskId: task.id });
+    });
   };
 
-  const saveTask = (id, updates) => {
+  const saveTask = async (id, updates) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
 
-    // Immediate optimistic UI update
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-
+    // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
-        const response = await axios.patch(`${API}/tasks/${id}`, updates, { headers });
-        const data = response.data;
-
-        // Incremental state updates from API response (if any)
-        if (data.exp !== undefined) {
-          setUser(prev => ({ ...prev, exp: data.exp, level: data.level, title: data.title, next_level_exp: data.next_level_exp, next_level_title: data.next_level_title, streak: data.streak }));
-        }
-        if (data.challenges) {
-          setChallenges(data.challenges);
-        }
-        if (data.achievements) {
-          setAchievements(data.achievements);
-        }
-        if (data.rare_drops) {
-          setRareDrops(data.rare_drops);
-        }
-        if (data.history) {
-          setHistory(data.history);
-        }
-        // Do NOT update tasks - task is already updated
+        await axios.patch(`${API}/tasks/${id}`, updates, { headers });
+        await fetchData(); // Refresh ALL data from API
+        showToast("✅ Zadanie zapisane");
       } catch (err) {
-        console.error("[saveTask] API error:", err);
-        showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
+        showToast(err.response?.data?.detail || "Błąd zapisu – spróbuj ponownie");
       }
-    }, { endpoint: `/tasks/${id}`, method: "PATCH", payload: updates, taskId: id });
+    });
   };
 
-  const uncheckTask = (task) => {
+  const uncheckTask = async (task) => {
     if (!canUncheckTask(task)) {
       showToast("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
       return;
     }
 
-    const expAwarded = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
-
-    // Check if daily bonus should be revoked
-    const today = toDateStr(new Date());
-    const todayTasks = tasks.filter(t => t.due_date === today);
-    const completedTodayTasks = todayTasks.filter(t => t.completed && t.id !== task.id);
-    const willRevokeDailyBonus = challenges && !challenges.bonus_claimed && completedTodayTasks.length < 3;
-
-    // Immediate optimistic UI update
-    setTasks(prev => prev.map(t => t.id === task.id ? { ...t, completed: false, completed_at: null, exp_awarded: false, exp_awarded_amount: null } : t));
-    setUser(prev => ({ ...prev, exp: Math.max(0, prev.exp - expAwarded) }));
-    
-    // Optimistic daily bonus revocation
-    if (willRevokeDailyBonus) {
-      setUser(prev => ({ ...prev, exp: Math.max(0, (prev.exp || 0) - 35) }));
-      showToastQueued("⚠️ Bonus dzienny cofnięty (-35 EXP)");
-    }
-    
-    if (challenges && challenges.goals) {
-      setChallenges(prev => ({
-        ...prev,
-        goals: prev.goals.map(g => {
-          if (g.done) return g;
-          const matchesCategory = g.category_filter === task.category;
-          const matchesDifficulty = g.difficulty_filter === task.difficulty;
-          const matchesAny = !g.category_filter && !g.difficulty_filter;
-          if (matchesAny || matchesCategory || matchesDifficulty) {
-            return { ...g, current: Math.max(0, g.current - 1) };
-          }
-          return g;
-        }),
-      }));
-    }
-
-    // Immediate toast
-    showToastQueued("🔄 Cofnięto ukończenie zadania");
-
+    // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
-        const response = await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
-        const data = response.data;
-
-        // Incremental state updates from API response
-        if (data.exp !== undefined) {
-          setUser(prev => ({ ...prev, exp: data.exp, level: data.level, title: data.title, next_level_exp: data.next_level_exp, next_level_title: data.next_level_title, streak: data.streak }));
-        }
-        if (data.challenges) {
-          setChallenges(data.challenges);
-        }
-        if (data.achievements) {
-          setAchievements(data.achievements);
-        }
-        if (data.rare_drops) {
-          setRareDrops(data.rare_drops);
-        }
-        if (data.history) {
-          setHistory(data.history);
-        }
-        // Do NOT update tasks - checkbox is already correct
+        await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
+        await fetchData(); // Refresh ALL data from API
+        showToast("🔄 Cofnięto ukończenie zadania");
       } catch (err) {
-        console.error("[uncheckTask] API error:", err);
-        showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
+        showToast(err.response?.data?.detail || "Błąd aktualizacji – spróbuj ponownie");
       }
-    }, { endpoint: `/tasks/${task.id}`, method: "PATCH", payload: { completed: false }, taskId: task.id });
+    });
   };
   
   const deleteAccount = async (password, onDone) => { 
@@ -1926,59 +1655,25 @@ export default function App() {
     } 
   };
   
-  const deleteTask = (task) => {
+  const deleteTask = async (task) => {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
 
-    // Immediate optimistic UI update
-    setTasks(prev => prev.filter(t => t.id !== task.id));
-    if (task.exp_awarded) {
-      setUser(prev => ({ ...prev, exp: Math.max(0, prev.exp - exp) }));
-    }
-    if (task.exp_awarded && challenges && challenges.goals) {
-      setChallenges(prev => ({
-        ...prev,
-        goals: prev.goals.map(g => {
-          if (g.done) return g;
-          const matchesCategory = g.category_filter === task.category;
-          const matchesDifficulty = g.difficulty_filter === task.difficulty;
-          const matchesAny = !g.category_filter && !g.difficulty_filter;
-          if (matchesAny || matchesCategory || matchesDifficulty) {
-            return { ...g, current: Math.max(0, g.current - 1) };
-          }
-          return g;
-        }),
-      }));
-    }
-
+    // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
-        const response = await axios.delete(`${API}/tasks/${task.id}`, { headers });
-        const data = response.data;
-
-        // Incremental state updates from API response
-        if (data.exp !== undefined) {
-          setUser(prev => ({ ...prev, exp: data.exp, level: data.level, title: data.title, next_level_exp: data.next_level_exp, next_level_title: data.next_level_title, streak: data.streak }));
-        }
-        if (data.challenges) {
-          setChallenges(data.challenges);
-        }
-        if (data.achievements) {
-          setAchievements(data.achievements);
-        }
-        if (data.rare_drops) {
-          setRareDrops(data.rare_drops);
-        }
-        if (data.history) {
-          setHistory(data.history);
-        }
-        // Do NOT update tasks - task is already removed
+        await axios.delete(`${API}/tasks/${task.id}`, { headers });
+        await fetchData(); // Refresh ALL data from API
+        showToast("🗑️ Zadanie usunięte");
       } catch (err) {
-        console.error("[deleteTask] API error:", err);
-        if (err.response?.status === 404) showToast("Zadanie już nie istnieje");
-        else showToast("❌ Błąd synchronizacji – odśwież stronę (F5)");
+        if (err.response?.status === 404) {
+          showToast("Zadanie już nie istnieje");
+          await fetchData(); // Refresh to show current state
+        } else {
+          showToast(err.response?.data?.detail || "Błąd usuwania – spróbuj ponownie");
+        }
       }
-    }, { endpoint: `/tasks/${task.id}`, method: "DELETE", payload: null, taskId: task.id });
+    });
   };
   
   const logout = () => { localStorage.removeItem("token"); setToken(null); setUser(null); };
