@@ -1578,6 +1578,34 @@ export default function App() {
     }
   }, []);
 
+  useEffect(() => {
+    if (!token) return;
+    
+    const pingBackend = async () => {
+      try {
+        await axios.get(`${API}/me`, { headers });
+      } catch (err) {
+        // ignoruj błędy – ping nie musi być potwierdzany
+      }
+    };
+    
+    // Ping co 5 minut
+    const interval = setInterval(pingBackend, 300000);
+    
+    // Ping przy powrocie do karty
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        pingBackend();
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    };
+  }, [token]);
+
   const addTask = async () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
     if (isAddingTask) return; // Prevent multiple clicks
