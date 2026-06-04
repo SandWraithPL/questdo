@@ -1502,6 +1502,15 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
     if task.exp_awarded:
         current_user.exp = max(0, current_user.exp - exp_removed)
 
+    # Zapamiętaj stary EXP przed odjęciem
+    old_exp_for_level = current_user.exp + exp_removed  # EXP przed odjęciem
+
+    # Usuń wpisy o awansie jeśli poziom spadł
+    remove_level_up_history(current_user, old_exp_for_level, db)
+
+    # Pobierz świeżą historię po ewentualnym usunięciu wpisów
+    history_data = build_history_list(current_user.id, db)
+
     # Usuń wszystkie wpisy historii powiązane z tym taskiem
     deleted_history_count = db.query(models.PlayerHistory).filter(
         models.PlayerHistory.user_id == current_user.id,
@@ -1524,6 +1533,7 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
         "next_level_exp": next_exp,
         "next_level_title": next_title,
         "achievements": build_achievements_payload(current_user, db),
+        "history": history_data,
     }
 
 @app.get("/achievements")

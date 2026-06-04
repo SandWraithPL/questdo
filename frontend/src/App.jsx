@@ -1938,12 +1938,16 @@ export default function App() {
           setAchievements(data.achievements);
         }
 
-        // Refresh history from API to ensure consistency
-        try {
-          const historyRes = await axios.get(`${API}/history`, { headers });
-          setHistory(historyRes.data);
-        } catch (err) {
-          console.error("Failed to refresh history:", err);
+        // Update history from response if available, otherwise fetch from API
+        if (data.history) {
+          setHistory(data.history);
+        } else {
+          try {
+            const historyRes = await axios.get(`${API}/history`, { headers });
+            setHistory(historyRes.data);
+          } catch (err) {
+            console.error("Failed to refresh history:", err);
+          }
         }
 
         showToast("🗑️ Zadanie usunięte");
