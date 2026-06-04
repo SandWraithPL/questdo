@@ -177,8 +177,16 @@ function countCompletedTasks(tasks) {
 
 
 
-function Toast({ message }) {
-  return <div className="toast">{message}</div>;
+function Toast({ toasts, onRemove }) {
+  return (
+    <div className="toast-stack">
+      {toasts.map((toast) => (
+        <div key={toast.id} className="toast">
+          {toast.message}
+        </div>
+      ))}
+    </div>
+  );
 }
 
 function LoadingSpinner({ label = "Ładowanie…" }) {
@@ -1112,7 +1120,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
   );
 }
 
-function AdminPanel({ isOpen, onClose, headers }) {
+function AdminPanel({ isOpen, onClose, headers, onRefreshAppData, onShowToast }) {
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
@@ -1149,10 +1157,12 @@ function AdminPanel({ isOpen, onClose, headers }) {
     if (!window.confirm(confirmMsg)) return;
     try {
       const res = await axios.post(`${API}/admin/reset-all-progress`, {}, { headers });
-      alert(res.data?.message || "Reset wykonany");
-      fetchData();
+      onShowToast("✅ Reset wykonano, dane odświeżone");
+      await onRefreshAppData(); // Odświeżenie wszystkich danych aplikacji
+      fetchData(); // Odświeżenie danych panelu admina
+      onClose(); // Zamknięcie panelu admina
     } catch (err) {
-      alert(err.response?.data?.detail || "Błąd resetowania progresu");
+      onShowToast(err.response?.data?.detail || "Błąd resetowania");
     }
   };
 
@@ -1384,7 +1394,7 @@ export default function App() {
   const [levelThresholds, setLevelThresholds] = useState(DEFAULT_LEVEL_THRESHOLDS);
   const [levelsMeta, setLevelsMeta] = useState(DEFAULT_LEVELS_META);
   const [challenges, setChallenges] = useState(null);
-  const [toast, setToast] = useState(null);
+  const [toasts, setToasts] = useState([]);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showAddTask, setShowAddTask] = useState(false);
   const [title, setTitle] = useState("");
@@ -1415,7 +1425,13 @@ export default function App() {
     }
   };
 
-  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+  const showToast = (msg) => {
+    const id = Date.now();
+    setToasts((prev) => [...prev, { id, message: msg }]);
+    setTimeout(() => {
+      setToasts((prev) => prev.filter((t) => t.id !== id));
+    }, 3000);
+  };
 
   const [pwaHintDismissed, setPwaHintDismissed] = useState(readPwaHintDismissed);
 
@@ -1596,12 +1612,35 @@ export default function App() {
     // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
-        await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
+        const response = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
         await fetchData(); // Refresh ALL data from API
         const expPreview = getExpPreview(task.difficulty, task.due_date);
         const today = toDateStr(new Date());
         const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
         showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
+
+        // Show toasts for new achievements
+        const newAchievements = response.data.new_achievements || [];
+        newAchievements.forEach((ach) => {
+          showToast(`🏆 Osiągnięcie: ${ach.icon} ${ach.title}`);
+        });
+
+        // Show toasts for new exclusive achievements
+        const newExclusiveAchievements = response.data.new_exclusive_achievements || [];
+        newExclusiveAchievements.forEach((ach) => {
+          showToast(`⭐ Osiągnięcie ekskluzywne: ${ach.icon} ${ach.title}`);
+        });
+
+        // Show toast for earned rare drop
+        if (response.data.earned_drop) {
+          const drop = response.data.earned_drop;
+          showToast(`💎 Znalazłeś: ${drop.icon} ${drop.name} (${drop.rarity})!`);
+        }
+
+        // Show toast for daily bonus
+        if (response.data.daily_bonus > 0) {
+          showToast(`🎁 Bonus dzienny: +${response.data.daily_bonus} EXP`);
+        }
       } catch (err) {
         showToast(err.response?.data?.detail || "Błąd aktualizacji – spróbuj ponownie");
       }
@@ -1737,8 +1776,8 @@ export default function App() {
         </div>
       )}
       <LeaderboardPanel currentUser={user.username} />
-      {toast && <Toast message={toast} />}
-      <AdminPanel isOpen={showAdminPanel} onClose={() => setShowAdminPanel(false)} headers={headers} />
+      {toasts.length > 0 && <Toast toasts={toasts} />}
+      <AdminPanel isOpen={showAdminPanel} onClose={() => setShowAdminPanel(false)} headers={headers} onRefreshAppData={fetchData} onShowToast={showToast} />
     </div>
   );
 }

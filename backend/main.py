@@ -541,11 +541,12 @@ def revoke_standard_achievement(user_id: int, slug: str, db: Session) -> None:
         models.UserAchievement.user_id == user_id,
         models.UserAchievement.achievement_id == achievement.id,
     ).delete(synchronize_session=False)
-    # Delete history entry for this achievement
-    db.query(models.PlayerHistory).filter(
+    # Delete history entries for this achievement (both task-specific and non-task-specific)
+    deleted_count = db.query(models.PlayerHistory).filter(
         models.PlayerHistory.user_id == user_id,
-        models.PlayerHistory.event_key == f"user:{user_id}:achievement:{slug}"
+        models.PlayerHistory.event_key.like(f"user:{user_id}:%:achievement:{slug}")
     ).delete(synchronize_session=False)
+    print(f"[revoke_standard_achievement] Deleted {deleted_count} history entries for achievement '{slug}'")
 
 
 def revoke_exclusive_achievement(user_id: int, slug: str, db: Session) -> None:
@@ -556,11 +557,12 @@ def revoke_exclusive_achievement(user_id: int, slug: str, db: Session) -> None:
         models.PlayerExclusiveAchievement.user_id == user_id,
         models.PlayerExclusiveAchievement.exclusive_achievement_id == ach.id,
     ).delete(synchronize_session=False)
-    # Delete history entry for this exclusive achievement
-    db.query(models.PlayerHistory).filter(
+    # Delete history entries for this exclusive achievement (both task-specific and non-task-specific)
+    deleted_count = db.query(models.PlayerHistory).filter(
         models.PlayerHistory.user_id == user_id,
-        models.PlayerHistory.event_key == f"user:{user_id}:exclusive:{slug}"
+        models.PlayerHistory.event_key.like(f"user:{user_id}:%:exclusive:{slug}")
     ).delete(synchronize_session=False)
+    print(f"[revoke_exclusive_achievement] Deleted {deleted_count} history entries for exclusive achievement '{slug}'")
 
 
 def reconcile_standard_achievements(
@@ -840,6 +842,7 @@ def unlock_achievement(
     else:
         body = f"Zdobyto osiągnięcie '{title}'"
         event_key = f"user:{user_id}:achievement:{slug}"
+    print(f"[unlock_achievement] Creating history entry with event_key: {event_key}")
     add_history_event(
         user_id,
         "achievement",
@@ -873,10 +876,12 @@ def check_achievements(user, db, task: Optional[models.Task] = None, stop_at_fir
 def unlock_exclusive_with_history(user: models.User, ea_def: dict, task: models.Task, db: Session) -> dict:
     title = ea_def["title"]
     body = f"Zdobyto osiągnięcie '{title}' za ukończenie zadania '{task.title}'"
+    event_key = history_key_task(user.id, task.id, "exclusive", ea_def["slug"])
+    print(f"[unlock_exclusive_with_history] Creating history entry with event_key: {event_key}")
     add_history_event(
         user.id,
         "achievement",
-        history_key_task(user.id, task.id, "exclusive", ea_def["slug"]),
+        event_key,
         body,
         db,
     )
@@ -1470,6 +1475,13 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
     if task.exp_awarded:
         exp_removed = task.exp_awarded_amount or EXP_REWARDS.get(task.difficulty, 10)
         current_user.exp = max(0, current_user.exp - exp_removed)
+
+    # Usuń wszystkie wpisy historii powiązane z tym taskiem
+    deleted_history_count = db.query(models.PlayerHistory).filter(
+        models.PlayerHistory.user_id == current_user.id,
+        models.PlayerHistory.event_key.like(f"user:{current_user.id}:task:{task_id}:%")
+    ).delete(synchronize_session=False)
+    print(f"[delete_task] Deleted {deleted_history_count} history entries for task {task_id}")
 
     db.delete(task)
     if exp_removed:
