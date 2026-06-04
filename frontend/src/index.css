@@ -127,8 +127,14 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .important-toggle span { color: #ff8f45; }
 
 /* Toast */
-.toast { position: fixed; bottom: 24px; right: 24px; background: #ff8906; color: #0f0e17; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 0.95rem; animation: slideIn 0.3s ease; }
+.toast-stack { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; }
+.toast { background: #ff8906; color: #0f0e17; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 0.95rem; animation: slideIn 0.3s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
 @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+
+@media (max-width: 600px) {
+  .toast-stack { bottom: 16px; right: 16px; left: 16px; }
+  .toast { font-size: 0.9rem; padding: 10px 16px; }
+}
 
 .calendar-section { background: #1a1a2e; border-radius: 12px; margin-bottom: 18px; border: 1px solid #2a2a3e; overflow: hidden; }
 .calendar-section--collapsed { margin-bottom: 12px; }
