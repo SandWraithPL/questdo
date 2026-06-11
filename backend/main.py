@@ -47,7 +47,7 @@ def create_tables():
         try:
             models.Base.metadata.create_all(bind=engine)
             migrate_schema()
-            print("Połączono z bazą danych!")
+            print("Baza danych połączona!")
             return
         except Exception as e:
             print(f"Baza nie gotowa, próba {i+1}/10... czekam 3s")
