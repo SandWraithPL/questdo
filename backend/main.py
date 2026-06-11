@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status
+from fastapi import FastAPI, Depends, HTTPException, status, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -20,12 +20,22 @@ import os
 import json
 import threading
 from zoneinfo import ZoneInfo
+import logging
 
 try:
     from pywebpush import webpush, WebPushException
 except ImportError:
     webpush = None
     WebPushException = Exception
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+    handlers=[logging.StreamHandler()]
+)
+logger = logging.getLogger("questdo")
+
+FORBIDDEN_USERNAMES = ["dominik", "knyc", "spust", "obrzydliwe", "sex", "porno"]
 
 REMINDER_TZ = ZoneInfo("Europe/Warsaw")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "")
@@ -122,7 +132,7 @@ def migrate_schema():
     if "player_exclusive_achievements" not in insp.get_table_names():
         models.PlayerExclusiveAchievement.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę player_exclusive_achievements")
-    
+
     if "player_badges" not in insp.get_table_names():
         models.PlayerBadge.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę player_badges")
@@ -130,7 +140,7 @@ def migrate_schema():
     if "player_history" not in insp.get_table_names():
         models.PlayerHistory.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę player_history")
-    
+
     db = next(get_db())
     rare_drop_count = db.query(models.RareDrop).count()
     if rare_drop_count == 0:
@@ -156,7 +166,7 @@ def migrate_schema():
                 rare_drop.rarity = drop_def["rarity"]
                 rare_drop.drop_chance_percent = drop_def["drop_chance"]
         db.commit()
-    
+
     exclusive_ach_count = db.query(models.ExclusiveAchievement).count()
     if exclusive_ach_count == 0:
         for ea_def in gc.EXCLUSIVE_ACHIEVEMENTS:
@@ -184,6 +194,25 @@ def migrate_schema():
 
 
 app = FastAPI(title="QuestDo API")
+
+@app.middleware("http")
+async def log_client_ip(request: Request, call_next):
+
+    client_ip = request.headers.get("x-forwarded-for")
+    if client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    else:
+        client_ip = request.client.host
+
+    logger.info(f"IP: {client_ip} -> {request.method} {request.url.path}")
+
+    start_time = time.time()
+    response = await call_next(request)
+    duration_ms = (time.time() - start_time) * 1000
+
+    logger.info(f"IP: {client_ip} <- {response.status_code} ({duration_ms:.2f}ms)")
+
+    return response
 
 def _push_configured() -> bool:
     return bool(webpush and VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY)
@@ -371,7 +400,7 @@ def calculate_exp_reward(difficulty: str, due_date: date, completed_on: datetime
     base = EXP_REWARDS.get(difficulty, 10)
     local_tz = ZoneInfo("Europe/Warsaw")
     completed_local = completed_on.astimezone(local_tz).date()
-    
+
     if completed_local < due_date:
         amount = max(MIN_EXP_REWARD, math.floor(base * EARLY_EXP_MULTIPLIER))
         timing = "early"
@@ -541,7 +570,6 @@ def revoke_standard_achievement(user_id: int, slug: str, db: Session) -> None:
         models.UserAchievement.user_id == user_id,
         models.UserAchievement.achievement_id == achievement.id,
     ).delete(synchronize_session=False)
-    # Delete history entries for this achievement (both task-specific and non-task-specific)
     deleted_count = db.query(models.PlayerHistory).filter(
         models.PlayerHistory.user_id == user_id,
         models.PlayerHistory.event_key.like(f"user:{user_id}:%:achievement:{slug}")
@@ -557,7 +585,6 @@ def revoke_exclusive_achievement(user_id: int, slug: str, db: Session) -> None:
         models.PlayerExclusiveAchievement.user_id == user_id,
         models.PlayerExclusiveAchievement.exclusive_achievement_id == ach.id,
     ).delete(synchronize_session=False)
-    # Delete history entries for this exclusive achievement (both task-specific and non-task-specific)
     deleted_count = db.query(models.PlayerHistory).filter(
         models.PlayerHistory.user_id == user_id,
         models.PlayerHistory.event_key.like(f"user:{user_id}:%:exclusive:{slug}")
@@ -976,18 +1003,37 @@ def award_rare_drop_on_completion(user: models.User, task: models.Task, db: Sess
 
     return None
 
-
 @app.post("/register")
-def register(user: UserCreate, db: Session = Depends(get_db)):
+def register(request: Request, user: UserCreate, db: Session = Depends(get_db)):
+
+    client_ip = request.headers.get("x-forwarded-for")
+    if client_ip:
+        client_ip = client_ip.split(",")[0].strip()
+    else:
+        client_ip = request.client.host
+
     username, password = validate_account_credentials(user.username, user.password)
+
+    # Sprawdzenie czy nazwa zawiera zakazane słowa
+    username_lower = username.lower()
+    for bad in FORBIDDEN_USERNAMES:
+        if bad in username_lower:
+            logger.warning(f"BLOCKED registration attempt: '{username}' contains '{bad}' from IP {client_ip}")
+            raise HTTPException(
+                status_code=400,
+                detail=f"Nazwa użytkownika zawiera niedozwolone słowo: {bad}"
+            )
+
     if db.query(models.User).filter(models.User.username == username).first():
         raise HTTPException(status_code=400, detail="Username already taken")
+
     new_user = models.User(
         username=username,
         hashed_password=get_password_hash(password)
     )
     db.add(new_user)
     db.commit()
+    logger.info(f"New user registered: {username} from IP {client_ip}")
     return {"message": "User created"}
 
 @app.post("/token", response_model=Token)
@@ -1067,7 +1113,7 @@ def get_tasks_by_date(date_str: str, current_user: models.User = Depends(get_cur
 def get_calendar_stats(year_month: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     year, month_num = map(int, year_month.split('-'))
     tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
-    
+
     stats = {}
     for task in tasks:
         day_str = task.due_date.strftime("%Y-%m-%d")
@@ -1173,14 +1219,14 @@ def update_task(task_id: int, task_update: TaskUpdate,
         if not task_update.completed and was_completed:
             if not task.completed_at:
                 raise HTTPException(status_code=400, detail="Task has no completion timestamp")
-            
+
             time_since_completion = datetime.utcnow() - task.completed_at
             if time_since_completion > timedelta(hours=24):
                 raise HTTPException(
                     status_code=400,
                     detail="Nie można odznaczyć zadania po upływie 24 godzin od ukończenia"
                 )
-            
+
             exp_to_revert = task.exp_awarded_amount or EXP_REWARDS.get(task.difficulty, 10)
             exp_before_changes = current_user.exp
             current_user.exp = max(0, current_user.exp - exp_to_revert)
@@ -1190,19 +1236,19 @@ def update_task(task_id: int, task_update: TaskUpdate,
             task.completed_at = None
             task.delayed_rewards_forfeited = True
             task.delayed_rewards_claimed = False
-            
+
             exp_gained = -exp_to_revert
-            
+
             print(f"[uncheck] Reverting {exp_to_revert} EXP for task {task.id}")
-            
+
             all_tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
             completed_tasks = [t for t in all_tasks if t.completed and t.completed_at]
             completed_tasks.sort(key=lambda t: t.completed_at, reverse=True)
-            
+
             today = date.today()
             streak = 0
             last_date = None
-            
+
             for t in completed_tasks:
                 task_date = t.completed_at.date()
                 if last_date is None:
@@ -1217,12 +1263,12 @@ def update_task(task_id: int, task_update: TaskUpdate,
                         last_date = task_date
                     else:
                         break
-            
+
             current_user.streak = streak
             current_user.last_streak_date = last_date if streak > 0 else None
-            
+
             print(f"[uncheck] Recalculated streak: {streak}, last_date: {last_date}")
-            
+
             remove_rewards_for_task(current_user, task, db)
             stats = gc.gather_user_stats(current_user, db, models)
             unlocked_slugs_before = get_unlocked_slugs(current_user.id, db)
@@ -1233,7 +1279,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
                 ach_def = gc.ACHIEVEMENT_BY_SLUG.get(slug)
                 if ach_def:
                     revoked_achievements.append({"slug": slug, "title": ach_def["title"], "icon": ach_def["icon"]})
-            
+
             assignment = get_or_create_daily_assignment(current_user, db, date.today())
             if assignment.bonus_claimed:
                 stats = dq.build_day_stats(current_user, all_tasks, date.today())
@@ -1246,10 +1292,10 @@ def update_task(task_id: int, task_update: TaskUpdate,
                     print(f"[uncheck] Reverted daily bonus {dq.TRIPLE_BONUS_EXP} EXP")
 
             remove_level_up_history(current_user, exp_before_changes, db)
-            
+
             new_rewards = {"achievements": [], "exclusive_achievements": []}
             earned_drop = None
-            
+
         if task_update.completed and not was_completed:
             task.completed = True
             task.completed_at = datetime.utcnow()
@@ -1273,7 +1319,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
                     else:
                         current_user.streak = 1
                     current_user.last_streak_date = today
-                
+
                 db.flush()
 
                 new_rewards = grant_completion_rewards(current_user, task, db)
@@ -1363,9 +1409,9 @@ def build_challenges_payload(user: models.User, db: Session, day: Union[date, No
     all_tasks = db.query(models.Task).filter(models.Task.owner_id == user.id).all()
     stats = dq.build_day_stats(user, all_tasks, day)
     goals = dq.evaluate_assigned_quests(quest_ids, stats)
-    
+
     print(f"[build_challenges_payload] user={user.id}, day={day}, stats={stats}, goals_current={[g['current'] for g in goals]}")
-    
+
     return {
         "today_total": stats["total_today"],
         "today_done": stats["done_today"],
@@ -1512,7 +1558,7 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
 
     history_data = build_history_list(current_user.id, db)
     achievements_payload = build_achievements_payload(current_user, db)
-    
+
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
         "message": "Deleted",
@@ -1571,13 +1617,13 @@ def get_player_history(current_user: models.User = Depends(get_current_user), db
 @app.get("/exclusive-achievements")
 def get_exclusive_achievements(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     refresh_player_rewards(current_user, db)
-    
+
     player_achs = db.query(models.PlayerExclusiveAchievement).filter(
         models.PlayerExclusiveAchievement.user_id == current_user.id
     ).all()
-    
+
     unlocked_slugs = {pa.exclusive_achievement.slug for pa in player_achs}
-    
+
     unlocked = [{
         "slug": pa.exclusive_achievement.slug,
         "title": pa.exclusive_achievement.title,
@@ -1585,7 +1631,7 @@ def get_exclusive_achievements(current_user: models.User = Depends(get_current_u
         "icon": pa.exclusive_achievement.icon,
         "unlocked_at": str(pa.unlocked_at)
     } for pa in player_achs]
-    
+
     locked = [
         {
             "slug": ea["slug"],
@@ -1598,7 +1644,7 @@ def get_exclusive_achievements(current_user: models.User = Depends(get_current_u
         for ea in gc.EXCLUSIVE_ACHIEVEMENTS
         if ea["slug"] not in unlocked_slugs
     ]
-    
+
     return {
         "unlocked_count": len(unlocked),
         "total_available": len(gc.EXCLUSIVE_ACHIEVEMENTS),
@@ -1648,7 +1694,7 @@ def ranking_rare_drops(db: Session = Depends(get_db)):
         models.User.id,
         models.User.username
     ).order_by(func.count(models.PlayerRareDrop.id).desc()).limit(10).all()
-    
+
     return [{
         "rank": i + 1,
         "username": r.username,
@@ -1669,7 +1715,7 @@ def ranking_completed_tasks(db: Session = Depends(get_db)):
         models.User.id,
         models.User.username
     ).order_by(func.count(models.Task.id).desc()).limit(10).all()
-    
+
     return [{
         "rank": i + 1,
         "username": r.username,
@@ -1760,12 +1806,12 @@ def delete_user_admin(user_id: int, current_user: models.User = Depends(get_curr
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     if target_user.username == "Igor":
         raise HTTPException(status_code=403, detail="Cannot delete admin account")
-    
+
     username = target_user.username
-    
+
     db.query(models.Task).filter(models.Task.owner_id == user_id).delete()
     db.query(models.UserAchievement).filter(models.UserAchievement.user_id == user_id).delete()
     db.query(models.DailyQuestAssignment).filter(models.DailyQuestAssignment.user_id == user_id).delete()
@@ -1775,7 +1821,7 @@ def delete_user_admin(user_id: int, current_user: models.User = Depends(get_curr
     db.query(models.PlayerHistory).filter(models.PlayerHistory.user_id == user_id).delete()
     db.delete(target_user)
     db.commit()
-    
+
     return {"message": f"User '{username}' deleted successfully"}
 
 
@@ -1786,7 +1832,7 @@ def get_admin_stats(current_user: models.User = Depends(get_current_admin_user),
     total_completed = db.query(models.Task).filter(models.Task.completed == True).count()
     total_achievements = db.query(models.UserAchievement).count()
     total_rare_drops = db.query(models.PlayerRareDrop).count()
-    
+
     return {
         "total_users": total_users,
         "total_tasks": total_tasks,
