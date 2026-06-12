@@ -415,7 +415,7 @@ def calculate_exp_reward(difficulty: str, due_date: date, completed_on: datetime
 
 def normalize_streak(user: models.User) -> bool:
     today = date.today()
-    if user.streak and user.last_streak_date and user.last_streak_date < today - timedelta(days=1):
+    if user.streak and user.last_streak_date and user.last_streak_date < today - timedelta(days=2):
         user.streak = 0
         return True
     return False
@@ -1316,7 +1316,11 @@ def update_task(task_id: int, task_update: TaskUpdate,
                 if current_user.last_streak_date != today:
                     if current_user.last_streak_date == today - timedelta(days=1):
                         current_user.streak += 1
+                    elif current_user.last_streak_date == today - timedelta(days=2):
+                        # Przerwa jednego dnia - kontynuujemy serię
+                        current_user.streak += 1
                     else:
+                        # Więcej niż jeden dzień przerwy - zaczynamy od nowa
                         current_user.streak = 1
                     current_user.last_streak_date = today
 
