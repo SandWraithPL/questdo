@@ -528,3 +528,173 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   90% { opacity: 1; }
   100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
 }
+
+.app-tabs {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 18px;
+  padding: 8px;
+  background: #141320;
+  border: 1px solid #2a2a3e;
+  border-radius: 14px;
+  position: sticky;
+  top: 8px;
+  z-index: 20;
+}
+
+.app-tab {
+  flex: 1;
+  min-width: 72px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 10px 8px;
+  border-radius: 10px;
+  border: 1px solid transparent;
+  background: transparent;
+  color: #aaa;
+  cursor: pointer;
+  transition: background 0.2s, color 0.2s, border-color 0.2s;
+}
+
+.app-tab:hover { background: #1f1f30; color: #fff; }
+.app-tab.active {
+  background: #2a1f00;
+  border-color: #ff8906;
+  color: #ff8906;
+}
+
+.app-tab-icon { font-size: 1.2rem; line-height: 1; }
+.app-tab-label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+
+.module-panel { margin-bottom: 24px; }
+
+.form-row-inline {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 10px;
+}
+
+.form-row-inline input,
+.form-row-inline select {
+  flex: 1;
+  min-width: 120px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #0f0e17;
+  color: #fff;
+}
+
+.form-row-inline .input-small { flex: 0 1 120px; }
+
+.stats-bar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.product-list { display: flex; flex-direction: column; gap: 10px; }
+
+.shopping-card .task-actions,
+.schedule-card .icon-btn {
+  display: flex;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.icon-btn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 4px 6px;
+  border-radius: 6px;
+}
+
+.icon-btn:hover { background: #2a2a3e; }
+.icon-btn.delete:hover { background: rgba(244, 67, 54, 0.15); }
+
+.edit-mode {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+  flex: 1;
+}
+
+.edit-mode input,
+.edit-mode select {
+  flex: 1;
+  min-width: 100px;
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #0f0e17;
+  color: #fff;
+}
+
+.save-mini, .cancel-mini {
+  padding: 6px 10px;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.save-mini { background: #4caf50; color: #0f0e17; }
+.cancel-mini { background: #333; color: #fff; }
+
+.danger-btn {
+  width: 100%;
+  margin-top: 12px;
+  padding: 12px;
+  border: none;
+  border-radius: 8px;
+  background: #3a1212;
+  color: #f44336;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.danger-btn:hover { background: #4a1818; }
+
+.earnings-summary {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.earnings-stat {
+  background: #1a1a2e;
+  border: 1px solid #2a2a3e;
+  border-radius: 10px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.earnings-stat-label { font-size: 0.72rem; color: #aaa; text-transform: uppercase; }
+.earnings-stat strong { color: #ff8906; font-size: 1rem; }
+.earnings-stat.muted strong { color: #aaa; }
+
+.earnings-day-total {
+  color: #ff8906;
+  font-weight: 700;
+  font-size: 0.95rem;
+}
+
+@media (max-width: 600px) {
+  .app-tab { min-width: 64px; padding: 8px 4px; }
+  .app-tab-label { font-size: 0.65rem; }
+  .earnings-summary { grid-template-columns: repeat(2, 1fr); }
+  .form-row-inline { flex-direction: column; }
+  .form-row-inline .input-small { flex: 1; }
+}

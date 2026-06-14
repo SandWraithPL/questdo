@@ -3,6 +3,10 @@ import { useState, useEffect, useMemo, useRef, useCallback } from "react";
 import axios from "axios";
 import "./index.css";
 import DatePicker from "./DatePicker";
+import AppTabs, { readMainTab } from "./AppTabs";
+import ShoppingPanel from "./ShoppingPanel";
+import SchedulePanel from "./SchedulePanel";
+import EarningsPanel from "./EarningsPanel";
 
 const API = "https://questdo-backend.onrender.com";
 
@@ -1416,6 +1420,11 @@ export default function App() {
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [deletingTaskIds, setDeletingTaskIds] = useState(new Set());
   const [editingTaskIds, setEditingTaskIds] = useState(new Set());
+  const [mainTab, setMainTab] = useState(readMainTab);
+  const [scheduleEntries, setScheduleEntries] = useState([]);
+  const [shoppingItems, setShoppingItems] = useState([]);
+  const [workEntries, setWorkEntries] = useState([]);
+  const [workSummary, setWorkSummary] = useState(null);
   const apiQueue = useRef([]);
   const isProcessingQueue = useRef(false);
 
@@ -1526,12 +1535,16 @@ export default function App() {
     };
     
     try {
-      const [userRes, tasksRes, chRes, levelsRes, rareDropsRes] = await Promise.all([
+      const [userRes, tasksRes, chRes, levelsRes, rareDropsRes, scheduleRes, shoppingRes, workRes, workSummaryRes] = await Promise.all([
         axios.get(`${API}/me`, { headers: noCacheHeaders }),
         axios.get(`${API}/tasks`, { headers: noCacheHeaders }),
         axios.get(`${API}/challenges`, { headers: noCacheHeaders }),
         axios.get(`${API}/game/levels`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
         axios.get(`${API}/rare-drops/inventory`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
+        axios.get(`${API}/schedule`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
+        axios.get(`${API}/shopping`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
+        axios.get(`${API}/work`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
+        axios.get(`${API}/work/summary`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
       ]);
       const achRes = await axios.get(`${API}/achievements`, { headers: noCacheHeaders });
       const historyRes = await axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] }));
@@ -1557,6 +1570,10 @@ export default function App() {
       setChallenges(chRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
       setHistory(historyRes.data || []);
+      setScheduleEntries(scheduleRes.data || []);
+      setShoppingItems(shoppingRes.data || []);
+      setWorkEntries(workRes.data || []);
+      setWorkSummary(workSummaryRes.data || null);
     } catch (err) {
       console.error("Fetch error:", err);
       localStorage.removeItem("token");
@@ -1942,6 +1959,12 @@ export default function App() {
   const logout = () => { localStorage.removeItem("token"); setToken(null); setUser(null); };
   const handleLogin = () => { const newToken = localStorage.getItem("token"); setToken(newToken); if (newToken) setTimeout(fetchData, 100); };
 
+  const updateUserFromModule = (patch) => {
+    setUser((prev) => ({ ...prev, ...patch }));
+  };
+
+  const handleDateSelect = (dateStr) => setSelectedDate(new Date(`${dateStr}T12:00:00`));
+
   if (!token) return <Auth onLogin={handleLogin} />;
   if (!user) return <div className="app"><LoadingSpinner label="Ładowanie questów…" /></div>;
 
@@ -1972,8 +1995,12 @@ export default function App() {
         onDismissForever={() => setPwaHintDismissed(true)}
       />
       <PlayerSummary user={user} progress={progress} />
+      <AppTabs activeTab={mainTab} onTabChange={setMainTab} />
+
+      {mainTab === "tasks" && (
+        <>
       <ChallengesBar challenges={challenges} />
-      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={(dateStr) => setSelectedDate(new Date(dateStr + "T12:00:00"))} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
+      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
       <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} editingTaskIds={editingTaskIds} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
@@ -1998,7 +2025,51 @@ export default function App() {
           </div>
         </div>
       )}
-      <LeaderboardPanel currentUser={user.username} />
+        </>
+      )}
+
+      {mainTab === "schedule" && (
+        <SchedulePanel
+          api={API}
+          headers={headers}
+          entries={scheduleEntries}
+          setEntries={setScheduleEntries}
+          selectedDate={selectedDate}
+          onDateSelect={handleDateSelect}
+          onToast={showToast}
+          enqueueRequest={enqueueRequest}
+        />
+      )}
+
+      {mainTab === "shopping" && (
+        <ShoppingPanel
+          api={API}
+          headers={headers}
+          items={shoppingItems}
+          setItems={setShoppingItems}
+          onUserUpdate={updateUserFromModule}
+          onToast={showToast}
+          enqueueRequest={enqueueRequest}
+        />
+      )}
+
+      {mainTab === "earnings" && (
+        <EarningsPanel
+          api={API}
+          headers={headers}
+          entries={workEntries}
+          setEntries={setWorkEntries}
+          summary={workSummary}
+          setSummary={setWorkSummary}
+          selectedDate={selectedDate}
+          onDateSelect={handleDateSelect}
+          onUserUpdate={updateUserFromModule}
+          onToast={showToast}
+          enqueueRequest={enqueueRequest}
+        />
+      )}
+
+      {mainTab === "tasks" && <LeaderboardPanel currentUser={user.username} />}
       {toasts.length > 0 && <Toast toasts={toasts} />}
       <AdminPanel isOpen={showAdminPanel} onClose={() => setShowAdminPanel(false)} headers={headers} onRefreshAppData={fetchData} onShowToast={showToast} />
     </div>

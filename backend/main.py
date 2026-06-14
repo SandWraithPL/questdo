@@ -10,6 +10,8 @@ from pydantic import BaseModel
 from typing import Optional, List
 import models
 from database import get_db, engine
+from encryption import encrypt_field, decrypt_field
+import life_modules as lm
 from sqlalchemy import inspect, text
 import daily_quests as dq
 import game_content as gc
@@ -140,6 +142,16 @@ def migrate_schema():
     if "player_history" not in insp.get_table_names():
         models.PlayerHistory.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę player_history")
+
+    if "schedule_entries" not in insp.get_table_names():
+        models.ScheduleEntry.__table__.create(bind=engine)
+        print("Migracja: utworzono tabelę schedule_entries")
+    if "shopping_items" not in insp.get_table_names():
+        models.ShoppingItem.__table__.create(bind=engine)
+        print("Migracja: utworzono tabelę shopping_items")
+    if "work_entries" not in insp.get_table_names():
+        models.WorkEntry.__table__.create(bind=engine)
+        print("Migracja: utworzono tabelę work_entries")
 
     db = next(get_db())
     rare_drop_count = db.query(models.RareDrop).count()
@@ -281,7 +293,7 @@ def process_scheduled_reminders():
             )
             if already:
                 continue
-            body = f'Przypomnienie: zadanie „{task.title}" ma termin {task.due_date}'
+            body = f'Przypomnienie: zadanie „{task_display_title(task)}" ma termin {task.due_date}'
             url = f"/?date={task.due_date}"
             send_push_to_user(db, task.owner_id, body, url)
             db.add(
@@ -421,11 +433,15 @@ def normalize_streak(user: models.User) -> bool:
     return False
 
 
+def task_display_title(task: models.Task) -> str:
+    return decrypt_field(task.title)
+
+
 def task_to_dict(t: models.Task) -> dict:
     data = {
         "id": t.id,
-        "title": t.title,
-        "description": t.description,
+        "title": decrypt_field(t.title),
+        "description": decrypt_field(t.description),
         "difficulty": t.difficulty,
         "category": t.category,
         "completed": t.completed,
@@ -766,6 +782,89 @@ class PushSubscriptionIn(BaseModel):
     keys: PushKeysIn
     expirationTime: Optional[int] = None
 
+
+class ScheduleCreate(BaseModel):
+    title: str
+    location: Optional[str] = ""
+    lecturer: Optional[str] = ""
+    day_of_week: Optional[int] = None
+    entry_date: Optional[str] = None
+    is_recurring: bool = True
+    start_time: str
+    end_time: str
+
+
+class ScheduleUpdate(BaseModel):
+    title: Optional[str] = None
+    location: Optional[str] = None
+    lecturer: Optional[str] = None
+    day_of_week: Optional[int] = None
+    entry_date: Optional[str] = None
+    is_recurring: Optional[bool] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+
+
+class ShoppingCreate(BaseModel):
+    name: str
+    quantity: Optional[str] = ""
+    category: Optional[str] = "other"
+
+
+class ShoppingUpdate(BaseModel):
+    name: Optional[str] = None
+    quantity: Optional[str] = None
+    category: Optional[str] = None
+    bought: Optional[bool] = None
+
+
+class WorkCreate(BaseModel):
+    work_date: str
+    start_time: str
+    end_time: str
+    hourly_rate: float
+    notes: Optional[str] = ""
+    tax_enabled: Optional[bool] = False
+    tax_percent: Optional[float] = 0.0
+
+
+class WorkUpdate(BaseModel):
+    work_date: Optional[str] = None
+    start_time: Optional[str] = None
+    end_time: Optional[str] = None
+    hourly_rate: Optional[float] = None
+    notes: Optional[str] = None
+    tax_enabled: Optional[bool] = None
+    tax_percent: Optional[float] = None
+    completed: Optional[bool] = None
+
+
+def validate_schedule_payload(data: ScheduleCreate | ScheduleUpdate, is_create: bool = False) -> None:
+    fields = data.model_dump(exclude_unset=not is_create)
+    if is_create:
+        if not (data.title or "").strip():
+            raise HTTPException(status_code=400, detail="Nazwa zajęć jest wymagana")
+        recurring = data.is_recurring
+        if recurring and data.day_of_week is None:
+            raise HTTPException(status_code=400, detail="Wybierz dzień tygodnia")
+        if not recurring and not data.entry_date:
+            raise HTTPException(status_code=400, detail="Podaj datę zajęć")
+    try:
+        start = fields.get("start_time", getattr(data, "start_time", None))
+        end = fields.get("end_time", getattr(data, "end_time", None))
+        if start and end:
+            lm.hours_between(start, end)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Nieprawidłowy format godziny (HH:MM)")
+
+
+def validate_shopping_category(category: str) -> str:
+    cat = (category or "other").strip().lower()
+    if cat not in lm.VALID_SHOPPING_CATEGORIES:
+        raise HTTPException(status_code=400, detail="Nieprawidłowa kategoria")
+    return cat
+
+
 def verify_password(plain, hashed):
     return pwd_context.verify(plain, hashed)
 
@@ -866,7 +965,7 @@ def unlock_achievement(
     db.flush()
     title = achievement_display(achievement)
     if task:
-        body = f"Zdobyto osiągnięcie '{title}' za ukończenie zadania '{task.title}'"
+        body = f"Zdobyto osiągnięcie '{title}' za ukończenie zadania '{task_display_title(task)}'"
         event_key = history_key_task(user_id, task.id, "achievement", slug)
     else:
         body = f"Zdobyto osiągnięcie '{title}'"
@@ -904,7 +1003,7 @@ def check_achievements(user, db, task: Optional[models.Task] = None, stop_at_fir
 
 def unlock_exclusive_with_history(user: models.User, ea_def: dict, task: models.Task, db: Session) -> dict:
     title = ea_def["title"]
-    body = f"Zdobyto osiągnięcie '{title}' za ukończenie zadania '{task.title}'"
+    body = f"Zdobyto osiągnięcie '{title}' za ukończenie zadania '{task_display_title(task)}'"
     event_key = history_key_task(user.id, task.id, "exclusive", ea_def["slug"])
     print(f"[unlock_exclusive_with_history] Creating history entry with event_key: {event_key}")
     add_history_event(
@@ -983,7 +1082,7 @@ def award_rare_drop_on_completion(user: models.User, task: models.Task, db: Sess
         db.add(player_drop)
         db.flush()
 
-        body = f"Znaleziono przedmiot '{drop_def['name']}' za ukończenie zadania '{task.title}'"
+        body = f"Znaleziono przedmiot '{drop_def['name']}' za ukończenie zadania '{task_display_title(task)}'"
         add_history_event(
             user.id,
             "rare_drop",
@@ -1072,6 +1171,9 @@ def delete_account(
         raise HTTPException(status_code=400, detail="Nieprawidłowe hasło")
 
     db.query(models.Task).filter(models.Task.owner_id == current_user.id).delete()
+    db.query(models.ScheduleEntry).filter(models.ScheduleEntry.owner_id == current_user.id).delete()
+    db.query(models.ShoppingItem).filter(models.ShoppingItem.owner_id == current_user.id).delete()
+    db.query(models.WorkEntry).filter(models.WorkEntry.owner_id == current_user.id).delete()
     db.query(models.UserAchievement).filter(
         models.UserAchievement.user_id == current_user.id
     ).delete()
@@ -1129,8 +1231,8 @@ def get_calendar_stats(year_month: str, current_user: models.User = Depends(get_
 def create_task(task: TaskCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     due = parse_due_date(task.due_date) if task.due_date else date.today()
     new_task = models.Task(
-        title=validate_title(task.title),
-        description=(task.description or "").strip()[:1000],
+        title=encrypt_field(validate_title(task.title)),
+        description=encrypt_field((task.description or "").strip()[:1000]),
         difficulty=validate_difficulty(task.difficulty or "easy"),
         category=validate_category(task.category or "Inne"),
         due_date=due,
@@ -1195,9 +1297,9 @@ def update_task(task_id: int, task_update: TaskUpdate,
         task.due_date = parse_due_date(task_update.due_date)
 
     if task_update.title is not None:
-        task.title = validate_title(task_update.title)
+        task.title = encrypt_field(validate_title(task_update.title))
     if task_update.description is not None:
-        task.description = task_update.description.strip()[:1000]
+        task.description = encrypt_field(task_update.description.strip()[:1000])
     if task_update.important is not None:
         task.important = bool(task_update.important)
     if "reminder_offset_days" in fields_set:
@@ -1791,6 +1893,334 @@ def ranking_all(db: Session = Depends(get_db)):
     }
 
 
+# === SCHEDULE / SHOPPING / EARNINGS ===
+
+@app.get("/schedule")
+def list_schedule(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    entries = db.query(models.ScheduleEntry).filter(
+        models.ScheduleEntry.owner_id == current_user.id
+    ).order_by(models.ScheduleEntry.day_of_week, models.ScheduleEntry.start_time).all()
+    return [lm.schedule_to_dict(e) for e in entries]
+
+
+@app.post("/schedule")
+def create_schedule(entry: ScheduleCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    validate_schedule_payload(entry, is_create=True)
+    enc = lm.encrypt_schedule_fields(entry.title, entry.location, entry.lecturer)
+    entry_date = parse_due_date(entry.entry_date) if entry.entry_date else None
+    if entry.is_recurring and entry.day_of_week is not None and not 0 <= entry.day_of_week <= 6:
+        raise HTTPException(status_code=400, detail="Dzień tygodnia musi być 0-6")
+    row = models.ScheduleEntry(
+        owner_id=current_user.id,
+        title=enc["title"],
+        location=enc["location"],
+        lecturer=enc["lecturer"],
+        day_of_week=entry.day_of_week if entry.is_recurring else None,
+        entry_date=None if entry.is_recurring else entry_date,
+        is_recurring=entry.is_recurring,
+        start_time=entry.start_time,
+        end_time=entry.end_time,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return lm.schedule_to_dict(row)
+
+
+@app.patch("/schedule/{entry_id}")
+def update_schedule(entry_id: int, body: ScheduleUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(models.ScheduleEntry).filter(
+        models.ScheduleEntry.id == entry_id,
+        models.ScheduleEntry.owner_id == current_user.id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Nie znaleziono wpisu")
+    validate_schedule_payload(body)
+    if body.title is not None:
+        row.title = encrypt_field(validate_title(body.title))
+    if body.location is not None:
+        row.location = encrypt_field(body.location.strip())
+    if body.lecturer is not None:
+        row.lecturer = encrypt_field(body.lecturer.strip())
+    if body.day_of_week is not None:
+        row.day_of_week = body.day_of_week
+    if body.entry_date is not None:
+        row.entry_date = parse_due_date(body.entry_date)
+    if body.is_recurring is not None:
+        row.is_recurring = body.is_recurring
+    if body.start_time is not None:
+        row.start_time = body.start_time
+    if body.end_time is not None:
+        row.end_time = body.end_time
+    db.commit()
+    db.refresh(row)
+    return lm.schedule_to_dict(row)
+
+
+@app.delete("/schedule/{entry_id}")
+def delete_schedule(entry_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(models.ScheduleEntry).filter(
+        models.ScheduleEntry.id == entry_id,
+        models.ScheduleEntry.owner_id == current_user.id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Nie znaleziono wpisu")
+    db.delete(row)
+    db.commit()
+    return {"message": "Usunięto wpis planu"}
+
+
+@app.get("/shopping")
+def list_shopping(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    items = db.query(models.ShoppingItem).filter(
+        models.ShoppingItem.owner_id == current_user.id
+    ).order_by(models.ShoppingItem.bought, models.ShoppingItem.id.desc()).all()
+    return [lm.shopping_to_dict(i) for i in items]
+
+
+@app.post("/shopping")
+def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    name = (item.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Nazwa produktu jest wymagana")
+    enc = lm.encrypt_shopping_fields(name, item.quantity)
+    row = models.ShoppingItem(
+        owner_id=current_user.id,
+        name=enc["name"],
+        quantity=enc["quantity"],
+        category=validate_shopping_category(item.category or "other"),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return lm.shopping_to_dict(row)
+
+
+@app.patch("/shopping/{item_id}")
+def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(models.ShoppingItem).filter(
+        models.ShoppingItem.id == item_id,
+        models.ShoppingItem.owner_id == current_user.id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Nie znaleziono produktu")
+    exp_gained = 0
+    level_ups = []
+    was_bought = row.bought
+    if body.name is not None:
+        row.name = encrypt_field(body.name.strip())
+    if body.quantity is not None:
+        row.quantity = encrypt_field(body.quantity.strip())
+    if body.category is not None:
+        row.category = validate_shopping_category(body.category)
+    if body.bought is not None:
+        row.bought = bool(body.bought)
+        if row.bought and not was_bought and not row.exp_awarded:
+            row.exp_awarded = True
+            level_ups = lm.award_small_exp(current_user, lm.SHOPPING_EXP)
+            exp_gained = lm.SHOPPING_EXP
+        if not row.bought and was_bought and row.exp_awarded:
+            current_user.exp = max(0, current_user.exp - lm.SHOPPING_EXP)
+            row.exp_awarded = False
+            exp_gained = -lm.SHOPPING_EXP
+    db.commit()
+    db.refresh(row)
+    level, title, next_exp, next_title = gc.get_level(current_user.exp)
+    return {
+        "item": lm.shopping_to_dict(row),
+        "exp": current_user.exp,
+        "level": level,
+        "title": title,
+        "next_level_exp": next_exp,
+        "next_level_title": next_title,
+        "exp_gained": exp_gained,
+        "level_ups": level_ups,
+    }
+
+
+@app.delete("/shopping/{item_id}")
+def delete_shopping(item_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(models.ShoppingItem).filter(
+        models.ShoppingItem.id == item_id,
+        models.ShoppingItem.owner_id == current_user.id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Nie znaleziono produktu")
+    if row.exp_awarded:
+        current_user.exp = max(0, current_user.exp - lm.SHOPPING_EXP)
+    db.delete(row)
+    db.commit()
+    level, title, next_exp, next_title = gc.get_level(current_user.exp)
+    return {
+        "message": "Usunięto produkt",
+        "exp": current_user.exp,
+        "level": level,
+        "title": title,
+        "next_level_exp": next_exp,
+        "next_level_title": next_title,
+    }
+
+
+@app.delete("/shopping/bought/clear")
+def clear_bought_shopping(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    bought = db.query(models.ShoppingItem).filter(
+        models.ShoppingItem.owner_id == current_user.id,
+        models.ShoppingItem.bought == True,
+    ).all()
+    for row in bought:
+        db.delete(row)
+    db.commit()
+    return {"message": f"Usunięto {len(bought)} kupionych produktów"}
+
+
+@app.get("/work")
+def list_work(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    entries = db.query(models.WorkEntry).filter(
+        models.WorkEntry.owner_id == current_user.id
+    ).order_by(models.WorkEntry.work_date.desc(), models.WorkEntry.start_time).all()
+    return [lm.work_to_dict(e) for e in entries]
+
+
+@app.get("/work/summary")
+def work_summary(
+    year: Optional[int] = None,
+    month: Optional[int] = None,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    entries = db.query(models.WorkEntry).filter(models.WorkEntry.owner_id == current_user.id).all()
+    completed = [e for e in entries if e.completed]
+    day_totals = {}
+    month_totals = {}
+    year_totals = {}
+    for entry in completed:
+        e = lm.work_earnings(entry)
+        d = str(entry.work_date)
+        ym = d[:7]
+        y = d[:4]
+        day_totals[d] = day_totals.get(d, 0.0) + e["net"]
+        month_totals[ym] = month_totals.get(ym, 0.0) + e["net"]
+        year_totals[y] = year_totals.get(y, 0.0) + e["net"]
+    result = {
+        "all_time": lm.sum_work_earnings(entries),
+        "by_day": {k: round(v, 2) for k, v in sorted(day_totals.items())},
+        "by_month": {k: round(v, 2) for k, v in sorted(month_totals.items())},
+        "by_year": {k: round(v, 2) for k, v in sorted(year_totals.items())},
+    }
+    if year and month:
+        key = f"{year:04d}-{month:02d}"
+        month_entries = [e for e in entries if str(e.work_date).startswith(key)]
+        result["selected_month"] = lm.sum_work_earnings(month_entries)
+    if year:
+        year_entries = [e for e in entries if str(e.work_date).startswith(f"{year:04d}")]
+        result["selected_year"] = lm.sum_work_earnings(year_entries)
+    return result
+
+
+@app.post("/work")
+def create_work(entry: WorkCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if entry.hourly_rate < 0:
+        raise HTTPException(status_code=400, detail="Stawka nie może być ujemna")
+    try:
+        lm.hours_between(entry.start_time, entry.end_time)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Nieprawidłowy format godziny (HH:MM)")
+    enc = lm.encrypt_work_fields(entry.hourly_rate, entry.notes)
+    row = models.WorkEntry(
+        owner_id=current_user.id,
+        work_date=parse_due_date(entry.work_date),
+        start_time=entry.start_time,
+        end_time=entry.end_time,
+        hourly_rate=enc["hourly_rate"],
+        notes=enc["notes"],
+        tax_enabled=bool(entry.tax_enabled),
+        tax_percent=max(0.0, min(100.0, float(entry.tax_percent or 0))),
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    return lm.work_to_dict(row)
+
+
+@app.patch("/work/{entry_id}")
+def update_work(entry_id: int, body: WorkUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(models.WorkEntry).filter(
+        models.WorkEntry.id == entry_id,
+        models.WorkEntry.owner_id == current_user.id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Nie znaleziono wpisu pracy")
+    was_completed = row.completed
+    exp_gained = 0
+    level_ups = []
+    if body.work_date is not None:
+        row.work_date = parse_due_date(body.work_date)
+    if body.start_time is not None:
+        row.start_time = body.start_time
+    if body.end_time is not None:
+        row.end_time = body.end_time
+    if body.hourly_rate is not None:
+        if body.hourly_rate < 0:
+            raise HTTPException(status_code=400, detail="Stawka nie może być ujemna")
+        row.hourly_rate = encrypt_field(str(body.hourly_rate))
+    if body.notes is not None:
+        row.notes = encrypt_field(body.notes.strip())
+    if body.tax_enabled is not None:
+        row.tax_enabled = bool(body.tax_enabled)
+    if body.tax_percent is not None:
+        row.tax_percent = max(0.0, min(100.0, float(body.tax_percent)))
+    if body.completed is not None:
+        row.completed = bool(body.completed)
+        if row.completed and not was_completed and not row.exp_awarded:
+            row.exp_awarded = True
+            level_ups = lm.award_small_exp(current_user, lm.WORK_EXP)
+            exp_gained = lm.WORK_EXP
+        if not row.completed and was_completed and row.exp_awarded:
+            current_user.exp = max(0, current_user.exp - lm.WORK_EXP)
+            row.exp_awarded = False
+            exp_gained = -lm.WORK_EXP
+    try:
+        lm.hours_between(row.start_time, row.end_time)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Nieprawidłowy format godziny (HH:MM)")
+    db.commit()
+    db.refresh(row)
+    level, title, next_exp, next_title = gc.get_level(current_user.exp)
+    return {
+        "entry": lm.work_to_dict(row),
+        "exp": current_user.exp,
+        "level": level,
+        "title": title,
+        "next_level_exp": next_exp,
+        "next_level_title": next_title,
+        "exp_gained": exp_gained,
+        "level_ups": level_ups,
+    }
+
+
+@app.delete("/work/{entry_id}")
+def delete_work(entry_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(models.WorkEntry).filter(
+        models.WorkEntry.id == entry_id,
+        models.WorkEntry.owner_id == current_user.id,
+    ).first()
+    if not row:
+        raise HTTPException(status_code=404, detail="Nie znaleziono wpisu pracy")
+    if row.exp_awarded:
+        current_user.exp = max(0, current_user.exp - lm.WORK_EXP)
+    db.delete(row)
+    db.commit()
+    level, title, next_exp, next_title = gc.get_level(current_user.exp)
+    return {
+        "message": "Usunięto wpis pracy",
+        "exp": current_user.exp,
+        "level": level,
+        "title": title,
+        "next_level_exp": next_exp,
+        "next_level_title": next_title,
+    }
+
+
 # === ADMIN ENDPOINTS ===
 @app.get("/admin/users")
 def list_all_users(current_user: models.User = Depends(get_current_admin_user), db: Session = Depends(get_db)):
@@ -1817,6 +2247,9 @@ def delete_user_admin(user_id: int, current_user: models.User = Depends(get_curr
     username = target_user.username
 
     db.query(models.Task).filter(models.Task.owner_id == user_id).delete()
+    db.query(models.ScheduleEntry).filter(models.ScheduleEntry.owner_id == user_id).delete()
+    db.query(models.ShoppingItem).filter(models.ShoppingItem.owner_id == user_id).delete()
+    db.query(models.WorkEntry).filter(models.WorkEntry.owner_id == user_id).delete()
     db.query(models.UserAchievement).filter(models.UserAchievement.user_id == user_id).delete()
     db.query(models.DailyQuestAssignment).filter(models.DailyQuestAssignment.user_id == user_id).delete()
     db.query(models.PlayerRareDrop).filter(models.PlayerRareDrop.user_id == user_id).delete()

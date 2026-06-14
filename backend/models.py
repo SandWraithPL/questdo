@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Date
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Date, Float
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime, date
@@ -146,3 +146,49 @@ class SentTaskReminder(Base):
     task_id = Column(Integer, ForeignKey("tasks.id"), index=True)
     reminder_on = Column(Date, index=True)
     sent_at = Column(DateTime, default=datetime.utcnow)
+
+
+class ScheduleEntry(Base):
+    __tablename__ = "schedule_entries"
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
+    title = Column(String)
+    location = Column(String, default="")
+    lecturer = Column(String, default="")
+    day_of_week = Column(Integer, nullable=True)
+    entry_date = Column(Date, nullable=True)
+    is_recurring = Column(Boolean, default=True)
+    start_time = Column(String)
+    end_time = Column(String)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    owner = relationship("User")
+
+
+class ShoppingItem(Base):
+    __tablename__ = "shopping_items"
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
+    name = Column(String)
+    quantity = Column(String, default="")
+    category = Column(String, default="other")
+    bought = Column(Boolean, default=False)
+    exp_awarded = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    owner = relationship("User")
+
+
+class WorkEntry(Base):
+    __tablename__ = "work_entries"
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
+    work_date = Column(Date, index=True)
+    start_time = Column(String)
+    end_time = Column(String)
+    hourly_rate = Column(String)
+    notes = Column(String, default="")
+    tax_enabled = Column(Boolean, default=False)
+    tax_percent = Column(Float, default=0.0)
+    completed = Column(Boolean, default=False)
+    exp_awarded = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    owner = relationship("User")

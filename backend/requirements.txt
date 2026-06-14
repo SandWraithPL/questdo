@@ -9,3 +9,4 @@ python-multipart==0.0.12
 pydantic-settings==2.5.2
 alembic==1.13.3
 pywebpush==2.0.1
+cryptography==43.0.3
