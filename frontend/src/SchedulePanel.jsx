@@ -23,6 +23,8 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
     return d.toISOString().slice(0, 10);
   });
   const [showAdd, setShowAdd] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
 
   const dayEntries = useMemo(
     () => entries.filter((e) => matchScheduleToDate(e, selectedDate instanceof Date ? selectedDate.toISOString().slice(0, 10) : String(selectedDate).slice(0, 10))),
@@ -73,6 +75,61 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
     });
   };
 
+  const handleExport = async () => {
+    try {
+      const res = await axios.post(`${api}/schedule/export`, {}, { headers });
+      const blob = new Blob([res.data.content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      onToast("📥 Wyeksportowano plan zajęć");
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd eksportu");
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importText.trim()) {
+      onToast("Wklej zawartość pliku");
+      return;
+    }
+    
+    const entries = [];
+    const lines = importText.split("\n");
+    let currentEntry = null;
+    
+    for (const line of lines) {
+      if (line === "[ENTRY]") {
+        currentEntry = {};
+      } else if (currentEntry && line.includes(":")) {
+        const [key, ...valueParts] = line.split(":");
+        const value = valueParts.join(":").trim();
+        currentEntry[key] = value;
+      } else if (line === "" && currentEntry) {
+        entries.push(currentEntry);
+        currentEntry = null;
+      }
+    }
+    
+    if (currentEntry) entries.push(currentEntry);
+    
+    try {
+      const res = await axios.post(`${api}/schedule/import`, { entries }, { headers });
+      setEntries((prev) => [...prev, ...Array(res.data.imported).fill({})]); // Reload needed
+      setShowImport(false);
+      setImportText("");
+      onToast(`📤 Zaimportowano ${res.data.imported} wpisów`);
+      if (res.data.errors.length > 0) {
+        onToast(`Błędy: ${res.data.errors.slice(0, 3).join(", ")}`);
+      }
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd importu");
+    }
+  };
+
   const selectedStr = selectedDate instanceof Date
     ? selectedDate.toISOString().slice(0, 10)
     : String(selectedDate).slice(0, 10);
@@ -104,6 +161,10 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
       <div className="day-tasks-panel">
         <div className="tasks-header">
           <h3>Zajęcia — {new Date(`${selectedStr}T12:00:00`).toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" })}</h3>
+          <div className="import-export-buttons">
+            <button type="button" className="icon-btn" onClick={handleExport} title="Eksportuj plan">📥</button>
+            <button type="button" className="icon-btn" onClick={() => setShowImport(!showImport)} title="Importuj plan">📤</button>
+          </div>
         </div>
         {sortedDayEntries.length === 0 && <p className="empty">Brak zajęć w tym dniu.</p>}
         {sortedDayEntries.map((entry) => (
@@ -121,6 +182,22 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
           </div>
         ))}
       </div>
+
+      {showImport && (
+        <div className="add-task">
+          <h3>📤 Importuj plan zajęć</h3>
+          <textarea
+            placeholder="Wklej zawartość pliku eksportu tutaj..."
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            rows={6}
+          />
+          <div className="row">
+            <button type="button" onClick={handleImport}>Importuj</button>
+            <button type="button" className="cancel-btn" onClick={() => setShowImport(false)}>Anuluj</button>
+          </div>
+        </div>
+      )}
 
       {!showAdd ? (
         <button type="button" className="add-task-btn" onClick={() => setShowAdd(true)}>+ Dodaj zajęcia</button>

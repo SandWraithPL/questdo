@@ -2221,6 +2221,204 @@ def delete_work(entry_id: int, current_user: models.User = Depends(get_current_u
     }
 
 
+# === IMPORT/EXPORT ENDPOINTS ===
+
+class ScheduleExport(BaseModel):
+    entries: List[dict]
+
+class ShoppingExport(BaseModel):
+    items: List[dict]
+
+@app.post("/schedule/export")
+def export_schedule(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    entries = db.query(models.ScheduleEntry).filter(
+        models.ScheduleEntry.owner_id == current_user.id
+    ).all()
+    
+    lines = [
+        "QUESTDO_SCHEDULE_EXPORT",
+        "VERSION:1.0",
+        f"EXPORT_DATE:{datetime.now().strftime('%Y-%m-%d')}",
+        ""
+    ]
+    
+    for entry in entries:
+        lines.append("[ENTRY]")
+        lines.append(f"TITLE:{decrypt_field(entry.title)}")
+        lines.append(f"LOCATION:{decrypt_field(entry.location)}")
+        lines.append(f"LECTURER:{decrypt_field(entry.lecturer)}")
+        if entry.is_recurring and entry.day_of_week is not None:
+            lines.append(f"DAY_OF_WEEK:{entry.day_of_week}")
+            lines.append("IS_RECURRING:true")
+        else:
+            lines.append(f"ENTRY_DATE:{entry.entry_date}")
+            lines.append("IS_RECURRING:false")
+        lines.append(f"START_TIME:{entry.start_time}")
+        lines.append(f"END_TIME:{entry.end_time}")
+        lines.append("")
+    
+    return {"content": "\n".join(lines), "filename": f"schedule_export_{datetime.now().strftime('%Y%m%d')}.txt"}
+
+@app.post("/schedule/import")
+def import_schedule(data: ScheduleExport, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    imported_count = 0
+    errors = []
+    
+    for entry_data in data.entries:
+        try:
+            entry = models.ScheduleEntry(
+                owner_id=current_user.id,
+                title=encrypt_field(entry_data.get("title", "").strip()),
+                location=encrypt_field(entry_data.get("location", "").strip()),
+                lecturer=encrypt_field(entry_data.get("lecturer", "").strip()),
+                is_recurring=entry_data.get("is_recurring", True),
+                day_of_week=entry_data.get("day_of_week") if entry_data.get("is_recurring") else None,
+                entry_date=datetime.strptime(entry_data.get("entry_date"), "%Y-%m-%d").date() if entry_data.get("entry_date") else None,
+                start_time=entry_data.get("start_time", "08:00"),
+                end_time=entry_data.get("end_time", "09:00")
+            )
+            db.add(entry)
+            imported_count += 1
+        except Exception as e:
+            errors.append(f"Błąd przy imporcie '{entry_data.get('title', 'unknown')}': {str(e)}")
+    
+    db.commit()
+    
+    return {
+        "imported": imported_count,
+        "errors": errors,
+        "message": f"Zaimportowano {imported_count} wpisów planu zajęć"
+    }
+
+@app.post("/shopping/export")
+def export_shopping(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    items = db.query(models.ShoppingItem).filter(
+        models.ShoppingItem.owner_id == current_user.id
+    ).all()
+    
+    lines = [
+        "QUESTDO_SHOPPING_EXPORT",
+        "VERSION:1.0",
+        f"EXPORT_DATE:{datetime.now().strftime('%Y-%m-%d')}",
+        ""
+    ]
+    
+    for item in items:
+        lines.append("[ITEM]")
+        lines.append(f"NAME:{decrypt_field(item.name)}")
+        lines.append(f"QUANTITY:{decrypt_field(item.quantity)}")
+        lines.append(f"CATEGORY:{item.category}")
+        lines.append(f"BOUGHT:{str(item.bought).lower()}")
+        lines.append("")
+    
+    return {"content": "\n".join(lines), "filename": f"shopping_export_{datetime.now().strftime('%Y%m%d')}.txt"}
+
+@app.post("/shopping/import")
+def import_shopping(data: ShoppingExport, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    imported_count = 0
+    errors = []
+    
+    valid_categories = ["veggies", "fruits", "dairy", "bread", "meat", "drinks", "chemicals", "sweets", "other"]
+    
+    for item_data in data.items:
+        try:
+            category = item_data.get("category", "other")
+            if category not in valid_categories:
+                category = "other"
+            
+            item = models.ShoppingItem(
+                owner_id=current_user.id,
+                name=encrypt_field(item_data.get("name", "").strip()),
+                quantity=encrypt_field(item_data.get("quantity", "").strip()),
+                category=category,
+                bought=item_data.get("bought", False)
+            )
+            db.add(item)
+            imported_count += 1
+        except Exception as e:
+            errors.append(f"Błąd przy imporcie '{item_data.get('name', 'unknown')}': {str(e)}")
+    
+    db.commit()
+    
+    return {
+        "imported": imported_count,
+        "errors": errors,
+        "message": f"Zaimportowano {imported_count} produktów"
+    }
+
+
+class ShoppingHistoryCreate(BaseModel):
+    items_json: str
+    total_items: int
+    total_spent: float = 0.0
+    notes: str = ""
+
+@app.get("/shopping/history")
+def get_shopping_history(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    history = db.query(models.ShoppingHistory).filter(
+        models.ShoppingHistory.owner_id == current_user.id
+    ).order_by(models.ShoppingHistory.completed_at.desc()).all()
+    
+    return [{
+        "id": h.id,
+        "total_items": h.total_items,
+        "completed_at": h.completed_at.isoformat(),
+        "total_spent": h.total_spent,
+        "notes": h.notes
+    } for h in history]
+
+@app.get("/shopping/history/{history_id}")
+def get_shopping_history_detail(history_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    history = db.query(models.ShoppingHistory).filter(
+        models.ShoppingHistory.id == history_id,
+        models.ShoppingHistory.owner_id == current_user.id
+    ).first()
+    
+    if not history:
+        raise HTTPException(status_code=404, detail="Nie znaleziono historii")
+    
+    return {
+        "id": history.id,
+        "items_json": history.items_json,
+        "total_items": history.total_items,
+        "completed_at": history.completed_at.isoformat(),
+        "total_spent": history.total_spent,
+        "notes": history.notes
+    }
+
+@app.post("/shopping/history")
+def create_shopping_history(data: ShoppingHistoryCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    history = models.ShoppingHistory(
+        owner_id=current_user.id,
+        items_json=data.items_json,
+        total_items=data.total_items,
+        total_spent=data.total_spent,
+        notes=data.notes
+    )
+    db.add(history)
+    db.commit()
+    db.refresh(history)
+    
+    return {
+        "id": history.id,
+        "message": "Zapisano historię listy zakupów"
+    }
+
+@app.delete("/shopping/history/{history_id}")
+def delete_shopping_history(history_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    history = db.query(models.ShoppingHistory).filter(
+        models.ShoppingHistory.id == history_id,
+        models.ShoppingHistory.owner_id == current_user.id
+    ).first()
+    
+    if not history:
+        raise HTTPException(status_code=404, detail="Nie znaleziono historii")
+    
+    db.delete(history)
+    db.commit()
+    
+    return {"message": "Usunięto historię"}
+
 # === ADMIN ENDPOINTS ===
 @app.get("/admin/users")
 def list_all_users(current_user: models.User = Depends(get_current_admin_user), db: Session = Depends(get_db)):

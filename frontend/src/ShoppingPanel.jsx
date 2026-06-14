@@ -27,6 +27,12 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
   const [editName, setEditName] = useState("");
   const [editQty, setEditQty] = useState("");
   const [editCat, setEditCat] = useState("other");
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
+  const [showHistory, setShowHistory] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [selectedHistory, setSelectedHistory] = useState(null);
+  const [historyDetail, setHistoryDetail] = useState(null);
 
   const boughtCount = items.filter((i) => i.bought).length;
   const leftCount = items.length - boughtCount;
@@ -137,6 +143,116 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     });
   };
 
+  const handleExport = async () => {
+    try {
+      const res = await axios.post(`${api}/shopping/export`, {}, { headers });
+      const blob = new Blob([res.data.content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      onToast("📥 Wyeksportowano listę zakupów");
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd eksportu");
+    }
+  };
+
+  const handleImport = async () => {
+    if (!importText.trim()) {
+      onToast("Wklej zawartość pliku");
+      return;
+    }
+    
+    const items = [];
+    const lines = importText.split("\n");
+    let currentItem = null;
+    
+    for (const line of lines) {
+      if (line === "[ITEM]") {
+        currentItem = {};
+      } else if (currentItem && line.includes(":")) {
+        const [key, ...valueParts] = line.split(":");
+        const value = valueParts.join(":").trim();
+        currentItem[key] = value;
+      } else if (line === "" && currentItem) {
+        items.push(currentItem);
+        currentItem = null;
+      }
+    }
+    
+    if (currentItem) items.push(currentItem);
+    
+    try {
+      const res = await axios.post(`${api}/shopping/import`, { items }, { headers });
+      setItems((prev) => [...prev, ...Array(res.data.imported).fill({})]); // Reload needed
+      setShowImport(false);
+      setImportText("");
+      onToast(`📤 Zaimportowano ${res.data.imported} produktów`);
+      if (res.data.errors.length > 0) {
+        onToast(`Błędy: ${res.data.errors.slice(0, 3).join(", ")}`);
+      }
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd importu");
+    }
+  };
+
+  const loadHistory = async () => {
+    try {
+      const res = await axios.get(`${api}/shopping/history`, { headers });
+      setHistory(res.data);
+      setShowHistory(true);
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd ładowania historii");
+    }
+  };
+
+  const viewHistoryDetail = async (historyId) => {
+    try {
+      const res = await axios.get(`${api}/shopping/history/${historyId}`, { headers });
+      setHistoryDetail(res.data);
+      setSelectedHistory(historyId);
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd ładowania szczegółów");
+    }
+  };
+
+  const saveToHistory = async () => {
+    const boughtItems = items.filter((i) => i.bought);
+    if (boughtItems.length === 0) {
+      onToast("Brak kupionych produktów do zapisania");
+      return;
+    }
+    
+    try {
+      const itemsJson = JSON.stringify(boughtItems);
+      await axios.post(`${api}/shopping/history`, {
+        items_json: itemsJson,
+        total_items: boughtItems.length,
+        total_spent: 0,
+        notes: ""
+      }, { headers });
+      onToast("💾 Zapisano listę do historii");
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd zapisu historii");
+    }
+  };
+
+  const deleteHistory = async (historyId) => {
+    try {
+      await axios.delete(`${api}/shopping/history/${historyId}`, { headers });
+      setHistory((prev) => prev.filter((h) => h.id !== historyId));
+      if (selectedHistory === historyId) {
+        setSelectedHistory(null);
+        setHistoryDetail(null);
+      }
+      onToast("🗑️ Usunięto z historii");
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd usuwania");
+    }
+  };
+
   return (
     <div className="module-panel shopping-panel">
       <div className="add-task">
@@ -154,6 +270,13 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
       </div>
 
       <input className="search-input" placeholder="🔍 Szukaj produktu..." value={search} onChange={(e) => setSearch(e.target.value)} />
+      
+      <div className="import-export-row">
+        <button type="button" className="icon-btn export-btn" onClick={handleExport} title="Eksportuj listę">📥 Eksportuj</button>
+        <button type="button" className="icon-btn import-btn" onClick={() => setShowImport(!showImport)} title="Importuj listę">📤 Importuj</button>
+        <button type="button" className="icon-btn history-btn" onClick={loadHistory} title="Historia list">📜 Historia</button>
+        <button type="button" className="icon-btn save-history-btn" onClick={saveToHistory} title="Zapisz do historii">💾 Zapisz</button>
+      </div>
 
       <div className="stats-bar">
         <div className="filter-group">
@@ -224,8 +347,76 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
         })}
       </div>
 
+      {showImport && (
+        <div className="add-task">
+          <h3>📤 Importuj listę zakupów</h3>
+          <textarea
+            placeholder="Wklej zawartość pliku eksportu tutaj..."
+            value={importText}
+            onChange={(e) => setImportText(e.target.value)}
+            rows={6}
+          />
+          <div className="row">
+            <button type="button" onClick={handleImport}>Importuj</button>
+            <button type="button" className="cancel-btn" onClick={() => setShowImport(false)}>Anuluj</button>
+          </div>
+        </div>
+      )}
+
       {boughtCount > 0 && (
         <button type="button" className="danger-btn" onClick={clearBought}>🗑️ Usuń kupione ({boughtCount})</button>
+      )}
+
+      {showHistory && (
+        <div className="history-panel">
+          <div className="history-header">
+            <h3>📜 Historia list zakupów</h3>
+            <button type="button" className="icon-btn" onClick={() => setShowHistory(false)}>✕</button>
+          </div>
+          {history.length === 0 ? (
+            <p className="empty">Brak zapisanych list w historii.</p>
+          ) : (
+            <div className="history-list">
+              {history.map((h) => (
+                <div key={h.id} className="history-card">
+                  <div className="history-info">
+                    <span className="history-date">{new Date(h.completed_at).toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
+                    <span className="history-count">{h.total_items} produktów</span>
+                  </div>
+                  <div className="history-actions">
+                    <button type="button" className="icon-btn" onClick={() => viewHistoryDetail(h.id)} title="Szczegóły">👁️</button>
+                    <button type="button" className="icon-btn delete" onClick={() => deleteHistory(h.id)} title="Usuń">🗑️</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {selectedHistory && historyDetail && (
+        <div className="history-detail-panel">
+          <div className="history-header">
+            <h3>📋 Szczegóły listy z {new Date(historyDetail.completed_at).toLocaleDateString("pl-PL")}</h3>
+            <button type="button" className="icon-btn" onClick={() => { setSelectedHistory(null); setHistoryDetail(null); }}>✕</button>
+          </div>
+          <div className="history-items">
+            {JSON.parse(historyDetail.items_json).map((item, idx) => {
+              const cat = getCategory(item.category);
+              return (
+                <div key={idx} className="task-card shopping-card done">
+                  <div className="task-info">
+                    <h4 className="done">{item.name}</h4>
+                    <div className="task-meta">
+                      {item.quantity && <span className="badge category">{item.quantity}</span>}
+                      <span className="badge category">{cat.emoji} {cat.label}</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       )}
     </div>
   );

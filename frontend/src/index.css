@@ -759,3 +759,108 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
     padding-right: 35px;
   }
 }
+
+.import-export-buttons {
+  display: flex;
+  gap: 8px;
+}
+
+.import-export-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+
+.export-btn, .import-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #1a1a2e;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.export-btn:hover, .import-btn:hover {
+  background: #2a2a3e;
+  border-color: #ff8906;
+}
+
+.history-btn, .save-history-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #1a1a2e;
+  color: #fff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  transition: background 0.2s, border-color 0.2s;
+}
+
+.history-btn:hover, .save-history-btn:hover {
+  background: #2a2a3e;
+  border-color: #ff8906;
+}
+
+.history-panel, .history-detail-panel {
+  background: #1a1a2e;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 16px;
+}
+
+.history-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.history-header h3 {
+  color: #ff8906;
+  font-size: 1.1rem;
+}
+
+.history-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.history-card {
+  background: #0f0e17;
+  border-radius: 8px;
+  padding: 12px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-left: 4px solid #ff8906;
+}
+
+.history-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.history-date {
+  font-size: 0.9rem;
+  color: #fff;
+}
+
+.history-count {
+  font-size: 0.8rem;
+  color: #aaa;
+}
+
+.history-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.history-items {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}

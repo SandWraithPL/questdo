@@ -177,6 +177,18 @@ class ShoppingItem(Base):
     owner = relationship("User")
 
 
+class ShoppingHistory(Base):
+    __tablename__ = "shopping_history"
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
+    items_json = Column(String)  # JSON string with items data
+    total_items = Column(Integer, default=0)
+    completed_at = Column(DateTime, default=datetime.utcnow)
+    total_spent = Column(Float, default=0.0)  # Optional: if user wants to track costs
+    notes = Column(String, default="")
+    owner = relationship("User")
+
+
 class WorkEntry(Base):
     __tablename__ = "work_entries"
     id = Column(Integer, primary_key=True, index=True)
