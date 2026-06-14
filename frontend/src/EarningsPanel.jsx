@@ -1,10 +1,14 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import axios from "axios";
 import SharedCalendar from "./SharedCalendar";
 import TimePicker from "./TimePicker";
 
 function formatMoney(value) {
   return `${Number(value || 0).toFixed(2)} zł`;
+}
+
+function formatRate(value) {
+  return `${Number(value || 0).toFixed(2)} zł/h`;
 }
 
 export default function EarningsPanel({
@@ -27,6 +31,14 @@ export default function EarningsPanel({
   const [notes, setNotes] = useState("");
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [taxPercent, setTaxPercent] = useState("12");
+  const [savedRates, setSavedRates] = useState([]);
+  const [showRateSelector, setShowRateSelector] = useState(false);
+  const [editingId, setEditingId] = useState(null);
+  const [editDate, setEditDate] = useState("");
+  const [editStartTime, setEditStartTime] = useState("");
+  const [editEndTime, setEditEndTime] = useState("");
+  const [editRate, setEditRate] = useState("");
+  const [editNotes, setEditNotes] = useState("");
 
   const selectedStr = selectedDate instanceof Date
     ? selectedDate.toISOString().slice(0, 10)
@@ -36,6 +48,10 @@ export default function EarningsPanel({
     () => entries.filter((e) => e.work_date === selectedStr).sort((a, b) => a.start_time.localeCompare(b.start_time)),
     [entries, selectedStr],
   );
+
+  useEffect(() => {
+    loadSavedRates();
+  }, []);
 
   const dayTotal = dayEntries.filter((e) => e.completed).reduce((sum, e) => sum + (e.net || 0), 0);
   const monthKey = selectedStr.slice(0, 7);
@@ -49,6 +65,45 @@ export default function EarningsPanel({
       setSummary(res.data);
     } catch {
       /* ignore */
+    }
+  };
+
+  const loadSavedRates = async () => {
+    try {
+      const res = await axios.get(`${api}/hourly-rates`, { headers });
+      setSavedRates(res.data);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const saveCurrentRate = async () => {
+    const rate = parseFloat(String(hourlyRate).replace(",", "."));
+    if (!rate || rate <= 0) {
+      onToast("Podaj stawkę godzinową");
+      return;
+    }
+    try {
+      await axios.post(`${api}/hourly-rates`, { rate, label: "" }, { headers });
+      await loadSavedRates();
+      onToast("💾 Zapisano stawkę");
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd zapisu stawki");
+    }
+  };
+
+  const selectSavedRate = (rate) => {
+    setHourlyRate(String(rate));
+    setShowRateSelector(false);
+  };
+
+  const deleteSavedRate = async (rateId) => {
+    try {
+      await axios.delete(`${api}/hourly-rates/${rateId}`, { headers });
+      await loadSavedRates();
+      onToast("🗑️ Usunięto stawkę");
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd usuwania stawki");
     }
   };
 
@@ -121,6 +176,40 @@ export default function EarningsPanel({
     });
   };
 
+  const startEdit = (entry) => {
+    setEditingId(entry.id);
+    setEditDate(entry.work_date);
+    setEditStartTime(entry.start_time);
+    setEditEndTime(entry.end_time);
+    setEditRate(entry.hourly_rate);
+    setEditNotes(entry.notes || "");
+  };
+
+  const saveEdit = (entry) => {
+    enqueueRequest(async () => {
+      try {
+        const rate = parseFloat(String(editRate).replace(",", "."));
+        if (!rate || rate <= 0) {
+          onToast("Podaj stawkę godzinową");
+          return;
+        }
+        const res = await axios.patch(`${api}/work/${entry.id}`, {
+          work_date: editDate,
+          start_time: editStartTime,
+          end_time: editEndTime,
+          hourly_rate: rate,
+          notes: editNotes,
+        }, { headers });
+        setEntries((prev) => prev.map((e) => (e.id === entry.id ? res.data.entry : e)));
+        await refreshSummary();
+        setEditingId(null);
+        onToast("✅ Zapisano zmiany");
+      } catch (err) {
+        onToast(err.response?.data?.detail || "Błąd zapisu");
+      }
+    });
+  };
+
   return (
     <div className="module-panel earnings-panel">
       <div className="earnings-summary">
@@ -151,7 +240,7 @@ export default function EarningsPanel({
         isItemCompleted={(item) => item.completed}
         renderItemMeta={(item) => (
           <div className="task-meta">
-            <span className="badge category">{item.hours}h × {item.hourly_rate} zł/h</span>
+            <span className="badge category">{item.hours}h × {formatRate(item.hourly_rate)}</span>
             {item.tax_enabled && <span className="badge timing-late">Podatek {item.tax_percent}%</span>}
             {item.completed && <span className="badge exp">Potwierdzone</span>}
           </div>
@@ -180,17 +269,37 @@ export default function EarningsPanel({
               <h4 className={entry.completed ? "done" : ""}>{entry.start_time} – {entry.end_time}</h4>
               {entry.notes && <p className={entry.completed ? "done-desc" : ""}>{entry.notes}</p>}
               <div className="task-meta">
-                <span className="badge category">{entry.hours}h × {entry.hourly_rate} zł/h</span>
+                <span className="badge category">{entry.hours}h × {formatRate(entry.hourly_rate)}</span>
                 <span className="badge exp">Brutto {formatMoney(entry.gross)}</span>
                 {entry.tax_enabled && <span className="badge timing-late">Podatek {entry.tax_percent}% (−{formatMoney(entry.tax)})</span>}
                 <span className="badge category">Netto {formatMoney(entry.net)}</span>
                 {entry.completed && <span className="badge exp">+8 EXP</span>}
               </div>
             </div>
-            <button type="button" className="icon-btn delete" onClick={() => deleteEntry(entry)}>🗑️</button>
+            <div className="task-actions">
+              <button type="button" className="icon-btn" onClick={() => startEdit(entry)} title="Edytuj">✏️</button>
+              <button type="button" className="icon-btn delete" onClick={() => deleteEntry(entry)}>🗑️</button>
+            </div>
           </div>
         ))}
       </div>
+
+      {editingId && (
+        <div className="add-task">
+          <h3>✏️ Edytuj wpis pracy</h3>
+          <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+          <div className="add-task-meta">
+            <TimePicker value={editStartTime} onChange={setEditStartTime} label="Od:" />
+            <TimePicker value={editEndTime} onChange={setEditEndTime} label="Do:" />
+          </div>
+          <input type="number" min="0" step="0.01" placeholder="Stawka za godzinę (zł)" value={editRate} onChange={(e) => setEditRate(e.target.value)} />
+          <input placeholder="Notatka / miejsce pracy (opcjonalnie)" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+          <div className="row">
+            <button type="button" onClick={() => saveEdit(dayEntries.find((e) => e.id === editingId))}>Zapisz zmiany</button>
+            <button type="button" className="cancel-btn" onClick={() => setEditingId(null)}>Anuluj</button>
+          </div>
+        </div>
+      )}
 
       {!showAdd ? (
         <button type="button" className="add-task-btn" onClick={() => setShowAdd(true)}>+ Dodaj pracę na ten dzień</button>
@@ -201,7 +310,21 @@ export default function EarningsPanel({
             <TimePicker value={startTime} onChange={setStartTime} label="Od:" />
             <TimePicker value={endTime} onChange={setEndTime} label="Do:" />
           </div>
-          <input type="number" min="0" step="0.01" placeholder="Stawka za godzinę (zł)" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} />
+          <div className="rate-input-group">
+            <input type="number" min="0" step="0.01" placeholder="Stawka za godzinę (zł)" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} />
+            <button type="button" className="icon-btn rate-save-btn" onClick={saveCurrentRate} title="Zapisz stawkę">💾</button>
+            <button type="button" className="icon-btn rate-select-btn" onClick={() => setShowRateSelector(!showRateSelector)} title="Wybierz zapisaną stawkę">📋</button>
+          </div>
+          {showRateSelector && savedRates.length > 0 && (
+            <div className="saved-rates-list">
+              {savedRates.map((rate) => (
+                <div key={rate.id} className="saved-rate-item">
+                  <span onClick={() => selectSavedRate(rate.rate)}>{formatRate(rate.rate)}</span>
+                  <button type="button" className="icon-btn delete" onClick={() => deleteSavedRate(rate.id)}>🗑️</button>
+                </div>
+              ))}
+            </div>
+          )}
           <input placeholder="Notatka / miejsce pracy (opcjonalnie)" value={notes} onChange={(e) => setNotes(e.target.value)} />
           <label className="important-toggle">
             <input type="checkbox" checked={taxEnabled} onChange={(e) => setTaxEnabled(e.target.checked)} />

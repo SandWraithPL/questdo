@@ -2419,6 +2419,60 @@ def delete_shopping_history(history_id: int, current_user: models.User = Depends
     
     return {"message": "Usunięto historię"}
 
+
+class HourlyRateCreate(BaseModel):
+    rate: float
+    label: str = ""
+
+@app.get("/hourly-rates")
+def get_hourly_rates(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    rates = db.query(models.HourlyRate).filter(
+        models.HourlyRate.owner_id == current_user.id
+    ).order_by(models.HourlyRate.created_at.desc()).all()
+    
+    return [{
+        "id": r.id,
+        "rate": r.rate,
+        "label": r.label,
+        "created_at": r.created_at.isoformat()
+    } for r in rates]
+
+@app.post("/hourly-rates")
+def create_hourly_rate(data: HourlyRateCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if data.rate <= 0:
+        raise HTTPException(status_code=400, detail="Stawka musi być większa od 0")
+    
+    rate = models.HourlyRate(
+        owner_id=current_user.id,
+        rate=data.rate,
+        label=data.label
+    )
+    db.add(rate)
+    db.commit()
+    db.refresh(rate)
+    
+    return {
+        "id": rate.id,
+        "rate": rate.rate,
+        "label": rate.label,
+        "message": "Dodano stawkę godzinową"
+    }
+
+@app.delete("/hourly-rates/{rate_id}")
+def delete_hourly_rate(rate_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    rate = db.query(models.HourlyRate).filter(
+        models.HourlyRate.id == rate_id,
+        models.HourlyRate.owner_id == current_user.id
+    ).first()
+    
+    if not rate:
+        raise HTTPException(status_code=404, detail="Nie znaleziono stawki")
+    
+    db.delete(rate)
+    db.commit()
+    
+    return {"message": "Usunięto stawkę"}
+
 # === ADMIN ENDPOINTS ===
 @app.get("/admin/users")
 def list_all_users(current_user: models.User = Depends(get_current_admin_user), db: Session = Depends(get_db)):

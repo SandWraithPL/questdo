@@ -189,6 +189,16 @@ class ShoppingHistory(Base):
     owner = relationship("User")
 
 
+class HourlyRate(Base):
+    __tablename__ = "hourly_rates"
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
+    rate = Column(Float)  # Hourly rate value
+    label = Column(String, default="")  # Optional label like "Praca domowa", "Freelance"
+    created_at = Column(DateTime, default=datetime.utcnow)
+    owner = relationship("User")
+
+
 class WorkEntry(Base):
     __tablename__ = "work_entries"
     id = Column(Integer, primary_key=True, index=True)

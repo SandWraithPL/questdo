@@ -33,6 +33,8 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
   const [history, setHistory] = useState([]);
   const [selectedHistory, setSelectedHistory] = useState(null);
   const [historyDetail, setHistoryDetail] = useState(null);
+  const [showReceiptImport, setShowReceiptImport] = useState(false);
+  const [receiptText, setReceiptText] = useState("");
 
   const boughtCount = items.filter((i) => i.bought).length;
   const leftCount = items.length - boughtCount;
@@ -253,6 +255,72 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     }
   };
 
+  const parseReceiptText = (text) => {
+    const lines = text.split("\n");
+    const products = [];
+    
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed) continue;
+      
+      // Parsowanie formatu: "Nazwa produktu cena" lub "Nazwa produktu x ilość cena"
+      const priceMatch = trimmed.match(/(\d+[.,]\d+)\s*zł?$/i);
+      if (priceMatch) {
+        const price = priceMatch[1].replace(",", ".");
+        const namePart = trimmed.substring(0, trimmed.lastIndexOf(priceMatch[1])).trim();
+        
+        // Sprawdź czy jest ilość (format: "Nazwa x2 cena")
+        const qtyMatch = namePart.match(/x(\d+)\s*$/i);
+        let name = namePart;
+        let quantity = "";
+        
+        if (qtyMatch) {
+          quantity = qtyMatch[1];
+          name = namePart.substring(0, namePart.lastIndexOf(qtyMatch[0])).trim();
+        }
+        
+        if (name) {
+          products.push({ name, quantity, category: "other" });
+        }
+      }
+    }
+    
+    return products;
+  };
+
+  const importFromReceipt = async () => {
+    if (!receiptText.trim()) {
+      onToast("Wklej tekst z paragonu");
+      return;
+    }
+    
+    const products = parseReceiptText(receiptText);
+    
+    if (products.length === 0) {
+      onToast("Nie znaleziono produktów w tekście. Sprawdź format.");
+      return;
+    }
+    
+    let imported = 0;
+    for (const product of products) {
+      try {
+        const res = await axios.post(`${api}/shopping`, {
+          name: product.name,
+          quantity: product.quantity,
+          category: product.category
+        }, { headers });
+        setItems((prev) => [res.data, ...prev]);
+        imported++;
+      } catch (err) {
+        console.error("Błąd importu produktu:", product.name, err);
+      }
+    }
+    
+    setShowReceiptImport(false);
+    setReceiptText("");
+    onToast(`📥 Zaimportowano ${imported} produktów z paragonu`);
+  };
+
   return (
     <div className="module-panel shopping-panel">
       <div className="add-task">
@@ -274,6 +342,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
       <div className="import-export-row">
         <button type="button" className="icon-btn export-btn" onClick={handleExport} title="Eksportuj listę">📥 Eksportuj</button>
         <button type="button" className="icon-btn import-btn" onClick={() => setShowImport(!showImport)} title="Importuj listę">📤 Importuj</button>
+        <button type="button" className="icon-btn receipt-btn" onClick={() => setShowReceiptImport(!showReceiptImport)} title="Importuj z paragonu">🧾 Paragon</button>
         <button type="button" className="icon-btn history-btn" onClick={loadHistory} title="Historia list">📜 Historia</button>
         <button type="button" className="icon-btn save-history-btn" onClick={saveToHistory} title="Zapisz do historii">💾 Zapisz</button>
       </div>
@@ -359,6 +428,27 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
           <div className="row">
             <button type="button" onClick={handleImport}>Importuj</button>
             <button type="button" className="cancel-btn" onClick={() => setShowImport(false)}>Anuluj</button>
+          </div>
+        </div>
+      )}
+
+      {showReceiptImport && (
+        <div className="add-task">
+          <h3>🧾 Importuj z paragonu</h3>
+          <textarea
+            placeholder="Wklej tekst z paragonu (np. z Lidl, Biedronka)...
+
+Format obsługiwany:
+- Mleko 3.50 zł
+- Chleb x2 4.00 zł
+- Masło 8.99 zł"
+            value={receiptText}
+            onChange={(e) => setReceiptText(e.target.value)}
+            rows={8}
+          />
+          <div className="row">
+            <button type="button" onClick={importFromReceipt}>Importuj produkty</button>
+            <button type="button" className="cancel-btn" onClick={() => setShowReceiptImport(false)}>Anuluj</button>
           </div>
         </div>
       )}

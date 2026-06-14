@@ -1,7 +1,7 @@
 import { useState } from "react";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
-const MINUTES = ["00", "15", "30", "45"];
+const MINUTES = ["00", "05", "10", "15", "20", "25", "30", "35", "40", "45", "50", "55"];
 
 export default function TimePicker({ value, onChange, label }) {
   const [hour, setHour] = useState(() => value?.split(":")[0] || "08");
