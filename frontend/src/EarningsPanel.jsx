@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import axios from "axios";
 import SharedCalendar from "./SharedCalendar";
+import TimePicker from "./TimePicker";
 
 function formatMoney(value) {
   return `${Number(value || 0).toFixed(2)} zł`;
@@ -197,8 +198,8 @@ export default function EarningsPanel({
         <div className="add-task">
           <h3>+ Nowy wpis pracy ({selectedStr})</h3>
           <div className="add-task-meta">
-            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-            <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            <TimePicker value={startTime} onChange={setStartTime} label="Od:" />
+            <TimePicker value={endTime} onChange={setEndTime} label="Do:" />
           </div>
           <input type="number" min="0" step="0.01" placeholder="Stawka za godzinę (zł)" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} />
           <input placeholder="Notatka / miejsce pracy (opcjonalnie)" value={notes} onChange={(e) => setNotes(e.target.value)} />

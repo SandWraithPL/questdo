@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import axios from "axios";
 import SharedCalendar, { weekdayIndex, WEEKDAYS_LONG } from "./SharedCalendar";
+import TimePicker from "./TimePicker";
 
 function matchScheduleToDate(entry, dateStr) {
   if (entry.is_recurring) {
@@ -130,8 +131,8 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
           <input placeholder="Sala / budynek (opcjonalnie)" value={location} onChange={(e) => setLocation(e.target.value)} />
           <input placeholder="Prowadzący (opcjonalnie)" value={lecturer} onChange={(e) => setLecturer(e.target.value)} />
           <div className="add-task-meta">
-            <input type="time" value={startTime} onChange={(e) => setStartTime(e.target.value)} />
-            <input type="time" value={endTime} onChange={(e) => setEndTime(e.target.value)} />
+            <TimePicker value={startTime} onChange={setStartTime} label="Od:" />
+            <TimePicker value={endTime} onChange={setEndTime} label="Do:" />
           </div>
           <label className="important-toggle">
             <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} />
