@@ -134,7 +134,7 @@ function getExpProgress(exp, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
       break;
     }
   }
-  const progress = next === current ? 100 : ((exp - current) / (next - current)) * 100;
+  const progress = next === current ? 100 : (exp / next) * 100;
   return { progress, current, next };
 }
 

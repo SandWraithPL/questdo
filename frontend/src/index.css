@@ -1174,28 +1174,30 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 
 .rate-input-group {
   display: flex;
-  gap: 8px;
+  gap: 6px;
   align-items: center;
 }
 
 .rate-input-group input {
   flex: 1;
+  min-width: 120px;
 }
 
 .rate-save-btn, .rate-select-btn, .rate-default-btn {
-  padding: 2px 6px;
+  padding: 4px 8px;
   border-radius: 4px;
   border: none;
   background: transparent;
   color: #fff;
   cursor: pointer;
-  font-size: 0.9rem;
+  font-size: 1rem;
   transition: background 0.2s, transform 0.15s;
+  flex-shrink: 0;
 }
 
 .rate-save-btn:hover, .rate-select-btn:hover, .rate-default-btn:hover {
   background: #2a2a3e;
-  transform: scale(1.08);
+  transform: scale(1.05);
 }
 
 .rate-default-btn {

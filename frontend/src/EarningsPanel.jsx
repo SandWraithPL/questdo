@@ -399,7 +399,6 @@ export default function EarningsPanel({
             <input type="number" min="0" step="0.01" placeholder="Stawka za godzinę (zł) *" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} />
             <button type="button" className="icon-btn rate-save-btn" onClick={saveCurrentRate} title="Zapisz stawkę">💾</button>
             <button type="button" className="icon-btn rate-select-btn" onClick={() => setShowRateSelector(!showRateSelector)} title="Wybierz zapisaną stawkę">📋</button>
-            <button type="button" className="icon-btn rate-default-btn" onClick={saveAsDefaultRate} title="Ustaw jako domyślną">⭐</button>
           </div>
           {showRateSelector && savedRates.length > 0 && (
             <div className="saved-rates-list">
