@@ -4,6 +4,13 @@ import FamilyPanel from "./FamilyPanel";
 import { applyUserFromResponse } from "./helpers";
 import { useEditItem } from "./hooks/useEditItem";
 
+// Funkcja formatująca pieniądze z przecinkiem i 2 miejscami po przecinku
+function formatMoney(value) {
+  const num = Number(value || 0);
+  const formatted = num.toFixed(2).replace(".", ",");
+  return `${formatted} zł`;
+}
+
 const SHOPPING_CATEGORIES = [
   { value: "veggies", emoji: "🥦", label: "Warzywa" },
   { value: "fruits", emoji: "🍎", label: "Owoce" },
@@ -376,23 +383,23 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
         <div className="earnings-summary">
           <div className="earnings-stat">
             <span className="earnings-stat-label">Lista</span>
-            <strong>{summary.current_list.toFixed(2)} zł</strong>
+            <strong>{formatMoney(summary.current_list)}</strong>
           </div>
           <div className="earnings-stat">
             <span className="earnings-stat-label">Dzień</span>
-            <strong>{Object.values(summary.by_day).slice(-1)[0]?.toFixed(2) || "0.00"} zł</strong>
+            <strong>{formatMoney(Object.values(summary.by_day).slice(-1)[0] || 0)}</strong>
           </div>
           <div className="earnings-stat">
             <span className="earnings-stat-label">Tydzień</span>
-            <strong>{Object.values(summary.by_week).slice(-1)[0]?.toFixed(2) || "0.00"} zł</strong>
+            <strong>{formatMoney(Object.values(summary.by_week).slice(-1)[0] || 0)}</strong>
           </div>
           <div className="earnings-stat">
             <span className="earnings-stat-label">Miesiąc</span>
-            <strong>{Object.values(summary.by_month).slice(-1)[0]?.toFixed(2) || "0.00"} zł</strong>
+            <strong>{formatMoney(Object.values(summary.by_month).slice(-1)[0] || 0)}</strong>
           </div>
           <div className="earnings-stat muted">
             <span className="earnings-stat-label">Łącznie</span>
-            <strong>{summary.all_time.toFixed(2)} zł</strong>
+            <strong>{formatMoney(summary.all_time)}</strong>
           </div>
         </div>
       )}
@@ -414,7 +421,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
                 {suggestions.map((s) => (
                   <div key={s.id} className="suggestion-item" onClick={() => selectSuggestion(s)}>
                     <span>{s.name}</span>
-                    <span className="suggestion-price">{s.default_price > 0 ? `${s.default_price.toFixed(2)} zł` : ""}</span>
+                    <span className="suggestion-price">{s.default_price > 0 ? formatMoney(s.default_price) : ""}</span>
                   </div>
                 ))}
               </div>
@@ -495,7 +502,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
                     <div className="task-meta">
                       {item.quantity && <span className="badge category">{item.quantity}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
-                      {item.price > 0 && <span className="badge category">💰 {item.price.toFixed(2)} zł</span>}
+                      {item.price > 0 && <span className="badge category">💰 {formatMoney(item.price)}</span>}
                       {item.bought && <span className="badge exp">+2 EXP</span>}
                     </div>
                   </div>
@@ -557,7 +564,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
                     <div className="task-meta">
                       {item.quantity && <span className="badge category">{item.quantity}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
-                      {item.price > 0 && <span className="badge category">💰 {item.price.toFixed(2)} zł</span>}
+                      {item.price > 0 && <span className="badge category">💰 {formatMoney(item.price)}</span>}
                     </div>
                   </div>
                 </div>

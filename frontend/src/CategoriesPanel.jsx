@@ -2,6 +2,13 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { SHOPPING_CATEGORIES } from "./ShoppingPanel";
 
+// Funkcja formatująca pieniądze z przecinkiem i 2 miejscami po przecinku
+function formatMoney(value) {
+  const num = Number(value || 0);
+  const formatted = num.toFixed(2).replace(".", ",");
+  return `${formatted} zł`;
+}
+
 function getCategory(cat) {
   return SHOPPING_CATEGORIES.find((c) => c.value === cat) || SHOPPING_CATEGORIES[8];
 }
@@ -119,12 +126,15 @@ export default function CategoriesPanel({ api, headers, onToast }) {
     }
   };
 
+  // Format display value for default hourly rate
+  const displayDefaultRate = defaultHourlyRate ? parseFloat(defaultHourlyRate).toFixed(2).replace(".", ",") : "";
+
   return (
     <div className="module-panel">
       <div className="add-task">
         <h3>⚙️ Ustawienia kategorii i stawek</h3>
-        <div className="form-row-inline">
-          <label style={{color: '#aaa', fontSize: '0.9rem', minWidth: '140px'}}>Domyślna stawka godzinowa:</label>
+        <div className="form-row-inline" style={{ alignItems: "center" }}>
+          <label style={{ color: "#aaa", fontSize: "0.9rem", minWidth: "160px" }}>Domyślna stawka godzinowa:</label>
           <input 
             type="number" 
             min="0" 
@@ -132,13 +142,14 @@ export default function CategoriesPanel({ api, headers, onToast }) {
             placeholder="Stawka (zł/h)" 
             value={defaultHourlyRate} 
             onChange={(e) => setDefaultHourlyRate(e.target.value)} 
-            style={{flex: 1}}
+            style={{ flex: 1 }}
           />
+          <span style={{ color: "#ff8906", fontWeight: "bold", minWidth: "80px" }}>{displayDefaultRate ? `${displayDefaultRate} zł/h` : "brak"}</span>
           <button 
             type="button" 
             className="add-task-btn" 
             onClick={saveDefaultHourlyRate}
-            style={{padding: '8px 16px', fontSize: '0.9rem'}}
+            style={{ padding: "8px 16px", fontSize: "0.9rem", flex: "0 0 auto" }}
           >
             Zapisz
           </button>
@@ -193,7 +204,7 @@ export default function CategoriesPanel({ api, headers, onToast }) {
                     <div className="task-meta">
                       {article.quantity && <span className="badge category">{article.quantity}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
-                      {article.default_price > 0 && <span className="badge category">💰 {article.default_price.toFixed(2)} zł</span>}
+                      {article.default_price > 0 && <span className="badge category">💰 {formatMoney(article.default_price)}</span>}
                     </div>
                   </div>
                   <div className="task-actions">

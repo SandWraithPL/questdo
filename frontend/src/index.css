@@ -1061,6 +1061,42 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   }
 }
 
+@media (max-width: 600px) {
+  .rate-input-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  
+  .rate-input-group input {
+    width: 100%;
+    min-width: auto;
+  }
+  
+  .rate-dropdown {
+    width: 100% !important;
+    min-width: auto !important;
+    max-width: none !important;
+  }
+  
+  .rate-save-btn {
+    width: 100%;
+  }
+  
+  .earnings-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .form-row-inline {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+  
+  .form-row-inline .input-small {
+    width: 100%;
+  }
+}
+
 .import-export-buttons {
   display: flex;
   gap: 8px;
