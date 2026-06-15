@@ -1520,6 +1520,7 @@ export default function App() {
   const [workEntries, setWorkEntries] = useState([]);
   const [workSummary, setWorkSummary] = useState(null);
   const [familyId, setFamilyId] = useState(null);
+  const [pwaHintDismissed, setPwaHintDismissed] = useState(readPwaHintDismissed);
   const apiQueue = useRef([]);
   const isProcessingQueue = useRef(false);
 
@@ -2093,7 +2094,7 @@ export default function App() {
       <PwaInstallBanner
         standalonePwa={standalonePwa}
         onShowToast={showToast}
-        onDismissForever={() => {}}
+        onDismissForever={() => setPwaHintDismissed(true)} 
       />
       <PlayerSummary user={user} progress={progress} />
       <AppTabs activeTab={mainTab} onTabChange={setMainTab} />
