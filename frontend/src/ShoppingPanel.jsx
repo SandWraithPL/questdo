@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import axios from "axios";
 import FamilyPanel from "./FamilyPanel";
 import { applyUserFromResponse } from "./helpers";
+import { useEditItem } from "./hooks/useEditItem";
 
 const SHOPPING_CATEGORIES = [
   { value: "veggies", emoji: "🥦", label: "Warzywa" },
@@ -25,10 +26,6 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
   const [category, setCategory] = useState("other");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
-  const [editingId, setEditingId] = useState(null);
-  const [editName, setEditName] = useState("");
-  const [editQty, setEditQty] = useState("");
-  const [editCat, setEditCat] = useState("other");
   const [showHistory, setShowHistory] = useState(false);
   const [history, setHistory] = useState([]);
   const [selectedHistory, setSelectedHistory] = useState(null);
@@ -40,6 +37,27 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
   const [showFamilyToggle, setShowFamilyToggle] = useState(false);
   const [selectedMode, setSelectedMode] = useState("individual");
   const [defaultCategory, setDefaultCategory] = useState("other");
+
+  const saveItem = async (id, form) => {
+    if (!form.name?.trim()) return;
+    enqueueRequest(async () => {
+      try {
+        const res = await axios.patch(`${api}/shopping/${id}`, {
+          name: form.name,
+          quantity: form.qty,
+          category: form.cat,
+          price: parseFloat(form.price) || 0,
+        }, { headers });
+        setItems((prev) => prev.map((i) => (i.id === id ? res.data.item : i)));
+        await loadSummary();
+        onToast("✅ Zapisano");
+      } catch (err) {
+        onToast(err.response?.data?.detail || "Błąd zapisu");
+      }
+    });
+  };
+
+  const { editingId, editForm, setEditForm, startEdit, cancelEdit, saveEdit } = useEditItem(saveItem);
 
   const boughtCount = items.filter((i) => i.bought).length;
   const leftCount = items.length - boughtCount;
@@ -55,7 +73,6 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     }
     return list;
   }, [items, filter, search]);
-
 
   const loadSummary = async () => {
     try {
@@ -173,32 +190,12 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     });
   };
 
-  const startEdit = (item) => {
-    setEditingId(item.id);
-    setEditName(item.name);
-    setEditQty(item.quantity || "");
-    setEditCat(item.category || "other");
-    setEditPrice(item.price ? String(item.price) : "");
-  };
-
-  const saveEdit = (item) => {
-    if (!editName.trim()) return;
-    enqueueRequest(async () => {
-      try {
-        const res = await axios.patch(`${api}/shopping/${item.id}`, {
-          name: editName,
-          quantity: editQty,
-          category: editCat,
-          price: parseFloat(editPrice) || 0,
-        }, { headers });
-        setItems((prev) => prev.map((i) => (i.id === item.id ? res.data.item : i)));
-        setEditingId(null);
-        setEditPrice("");
-        await loadSummary();
-        onToast("✅ Zapisano");
-      } catch (err) {
-        onToast(err.response?.data?.detail || "Błąd zapisu");
-      }
+  const startEditItem = (item) => {
+    startEdit(item, {
+      name: item.name,
+      qty: item.quantity || "",
+      cat: item.category || "other",
+      price: item.price ? String(item.price) : "",
     });
   };
 
@@ -214,8 +211,6 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
       }
     });
   };
-
-
 
   const loadHistory = async () => {
     try {
@@ -235,27 +230,6 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
       setSelectedHistory(historyId);
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd ładowania szczegółów");
-    }
-  };
-
-  const saveToHistory = async () => {
-    const boughtItems = items.filter((i) => i.bought);
-    if (boughtItems.length === 0) {
-      onToast("Brak kupionych produktów do zapisania");
-      return;
-    }
-    
-    try {
-      const itemsJson = JSON.stringify(boughtItems);
-      await axios.post(`${api}/shopping/history`, {
-        items_json: itemsJson,
-        total_items: boughtItems.length,
-        total_spent: 0,
-        notes: ""
-      }, { headers });
-      onToast("💾 Zapisano listę do historii");
-    } catch (err) {
-      onToast(err.response?.data?.detail || "Błąd zapisu historii");
     }
   };
 
@@ -356,7 +330,6 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
       onToast(err.response?.data?.detail || "Błąd zapisu historii");
     }
   };
-
 
   return (
     <div className="module-panel shopping-panel">
@@ -504,16 +477,16 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
               </button>
               {editing ? (
                 <div className="edit-mode">
-                  <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nazwa" />
-                  <input className="input-small" value={editQty} onChange={(e) => setEditQty(e.target.value)} placeholder="Ilość" />
-                  <input className="input-small" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} placeholder="Cena (zł)" type="number" step="0.01" min="0" />
-                  <select value={editCat} onChange={(e) => setEditCat(e.target.value)}>
+                  <input value={editForm.name || ""} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nazwa" />
+                  <input className="input-small" value={editForm.qty || ""} onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })} placeholder="Ilość" />
+                  <input className="input-small" value={editForm.price || ""} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} placeholder="Cena (zł)" type="number" step="0.01" min="0" />
+                  <select value={editForm.cat || "other"} onChange={(e) => setEditForm({ ...editForm, cat: e.target.value })}>
                     {SHOPPING_CATEGORIES.map((c) => (
                       <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
                     ))}
                   </select>
                   <button type="button" className="save-mini" onClick={() => saveEdit(item)}>✓</button>
-                  <button type="button" className="cancel-mini" onClick={() => { setEditingId(null); setEditPrice(""); }}>✗</button>
+                  <button type="button" className="cancel-mini" onClick={cancelEdit}>✗</button>
                 </div>
               ) : (
                 <>
@@ -527,7 +500,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
                     </div>
                   </div>
                   <div className="task-actions">
-                    <button type="button" className="icon-btn" onClick={() => startEdit(item)} title="Edytuj">✏️</button>
+                    <button type="button" className="icon-btn" onClick={() => startEditItem(item)} title="Edytuj">✏️</button>
                     <button type="button" className="icon-btn delete" onClick={() => deleteItem(item)} title="Usuń">🗑️</button>
                   </div>
                 </>
@@ -536,7 +509,6 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
           );
         })}
       </div>
-
 
       {boughtCount > 0 && (
         <button type="button" className="danger-btn" onClick={clearBought}>🗑️ Usuń kupione ({boughtCount})</button>
@@ -559,7 +531,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
                     <span className="history-count">{h.total_items} produktów</span>
                   </div>
                   <div className="history-actions">
-                    <button type="button" className="icon-btn" onClick={() => loadFromHistory(h.id)} title="Wczytaj listę">�</button>
+                    <button type="button" className="icon-btn" onClick={() => loadFromHistory(h.id)} title="Wczytaj listę">📋</button>
                     <button type="button" className="icon-btn delete" onClick={() => deleteHistory(h.id)} title="Usuń">🗑️</button>
                   </div>
                 </div>

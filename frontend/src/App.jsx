@@ -9,6 +9,7 @@ import SchedulePanel from "./SchedulePanel";
 import EarningsPanel from "./EarningsPanel";
 import CategoriesPanel from "./CategoriesPanel";
 import FamilyPanel from "./FamilyPanel";
+import { useEditItem } from "./hooks/useEditItem";
 
 const API = "https://questdo-backend.onrender.com";
 
@@ -204,8 +205,6 @@ function countCompletedTasks(tasks) {
   return tasks.filter((t) => t.completed && t.exp_awarded).length;
 }
 
-
-
 function Toast({ toasts, onRemove }) {
   return (
     <div className="toast-stack">
@@ -240,13 +239,6 @@ function sortTasks(list) {
     return new Date(a.due_date) - new Date(b.due_date);
   });
 }
-
-
-
-
-
-
-
 
 function getTaskCheckState(task) {
   if (!task.completed) {
@@ -1040,12 +1032,31 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
-function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToast, onUncheck, loadingTaskIds, deletingTaskIds, editingTaskIds }) {
+function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToast, onUncheck, loadingTaskIds, deletingTaskIds }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [editingId, setEditingId] = useState(null);
-  const [editForm, setEditForm] = useState({});
+
+  const saveItem = async (id, form) => {
+    if (!form.title?.trim()) { onToast("Tytuł jest wymagany"); return; }
+    try {
+      const task = tasks.find(t => t.id === id);
+      const payload = {
+        title: form.title.trim(),
+        description: form.description,
+        important: !!form.important,
+        reminder_offset_days: parseReminderValue(form.reminder_offset_days),
+        task_type: form.task_type,
+        event_category: form.event_category || null,
+        recurring_pattern: form.recurring_pattern || null,
+        recurring_end_date: form.recurring_end_date || null,
+        ...(task?.exp_awarded ? {} : { difficulty: form.difficulty, category: form.category, due_date: form.due_date }),
+      };
+      await onSave(id, payload);
+    } catch (e) { onToast(e.response?.data?.detail || "Błąd zapisu"); }
+  };
+
+  const { editingId, editForm, setEditForm, startEdit, cancelEdit, saveEdit } = useEditItem(saveItem);
 
   const handleToggleClick = (task) => {
     if (task.completed) {
@@ -1057,6 +1068,23 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToas
     } else {
       onToggle(task);
     }
+  };
+
+  const startEditItem = (task) => {
+    if (task.completed) return;
+    startEdit(task, {
+      title: task.title,
+      description: task.description || "",
+      difficulty: task.difficulty,
+      category: task.category,
+      due_date: task.due_date,
+      important: !!task.important,
+      reminder_offset_days: task.reminder_offset_days ?? "",
+      task_type: task.task_type || "quest",
+      event_category: task.event_category || "",
+      recurring_pattern: task.recurring_pattern || "",
+      recurring_end_date: task.recurring_end_date || "",
+    });
   };
 
   const dateStr = toDateStr(selectedDate);
@@ -1079,43 +1107,6 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToas
   const doneCount = allDay.filter((t) => t.completed).length;
   const percent = allDay.length ? Math.round((doneCount / allDay.length) * 100) : 0;
 
-  const startEdit = (task) => {
-    if (task.completed) return;
-    setEditingId(task.id);
-    setEditForm({
-      title: task.title,
-      description: task.description || "",
-      difficulty: task.difficulty,
-      category: task.category,
-      due_date: task.due_date,
-      important: !!task.important,
-      reminder_offset_days: task.reminder_offset_days ?? "",
-      task_type: task.task_type || "quest",
-      event_category: task.event_category || "",
-      recurring_pattern: task.recurring_pattern || "",
-      recurring_end_date: task.recurring_end_date || "",
-    });
-  };
-  const cancelEdit = () => { setEditingId(null); setEditForm({}); };
-  const saveEdit = async (task) => {
-    if (!editForm.title?.trim()) { onToast("Tytuł jest wymagany"); return; }
-    try {
-      const payload = {
-        title: editForm.title.trim(),
-        description: editForm.description,
-        important: !!editForm.important,
-        reminder_offset_days: parseReminderValue(editForm.reminder_offset_days),
-        task_type: editForm.task_type,
-        event_category: editForm.event_category || null,
-        recurring_pattern: editForm.recurring_pattern || null,
-        recurring_end_date: editForm.recurring_end_date || null,
-        ...(task.exp_awarded ? {} : { difficulty: editForm.difficulty, category: editForm.category, due_date: editForm.due_date }),
-      };
-      await onSave(task.id, payload);
-      cancelEdit();
-    } catch (e) { onToast(e.response?.data?.detail || "Błąd zapisu"); }
-  };
-
   return (
     <div className="day-tasks-panel">
       <div className="tasks-header"><h3>Questy · {dateLabel}</h3>
@@ -1132,21 +1123,22 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToas
       {dayTasks.map((task) => {
         const checkState = getTaskCheckState(task);
         const isEvent = task.task_type === "event";
+        const editing = editingId === task.id;
         return (
         <div key={task.id} className={`task-card ${isEvent ? "event" : task.difficulty} ${task.completed ? "done" : ""} ${checkState.showUncheckBadge ? "can-uncheck" : ""}`}>
-          {editingId === task.id ? (
+          {editing ? (
             <div className="edit-mode">
-              <input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} placeholder="Nazwa zadania" />
-              <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} placeholder="Opis" rows="2" />
+              <input value={editForm.title || ""} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} placeholder="Nazwa zadania" />
+              <textarea value={editForm.description || ""} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} placeholder="Opis" rows="2" />
               <select value={editForm.task_type || "quest"} onChange={(e) => setEditForm({ ...editForm, task_type: e.target.value })}>
                 <option value="quest">⚔️ Quest (do wykonania)</option>
                 <option value="event">📅 Wydarzenie (urodziny, notatka)</option>
               </select>
-              {editForm.task_type !== "event" && !task.exp_awarded && (<>
-                <select value={editForm.difficulty} onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}>
+              {editForm.task_type !== "event" && !tasks.find(t => t.id === task.id)?.exp_awarded && (<>
+                <select value={editForm.difficulty || "easy"} onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}>
                   <option value="easy">⚔️ Łatwe (+10 EXP)</option><option value="medium">🗡️ Średnie (+25 EXP)</option><option value="hard">💀 Trudne (+50 EXP)</option>
                 </select>
-                <select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
+                <select value={editForm.category || "Inne"} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
                   {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}
                 </select>
                 <DatePicker value={editForm.due_date || ""} onChange={(due_date) => setEditForm({ ...editForm, due_date })} />
@@ -1163,7 +1155,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToas
                   {editForm.recurring_pattern && (
                     <DatePicker value={editForm.recurring_end_date || ""} onChange={(recurring_end_date) => setEditForm({ ...editForm, recurring_end_date })} label="Data końcowa cyklu (opcjonalne)" />
                   )}
-                  <select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
+                  <select value={editForm.category || "Inne"} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
                     {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}
                   </select>
                   <DatePicker value={editForm.due_date || ""} onChange={(due_date) => setEditForm({ ...editForm, due_date })} />
@@ -1176,7 +1168,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToas
               <select value={editForm.reminder_offset_days ?? ""} onChange={(e) => setEditForm({ ...editForm, reminder_offset_days: e.target.value })}>
                 {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
-              <button type="button" className="save-mini" onClick={() => saveEdit(task)} disabled={editingTaskIds.has(task.id)}>{editingTaskIds.has(task.id) ? "⏳" : "✓"}</button>
+              <button type="button" className="save-mini" onClick={() => saveEdit(task)} disabled={loadingTaskIds.has(task.id)}>{loadingTaskIds.has(task.id) ? "⏳" : "✓"}</button>
               <button type="button" className="cancel-mini" onClick={cancelEdit}>✗</button>
             </div>
           ) : (
@@ -1211,7 +1203,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToas
                 </div>
               </div>
               <div className="task-actions">
-                <button className="icon-btn" onClick={() => startEdit(task)} disabled={editingTaskIds.has(task.id)}>✏️</button>
+                <button className="icon-btn" onClick={() => startEditItem(task)} disabled={loadingTaskIds.has(task.id)}>✏️</button>
                 <button className="task-delete" onClick={() => onDelete(task)} disabled={deletingTaskIds.has(task.id)}>{deletingTaskIds.has(task.id) ? "⏳" : "🗑"}</button>
               </div>
             </>
@@ -1260,12 +1252,7 @@ function AdminPanel({ isOpen, onClose, headers, onRefreshAppData, onShowToast })
     try {
       await axios.post(`${API}/admin/reset-all-progress`, {}, { headers });
       onShowToast("✅ Reset wykonano, dane odświeżone");
-      await onRefreshAppData(); // fetchData
-      // Dodatkowo wymuś odświeżenie konkretnych stanów
-      setHistory([]);
-      setAchievements({ unlocked: [], next: null });
-      setRareDrops(null);
-      setChallenges(null);
+      await onRefreshAppData();
       onClose();
     } catch (err) {
       onShowToast(err.response?.data?.detail || "Błąd resetowania");
@@ -1521,7 +1508,6 @@ export default function App() {
   const [loadingTaskIds, setLoadingTaskIds] = useState(new Set());
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [deletingTaskIds, setDeletingTaskIds] = useState(new Set());
-  const [editingTaskIds, setEditingTaskIds] = useState(new Set());
   const [mainTab, setMainTab] = useState(readMainTab);
   const [scheduleEntries, setScheduleEntries] = useState([]);
   const [shoppingItems, setShoppingItems] = useState([]);
@@ -1553,7 +1539,6 @@ export default function App() {
       setToasts((prev) => prev.filter((t) => t.id !== id));
     }, 3000);
   };
-
 
   const enableNotifications = async () => {
     const permission = await ensureNotificationPermission();
@@ -1657,12 +1642,11 @@ export default function App() {
       
       setUser(userRes.data);
       
-      // Sort tasks: uncompleted on top (by date ascending), completed at bottom (by date ascending)
       const sortedTasks = [...tasksRes.data].sort((a, b) => {
         if (a.completed !== b.completed) {
-          return a.completed ? 1 : -1; // uncompleted first
+          return a.completed ? 1 : -1;
         }
-        return new Date(a.due_date) - new Date(b.due_date); // by date ascending
+        return new Date(a.due_date) - new Date(b.due_date);
       });
       setTasks(sortedTasks);
       
@@ -1684,7 +1668,6 @@ export default function App() {
       setToken(null);
     }
   };
-
 
   useEffect(() => {
     let cleanup;
@@ -1715,10 +1698,8 @@ export default function App() {
       }
     };
     
-    // Ping co 5 minut
     const interval = setInterval(pingBackend, 300000);
     
-    // Ping przy powrocie do karty
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         pingBackend();
@@ -1734,7 +1715,7 @@ export default function App() {
 
   const addTask = async () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
-    if (isAddingTask) return; // Prevent multiple clicks
+    if (isAddingTask) return;
 
     setIsAddingTask(true);
 
@@ -1752,7 +1733,6 @@ export default function App() {
       recurring_end_date: taskType === "event" ? recurringEndDate || null : null,
     };
 
-    // Clear form
     setTitle("");
     setDesc("");
     setDifficulty("easy");
@@ -1764,11 +1744,10 @@ export default function App() {
     setRecurringEndDate("");
     setShowAddTask(false);
 
-    // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
         await axios.post(`${API}/tasks`, apiPayload, { headers });
-        await fetchData(); // Refresh ALL data from API
+        await fetchData();
         showToast("✅ Zadanie dodane");
       } catch (err) {
         showToast(err.response?.data?.detail || "Błąd dodawania – spróbuj ponownie");
@@ -1780,17 +1759,15 @@ export default function App() {
 
   const toggleTask = async (task) => {
     if (task.completed) return;
-    if (loadingTaskIds.has(task.id)) return; // Prevent multiple clicks
+    if (loadingTaskIds.has(task.id)) return;
 
     setLoadingTaskIds(prev => new Set([...prev, task.id]));
 
-    // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
         const response = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
         const data = response.data;
 
-        // Update user with data from response
         setUser(prev => ({
           ...prev,
           exp: data.exp,
@@ -1801,14 +1778,12 @@ export default function App() {
           next_level_title: data.next_level_title,
         }));
 
-        // Update tasks - replace the changed task
         setTasks(prev => {
           const sorted = [...prev];
           const idx = sorted.findIndex(t => t.id === data.task.id);
           if (idx !== -1) {
             sorted[idx] = data.task;
           }
-          // Sort: uncompleted on top (by date ascending), completed at bottom (by date ascending)
           return sorted.sort((a, b) => {
             if (a.completed !== b.completed) {
               return a.completed ? 1 : -1;
@@ -1817,7 +1792,6 @@ export default function App() {
           });
         });
 
-        // Add new achievements
         if (data.new_achievements && data.new_achievements.length > 0) {
           setAchievements(prev => ({
             ...prev,
@@ -1825,7 +1799,6 @@ export default function App() {
           }));
         }
 
-        // Add earned drop to rareDrops
         if (data.earned_drop) {
           setRareDrops(prev => {
             if (!prev) return { total_items: 1, items: [data.earned_drop] };
@@ -1852,30 +1825,25 @@ export default function App() {
         const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
         showToast(`✅ Quest ukończony! +${expPreview.amount} EXP${expToastSuffix(timing)}`);
 
-        // Show toasts for new achievements
         const newAchievements = data.new_achievements || [];
         newAchievements.forEach((ach) => {
           showToast(`🏆 Osiągnięcie: ${ach.icon} ${ach.title}`);
         });
 
-        // Show toasts for new exclusive achievements
         const newExclusiveAchievements = data.new_exclusive_achievements || [];
         newExclusiveAchievements.forEach((ach) => {
           showToast(`⭐ Osiągnięcie ekskluzywne: ${ach.icon} ${ach.title}`);
         });
 
-        // Show toast for earned rare drop
         if (data.earned_drop) {
           const drop = data.earned_drop;
           showToast(`💎 Znalazłeś: ${drop.icon} ${drop.name} (${drop.rarity})!`);
         }
 
-        // Show toast for daily bonus
         if (data.daily_bonus > 0) {
           showToast(`🎁 Bonus dzienny: +${data.daily_bonus} EXP`);
         }
 
-        // Refresh challenges
         const challengesRes = await axios.get(`${API}/challenges`, { headers });
         setChallenges(challengesRes.data);
       } catch (err) {
@@ -1893,24 +1861,14 @@ export default function App() {
   const saveTask = async (id, updates) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
-    if (editingTaskIds.has(id)) return; // Prevent multiple clicks
 
-    setEditingTaskIds(prev => new Set([...prev, id]));
-
-    // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
         await axios.patch(`${API}/tasks/${id}`, updates, { headers });
-        await fetchData(); // Refresh ALL data from API
+        await fetchData();
         showToast("✅ Zadanie zapisane");
       } catch (err) {
         showToast(err.response?.data?.detail || "Błąd zapisu – spróbuj ponownie");
-      } finally {
-        setEditingTaskIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(id);
-          return newSet;
-        });
       }
     });
   };
@@ -1920,17 +1878,15 @@ export default function App() {
       showToast("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
       return;
     }
-    if (loadingTaskIds.has(task.id)) return; // Prevent multiple clicks
+    if (loadingTaskIds.has(task.id)) return;
 
     setLoadingTaskIds(prev => new Set([...prev, task.id]));
 
-    // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
         const response = await axios.patch(`${API}/tasks/${task.id}`, { completed: false }, { headers });
         const data = response.data;
 
-        // Update user with data from response
         setUser(prev => ({
           ...prev,
           exp: data.exp,
@@ -1941,14 +1897,12 @@ export default function App() {
           next_level_title: data.next_level_title,
         }));
 
-        // Update tasks - replace the changed task
         setTasks(prev => {
           const sorted = [...prev];
           const idx = sorted.findIndex(t => t.id === data.task.id);
           if (idx !== -1) {
             sorted[idx] = data.task;
           }
-          // Sort: uncompleted on top (by date ascending), completed at bottom (by date ascending)
           return sorted.sort((a, b) => {
             if (a.completed !== b.completed) {
               return a.completed ? 1 : -1;
@@ -1957,7 +1911,6 @@ export default function App() {
           });
         });
 
-        // Remove revoked achievements
         if (data.revoked_achievements && data.revoked_achievements.length > 0) {
           setAchievements(prev => ({
             ...prev,
@@ -1967,7 +1920,6 @@ export default function App() {
           }));
         }
 
-        // Handle earned drop if present (unlikely for uncheck, but handle if exists)
         if (data.earned_drop) {
           setRareDrops(prev => {
             if (!prev) return { total_items: 1, items: [data.earned_drop] };
@@ -1992,7 +1944,6 @@ export default function App() {
 
         showToast("🔄 Cofnięto ukończenie zadania");
 
-        // Refresh challenges
         const challengesRes = await axios.get(`${API}/challenges`, { headers });
         setChallenges(challengesRes.data);
       } catch (err) {
@@ -2024,17 +1975,15 @@ export default function App() {
   const deleteTask = async (task) => {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
-    if (deletingTaskIds.has(task.id)) return; // Prevent multiple clicks
+    if (deletingTaskIds.has(task.id)) return;
 
     setDeletingTaskIds(prev => new Set([...prev, task.id]));
 
-    // Add to queue (no optimistic updates)
     enqueueRequest(async () => {
       try {
         const response = await axios.delete(`${API}/tasks/${task.id}`, { headers });
         const data = response.data;
 
-        // Update user with data from response
         setUser(prev => ({
           ...prev,
           exp: data.exp,
@@ -2044,7 +1993,6 @@ export default function App() {
           next_level_title: data.next_level_title,
         }));
 
-        // Remove task from local list
         setTasks(prev => prev.filter(t => t.id !== task.id));
 
         if (data.achievements) setAchievements(data.achievements);
@@ -2113,7 +2061,7 @@ export default function App() {
         <>
       <ChallengesBar challenges={challenges} />
       <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} editingTaskIds={editingTaskIds} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">
