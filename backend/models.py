@@ -13,6 +13,8 @@ class User(Base):
     last_streak_date = Column(Date, nullable=True)
     progress_reset_at = Column(DateTime, nullable=True)
     exp_at_progress_reset = Column(Integer, default=0)
+    default_category = Column(String, default="other")
+    default_hourly_rate = Column(Float, nullable=True)
     tasks = relationship("Task", back_populates="owner")
     achievements = relationship("UserAchievement", back_populates="user")
 

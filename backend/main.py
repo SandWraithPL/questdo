@@ -114,6 +114,14 @@ def migrate_schema():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE users ADD COLUMN exp_at_progress_reset INTEGER DEFAULT 0"))
             print("Migracja: dodano kolumnę users.exp_at_progress_reset")
+        if "default_category" not in user_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN default_category VARCHAR DEFAULT 'other'"))
+            print("Migracja: dodano kolumnę users.default_category")
+        if "default_hourly_rate" not in user_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE users ADD COLUMN default_hourly_rate FLOAT"))
+            print("Migracja: dodano kolumnę users.default_hourly_rate")
 
     if "rare_drops" not in insp.get_table_names():
         models.RareDrop.__table__.create(bind=engine)
@@ -2871,6 +2879,40 @@ def delete_hourly_rate(rate_id: int, current_user: models.User = Depends(get_cur
     return {"message": "Usunięto stawkę"}
 
 
+class DefaultCategoryUpdate(BaseModel):
+    category: str
+
+
+class DefaultHourlyRateUpdate(BaseModel):
+    rate: float
+
+
+@app.get("/settings/default-category")
+def get_default_category(current_user: models.User = Depends(get_current_user)):
+    return {"category": current_user.default_category or "other"}
+
+
+@app.post("/settings/default-category")
+def update_default_category(data: DefaultCategoryUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    current_user.default_category = data.category
+    db.commit()
+    return {"category": current_user.default_category}
+
+
+@app.get("/settings/default-hourly-rate")
+def get_default_hourly_rate(current_user: models.User = Depends(get_current_user)):
+    return {"rate": current_user.default_hourly_rate}
+
+
+@app.post("/settings/default-hourly-rate")
+def update_default_hourly_rate(data: DefaultHourlyRateUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if data.rate <= 0:
+        raise HTTPException(status_code=400, detail="Stawka musi być większa od 0")
+    current_user.default_hourly_rate = data.rate
+    db.commit()
+    return {"rate": current_user.default_hourly_rate}
+
+
 # === FAMILY ENDPOINTS ===
 @app.get("/families")
 def list_families(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -3034,6 +3076,10 @@ def accept_family_invitation(invitation_id: int, current_user: models.User = Dep
     if existing:
         raise HTTPException(status_code=400, detail="Jesteś już członkiem rodziny")
     
+    # Get family founder to inherit default settings
+    family = db.query(models.Family).filter(models.Family.id == invitation.family_id).first()
+    founder = db.query(models.User).filter(models.User.id == family.created_by).first()
+    
     # Add user to family
     member = models.FamilyMember(
         family_id=invitation.family_id,
@@ -3041,6 +3087,12 @@ def accept_family_invitation(invitation_id: int, current_user: models.User = Dep
         role="member"
     )
     db.add(member)
+    
+    # Inherit default settings from founder if user doesn't have them set
+    if founder and current_user.default_category == "other" and founder.default_category != "other":
+        current_user.default_category = founder.default_category
+    if founder and current_user.default_hourly_rate is None and founder.default_hourly_rate is not None:
+        current_user.default_hourly_rate = founder.default_hourly_rate
     
     # Update invitation status
     invitation.status = "accepted"

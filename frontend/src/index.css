@@ -1178,20 +1178,24 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   flex: 1;
 }
 
-.rate-save-btn, .rate-select-btn {
-  padding: 4px;
-  border-radius: 6px;
+.rate-save-btn, .rate-select-btn, .rate-default-btn {
+  padding: 2px 6px;
+  border-radius: 4px;
   border: none;
   background: transparent;
   color: #fff;
   cursor: pointer;
-  font-size: 1.1rem;
+  font-size: 0.9rem;
   transition: background 0.2s, transform 0.15s;
 }
 
-.rate-save-btn:hover, .rate-select-btn:hover {
+.rate-save-btn:hover, .rate-select-btn:hover, .rate-default-btn:hover {
   background: #2a2a3e;
   transform: scale(1.08);
+}
+
+.rate-default-btn {
+  color: #ff8906;
 }
 
 .saved-rates-list {

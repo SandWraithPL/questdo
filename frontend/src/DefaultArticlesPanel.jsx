@@ -17,6 +17,7 @@ export default function DefaultArticlesPanel({ api, headers, onToast }) {
   const [editQty, setEditQty] = useState("");
   const [editCat, setEditCat] = useState("other");
   const [editPrice, setEditPrice] = useState("");
+  const [defaultCategory, setDefaultCategory] = useState("other");
 
   const loadArticles = async () => {
     try {
@@ -29,7 +30,17 @@ export default function DefaultArticlesPanel({ api, headers, onToast }) {
 
   useEffect(() => {
     loadArticles();
+    loadDefaultCategory();
   }, []);
+
+  const loadDefaultCategory = async () => {
+    try {
+      const res = await axios.get(`${api}/settings/default-category`, { headers });
+      setDefaultCategory(res.data.category || "other");
+    } catch {
+      /* ignore */
+    }
+  };
 
   const addArticle = async () => {
     if (!name.trim()) {
@@ -93,8 +104,30 @@ export default function DefaultArticlesPanel({ api, headers, onToast }) {
     }
   };
 
+  const saveDefaultCategory = async () => {
+    try {
+      await axios.post(`${api}/settings/default-category`, { category }, { headers });
+      setDefaultCategory(category);
+      onToast("💾 Zapisano domyślną kategorię");
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd zapisu domyślnej kategorii");
+    }
+  };
+
   return (
     <div className="module-panel">
+      <div className="add-task">
+        <h3>⚙️ Ustawienia domyślne</h3>
+        <div className="form-row-inline">
+          <label style={{color: '#aaa', fontSize: '0.9rem', minWidth: '120px'}}>Domyślna kategoria:</label>
+          <select value={defaultCategory} onChange={(e) => setDefaultCategory(e.target.value)} style={{flex: 1}}>
+            {SHOPPING_CATEGORIES.map((c) => (
+              <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
+            ))}
+          </select>
+          <button type="button" className="icon-btn" onClick={saveDefaultCategory} title="Zapisz domyślną kategorię" style={{padding: '4px 8px', fontSize: '0.9rem'}}>💾</button>
+        </div>
+      </div>
       <div className="add-task">
         <h3>➕ Dodaj artykuł domyślny</h3>
         <div className="form-row-inline">

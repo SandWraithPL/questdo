@@ -37,6 +37,8 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
   const [editPrice, setEditPrice] = useState("");
   const [summary, setSummary] = useState(null);
   const [showFamilyToggle, setShowFamilyToggle] = useState(false);
+  const [selectedMode, setSelectedMode] = useState("individual");
+  const [defaultCategory, setDefaultCategory] = useState("other");
 
   const boughtCount = items.filter((i) => i.bought).length;
   const leftCount = items.length - boughtCount;
@@ -94,6 +96,24 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     loadShoppingItems();
   }, [familyId]);
 
+  useEffect(() => {
+    setSelectedMode(familyId ? "family" : "individual");
+  }, [familyId]);
+
+  useEffect(() => {
+    loadDefaultCategory();
+  }, []);
+
+  const loadDefaultCategory = async () => {
+    try {
+      const res = await axios.get(`${api}/settings/default-category`, { headers });
+      setDefaultCategory(res.data.category || "other");
+      setCategory(res.data.category || "other");
+    } catch {
+      /* ignore */
+    }
+  };
+
   // Poll for real-time synchronization when family mode is active
   useEffect(() => {
     if (!familyId) return;
@@ -123,7 +143,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
         setItems((prev) => [res.data, ...prev]);
         setName("");
         setQty("");
-        setCategory("other");
+        setCategory(defaultCategory);
         setEditPrice("");
         setShowSuggestions(false);
         setSuggestions([]);
@@ -355,15 +375,22 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
         <div className="family-toggle">
           <button 
             type="button" 
-            className={`family-toggle-btn ${!familyId ? "active" : ""}`}
-            onClick={() => onFamilyChange?.(null)}
+            className={`family-toggle-btn ${selectedMode === "individual" ? "active" : ""}`}
+            onClick={() => {
+              setSelectedMode("individual");
+              onFamilyChange?.(null);
+              setShowFamilyToggle(false);
+            }}
           >
             👤 Indywidualna
           </button>
           <button 
             type="button" 
-            className={`family-toggle-btn ${familyId ? "active" : ""}`}
-            onClick={() => setShowFamilyToggle(!showFamilyToggle)}
+            className={`family-toggle-btn ${selectedMode === "family" ? "active" : ""}`}
+            onClick={() => {
+              setSelectedMode("family");
+              setShowFamilyToggle(true);
+            }}
           >
             👨‍👩‍👧‍👦 Rodzinna
           </button>

@@ -34,6 +34,7 @@ export default function EarningsPanel({
   const [taxPercent, setTaxPercent] = useState("12");
   const [savedRates, setSavedRates] = useState([]);
   const [showRateSelector, setShowRateSelector] = useState(false);
+  const [defaultHourlyRate, setDefaultHourlyRate] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editDate, setEditDate] = useState("");
   const [editStartTime, setEditStartTime] = useState("");
@@ -52,7 +53,17 @@ export default function EarningsPanel({
 
   useEffect(() => {
     loadSavedRates();
+    loadDefaultHourlyRate();
   }, []);
+
+  const loadDefaultHourlyRate = async () => {
+    try {
+      const res = await axios.get(`${api}/settings/default-hourly-rate`, { headers });
+      setDefaultHourlyRate(res.data.rate ? String(res.data.rate) : "");
+    } catch {
+      /* ignore */
+    }
+  };
 
   const dayTotal = dayEntries.filter((e) => e.completed).reduce((sum, e) => sum + (e.net || 0), 0);
   const monthKey = selectedStr.slice(0, 7);
@@ -90,6 +101,21 @@ export default function EarningsPanel({
       onToast("💾 Zapisano stawkę");
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd zapisu stawki");
+    }
+  };
+
+  const saveAsDefaultRate = async () => {
+    const rate = parseFloat(String(hourlyRate).replace(",", "."));
+    if (!rate || rate <= 0) {
+      onToast("Podaj stawkę godzinową");
+      return;
+    }
+    try {
+      await axios.post(`${api}/settings/default-hourly-rate`, { rate }, { headers });
+      setDefaultHourlyRate(String(rate));
+      onToast("💾 Zapisano jako domyślną stawkę");
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd zapisu domyślnej stawki");
     }
   };
 
@@ -140,7 +166,7 @@ export default function EarningsPanel({
         setEntries((prev) => [res.data, ...prev]);
         await refreshSummary();
         setShowAdd(false);
-        setHourlyRate("");
+        setHourlyRate(defaultHourlyRate || "");
         setNotes("");
         onToast("✅ Dodano wpis pracy");
       } catch (err) {
@@ -303,7 +329,12 @@ export default function EarningsPanel({
       </div>
 
       {!showAdd ? (
-        <button type="button" className="add-task-btn" onClick={() => setShowAdd(true)}>+ Dodaj pracę na ten dzień</button>
+        <button type="button" className="add-task-btn" onClick={() => {
+          setShowAdd(true);
+          if (defaultHourlyRate && !hourlyRate) {
+            setHourlyRate(defaultHourlyRate);
+          }
+        }}>+ Dodaj pracę na ten dzień</button>
       ) : (
         <div className="add-task">
           <h3>+ Nowy wpis pracy ({selectedStr})</h3>
@@ -312,9 +343,10 @@ export default function EarningsPanel({
             <TimePicker value={endTime} onChange={setEndTime} label="Do:" />
           </div>
           <div className="rate-input-group">
-            <input type="number" min="0" step="0.01" placeholder="Stawka za godzinę (zł)" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} />
+            <input type="number" min="0" step="0.01" placeholder="Stawka za godzinę (zł) *" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} />
             <button type="button" className="icon-btn rate-save-btn" onClick={saveCurrentRate} title="Zapisz stawkę">💾</button>
             <button type="button" className="icon-btn rate-select-btn" onClick={() => setShowRateSelector(!showRateSelector)} title="Wybierz zapisaną stawkę">📋</button>
+            <button type="button" className="icon-btn rate-default-btn" onClick={saveAsDefaultRate} title="Ustaw jako domyślną">⭐</button>
           </div>
           {showRateSelector && savedRates.length > 0 && (
             <div className="saved-rates-list">
