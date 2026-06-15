@@ -162,6 +162,10 @@ def migrate_schema():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE shopping_items ADD COLUMN price FLOAT DEFAULT 0.0"))
             print("Migracja: dodano kolumnę shopping_items.price")
+        if "family_id" not in shopping_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE shopping_items ADD COLUMN family_id INTEGER REFERENCES families(id)"))
+            print("Migracja: dodano kolumnę shopping_items.family_id")
 
     if "shopping_history" in insp.get_table_names():
         history_cols = {c["name"] for c in insp.get_columns("shopping_history")}
@@ -169,6 +173,20 @@ def migrate_schema():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE shopping_history ADD COLUMN is_template BOOLEAN DEFAULT FALSE"))
             print("Migracja: dodano kolumnę shopping_history.is_template")
+        if "family_id" not in history_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE shopping_history ADD COLUMN family_id INTEGER REFERENCES families(id)"))
+            print("Migracja: dodano kolumnę shopping_history.family_id")
+
+    if "families" not in insp.get_table_names():
+        models.Family.__table__.create(bind=engine)
+        print("Migracja: utworzono tabelę families")
+    if "family_members" not in insp.get_table_names():
+        models.FamilyMember.__table__.create(bind=engine)
+        print("Migracja: utworzono tabelę family_members")
+    if "family_invitations" not in insp.get_table_names():
+        models.FamilyInvitation.__table__.create(bind=engine)
+        print("Migracja: utworzono tabelę family_invitations")
 
     db = next(get_db())
     rare_drop_count = db.query(models.RareDrop).count()
@@ -826,6 +844,8 @@ class ShoppingCreate(BaseModel):
     name: str
     quantity: Optional[str] = ""
     category: Optional[str] = "other"
+    family_id: Optional[int] = None
+    price: Optional[float] = 0.0
 
 
 class ShoppingUpdate(BaseModel):
@@ -855,6 +875,18 @@ class WorkUpdate(BaseModel):
     tax_enabled: Optional[bool] = None
     tax_percent: Optional[float] = None
     completed: Optional[bool] = None
+
+
+class FamilyCreate(BaseModel):
+    name: str
+
+
+class FamilyInvite(BaseModel):
+    username: str
+
+
+class FamilyUpdate(BaseModel):
+    name: Optional[str] = None
 
 
 def validate_schedule_payload(data: ScheduleCreate | ScheduleUpdate, is_create: bool = False) -> None:
@@ -1989,10 +2021,24 @@ def delete_schedule(entry_id: int, current_user: models.User = Depends(get_curre
 
 
 @app.get("/shopping")
-def list_shopping(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    items = db.query(models.ShoppingItem).filter(
-        models.ShoppingItem.owner_id == current_user.id
-    ).order_by(models.ShoppingItem.bought, models.ShoppingItem.id.desc()).all()
+def list_shopping(family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if family_id is not None:
+        # Check if user is member of the family
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie jesteś członkiem tej rodziny")
+        
+        items = db.query(models.ShoppingItem).filter(
+            models.ShoppingItem.family_id == family_id
+        ).order_by(models.ShoppingItem.bought, models.ShoppingItem.id.desc()).all()
+    else:
+        items = db.query(models.ShoppingItem).filter(
+            models.ShoppingItem.owner_id == current_user.id,
+            models.ShoppingItem.family_id.is_(None)
+        ).order_by(models.ShoppingItem.bought, models.ShoppingItem.id.desc()).all()
     return [lm.shopping_to_dict(i) for i in items]
 
 
@@ -2001,12 +2047,25 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
     name = (item.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Nazwa produktu jest wymagana")
+    
+    family_id = item.family_id
+    if family_id is not None:
+        # Check if user is member of the family
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie jesteś członkiem tej rodziny")
+    
     enc = lm.encrypt_shopping_fields(name, item.quantity)
     row = models.ShoppingItem(
         owner_id=current_user.id,
+        family_id=family_id,
         name=enc["name"],
         quantity=enc["quantity"],
         category=validate_shopping_category(item.category or "other"),
+        price=max(0.0, float(item.price or 0.0))
     )
     db.add(row)
     db.commit()
@@ -2017,11 +2076,21 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
 @app.patch("/shopping/{item_id}")
 def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     row = db.query(models.ShoppingItem).filter(
-        models.ShoppingItem.id == item_id,
-        models.ShoppingItem.owner_id == current_user.id,
+        models.ShoppingItem.id == item_id
     ).first()
     if not row:
         raise HTTPException(status_code=404, detail="Nie znaleziono produktu")
+    
+    # Check if user has access to this item (either owner or family member)
+    if row.family_id is not None:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == row.family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
+    elif row.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
     exp_gained = 0
     level_ups = []
     was_bought = row.bought
@@ -2061,11 +2130,21 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
 @app.delete("/shopping/{item_id}")
 def delete_shopping(item_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     row = db.query(models.ShoppingItem).filter(
-        models.ShoppingItem.id == item_id,
-        models.ShoppingItem.owner_id == current_user.id,
+        models.ShoppingItem.id == item_id
     ).first()
     if not row:
         raise HTTPException(status_code=404, detail="Nie znaleziono produktu")
+    
+    # Check if user has access to this item (either owner or family member)
+    if row.family_id is not None:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == row.family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
+    elif row.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
     if row.exp_awarded:
         current_user.exp = max(0, current_user.exp - lm.SHOPPING_EXP)
     db.delete(row)
@@ -2389,10 +2468,24 @@ class DefaultArticleUpdate(BaseModel):
     default_price: Optional[float] = None
 
 @app.get("/shopping/history")
-def get_shopping_history(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    history = db.query(models.ShoppingHistory).filter(
-        models.ShoppingHistory.owner_id == current_user.id
-    ).order_by(models.ShoppingHistory.completed_at.desc()).all()
+def get_shopping_history(family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if family_id is not None:
+        # Check if user is member of the family
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie jesteś członkiem tej rodziny")
+        
+        history = db.query(models.ShoppingHistory).filter(
+            models.ShoppingHistory.family_id == family_id
+        ).order_by(models.ShoppingHistory.completed_at.desc()).all()
+    else:
+        history = db.query(models.ShoppingHistory).filter(
+            models.ShoppingHistory.owner_id == current_user.id,
+            models.ShoppingHistory.family_id.is_(None)
+        ).order_by(models.ShoppingHistory.completed_at.desc()).all()
     
     return [{
         "id": h.id,
@@ -2406,12 +2499,22 @@ def get_shopping_history(current_user: models.User = Depends(get_current_user), 
 @app.get("/shopping/history/{history_id}")
 def get_shopping_history_detail(history_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     history = db.query(models.ShoppingHistory).filter(
-        models.ShoppingHistory.id == history_id,
-        models.ShoppingHistory.owner_id == current_user.id
+        models.ShoppingHistory.id == history_id
     ).first()
     
     if not history:
         raise HTTPException(status_code=404, detail="Nie znaleziono historii")
+    
+    # Check if user has access to this history (either owner or family member)
+    if history.family_id is not None:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == history.family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie masz dostępu do tej historii")
+    elif history.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Nie masz dostępu do tej historii")
     
     hours_since_completion = (datetime.utcnow() - history.completed_at).total_seconds() / 3600
     can_edit = hours_since_completion < 24
@@ -2429,9 +2532,19 @@ def get_shopping_history_detail(history_id: int, current_user: models.User = Dep
     }
 
 @app.post("/shopping/history")
-def create_shopping_history(data: ShoppingHistoryCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def create_shopping_history(data: ShoppingHistoryCreate, family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if family_id is not None:
+        # Check if user is member of the family
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie jesteś członkiem tej rodziny")
+    
     history = models.ShoppingHistory(
         owner_id=current_user.id,
+        family_id=family_id,
         items_json=data.items_json,
         total_items=data.total_items,
         total_spent=data.total_spent,
@@ -2450,12 +2563,22 @@ def create_shopping_history(data: ShoppingHistoryCreate, current_user: models.Us
 @app.delete("/shopping/history/{history_id}")
 def delete_shopping_history(history_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     history = db.query(models.ShoppingHistory).filter(
-        models.ShoppingHistory.id == history_id,
-        models.ShoppingHistory.owner_id == current_user.id
+        models.ShoppingHistory.id == history_id
     ).first()
 
     if not history:
         raise HTTPException(status_code=404, detail="Nie znaleziono historii")
+
+    # Check if user has access to this history (either owner or family member)
+    if history.family_id is not None:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == history.family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie masz dostępu do tej historii")
+    elif history.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Nie masz dostępu do tej historii")
 
     db.delete(history)
     db.commit()
@@ -2466,12 +2589,22 @@ def delete_shopping_history(history_id: int, current_user: models.User = Depends
 @app.post("/shopping/history/{history_id}/load")
 def load_shopping_from_history(history_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     history = db.query(models.ShoppingHistory).filter(
-        models.ShoppingHistory.id == history_id,
-        models.ShoppingHistory.owner_id == current_user.id
+        models.ShoppingHistory.id == history_id
     ).first()
 
     if not history:
         raise HTTPException(status_code=404, detail="Nie znaleziono historii")
+
+    # Check if user has access to this history (either owner or family member)
+    if history.family_id is not None:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == history.family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie masz dostępu do tej historii")
+    elif history.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail="Nie masz dostępu do tej historii")
 
     hours_since_completion = (datetime.utcnow() - history.completed_at).total_seconds() / 3600
     can_edit = hours_since_completion < 24
@@ -2482,6 +2615,7 @@ def load_shopping_from_history(history_id: int, current_user: models.User = Depe
     for item_data in items_data:
         item = models.ShoppingItem(
             owner_id=current_user.id,
+            family_id=history.family_id,
             name=encrypt_field(item_data.get("name", "")),
             quantity=encrypt_field(item_data.get("quantity", "")),
             category=item_data.get("category", "other"),
@@ -2620,6 +2754,69 @@ def delete_default_article(article_id: int, current_user: models.User = Depends(
     return {"message": "Usunięto artykuł domyślny"}
 
 
+@app.get("/shopping/summary")
+def shopping_summary(family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if family_id is not None:
+        # Check if user is member of the family
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie jesteś członkiem tej rodziny")
+        
+        items = db.query(models.ShoppingItem).filter(
+            models.ShoppingItem.family_id == family_id
+        ).all()
+        history = db.query(models.ShoppingHistory).filter(
+            models.ShoppingHistory.family_id == family_id
+        ).all()
+    else:
+        items = db.query(models.ShoppingItem).filter(
+            models.ShoppingItem.owner_id == current_user.id,
+            models.ShoppingItem.family_id.is_(None)
+        ).all()
+        history = db.query(models.ShoppingHistory).filter(
+            models.ShoppingHistory.owner_id == current_user.id,
+            models.ShoppingHistory.family_id.is_(None)
+        ).all()
+    
+    # Calculate expenses from history
+    day_totals = {}
+    week_totals = {}
+    month_totals = {}
+    year_totals = {}
+    
+    for h in history:
+        date_str = str(h.completed_at.date())
+        ym = date_str[:7]
+        y = date_str[:4]
+        
+        # Calculate week number
+        from datetime import datetime
+        dt = h.completed_at
+        week_str = f"{y}-W{dt.isocalendar()[1]:02d}"
+        
+        day_totals[date_str] = day_totals.get(date_str, 0.0) + h.total_spent
+        week_totals[week_str] = week_totals.get(week_str, 0.0) + h.total_spent
+        month_totals[ym] = month_totals.get(ym, 0.0) + h.total_spent
+        year_totals[y] = year_totals.get(y, 0.0) + h.total_spent
+    
+    # Calculate current list total
+    current_list_total = sum(item.price or 0.0 for item in items if item.bought)
+    
+    all_time_total = sum(h.total_spent for h in history)
+    
+    return {
+        "current_list": round(current_list_total, 2),
+        "all_time": round(all_time_total, 2),
+        "by_day": {k: round(v, 2) for k, v in sorted(day_totals.items())},
+        "by_week": {k: round(v, 2) for k, v in sorted(week_totals.items())},
+        "by_month": {k: round(v, 2) for k, v in sorted(month_totals.items())},
+        "by_year": {k: round(v, 2) for k, v in sorted(year_totals.items())},
+    }
+
+
 class HourlyRateCreate(BaseModel):
     rate: float
     label: str = ""
@@ -2672,6 +2869,292 @@ def delete_hourly_rate(rate_id: int, current_user: models.User = Depends(get_cur
     db.commit()
     
     return {"message": "Usunięto stawkę"}
+
+
+# === FAMILY ENDPOINTS ===
+@app.get("/families")
+def list_families(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    families = db.query(models.FamilyMember).filter(
+        models.FamilyMember.user_id == current_user.id
+    ).all()
+    
+    result = []
+    for fm in families:
+        family = fm.family
+        members = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family.id
+        ).all()
+        member_info = []
+        for m in members:
+            user = db.query(models.User).filter(models.User.id == m.user_id).first()
+            if user:
+                member_info.append({
+                    "id": user.id,
+                    "username": user.username,
+                    "role": m.role,
+                    "joined_at": str(m.joined_at)
+                })
+        
+        result.append({
+            "id": family.id,
+            "name": decrypt_field(family.name),
+            "created_by": family.created_by,
+            "created_at": str(family.created_at),
+            "role": fm.role,
+            "members": member_info
+        })
+    
+    return result
+
+
+@app.post("/families")
+def create_family(data: FamilyCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    name = (data.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Nazwa rodziny jest wymagana")
+    
+    # Check if user is already in a family
+    existing = db.query(models.FamilyMember).filter(
+        models.FamilyMember.user_id == current_user.id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Jesteś już członkiem rodziny")
+    
+    family = models.Family(
+        name=encrypt_field(name),
+        created_by=current_user.id
+    )
+    db.add(family)
+    db.commit()
+    db.refresh(family)
+    
+    # Add creator as admin
+    member = models.FamilyMember(
+        family_id=family.id,
+        user_id=current_user.id,
+        role="admin"
+    )
+    db.add(member)
+    db.commit()
+    
+    return {
+        "id": family.id,
+        "name": name,
+        "message": "Utworzono rodzinę"
+    }
+
+
+@app.post("/families/{family_id}/invite")
+def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Check if user is admin of the family
+    membership = db.query(models.FamilyMember).filter(
+        models.FamilyMember.family_id == family_id,
+        models.FamilyMember.user_id == current_user.id,
+        models.FamilyMember.role == "admin"
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Nie masz uprawnień do zapraszania")
+    
+    username = (data.username or "").strip()
+    if not username:
+        raise HTTPException(status_code=400, detail="Nazwa użytkownika jest wymagana")
+    
+    # Check if user exists
+    target_user = db.query(models.User).filter(models.User.username == username).first()
+    if not target_user:
+        raise HTTPException(status_code=404, detail="Użytkownik nie istnieje")
+    
+    # Check if user is already in the family
+    existing_member = db.query(models.FamilyMember).filter(
+        models.FamilyMember.family_id == family_id,
+        models.FamilyMember.user_id == target_user.id
+    ).first()
+    if existing_member:
+        raise HTTPException(status_code=400, detail="Użytkownik jest już członkiem tej rodziny")
+    
+    # Check if there's already a pending invitation
+    existing_invitation = db.query(models.FamilyInvitation).filter(
+        models.FamilyInvitation.family_id == family_id,
+        models.FamilyInvitation.invited_username == encrypt_field(username),
+        models.FamilyInvitation.status == "pending"
+    ).first()
+    if existing_invitation:
+        raise HTTPException(status_code=400, detail="Istnieje już zaproszenie dla tego użytkownika")
+    
+    invitation = models.FamilyInvitation(
+        family_id=family_id,
+        invited_by=current_user.id,
+        invited_username=encrypt_field(username),
+        status="pending"
+    )
+    db.add(invitation)
+    db.commit()
+    
+    return {"message": f"Wysłano zaproszenie do {username}"}
+
+
+@app.get("/family/invitations")
+def list_family_invitations(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    invitations = db.query(models.FamilyInvitation).filter(
+        models.FamilyInvitation.invited_username == encrypt_field(current_user.username),
+        models.FamilyInvitation.status == "pending"
+    ).all()
+    
+    result = []
+    for inv in invitations:
+        family = inv.family
+        inviter = db.query(models.User).filter(models.User.id == inv.invited_by).first()
+        result.append({
+            "id": inv.id,
+            "family_id": family.id,
+            "family_name": decrypt_field(family.name),
+            "invited_by": inviter.username if inviter else "Nieznany",
+            "created_at": str(inv.created_at)
+        })
+    
+    return result
+
+
+@app.post("/family/invitations/{invitation_id}/accept")
+def accept_family_invitation(invitation_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    invitation = db.query(models.FamilyInvitation).filter(
+        models.FamilyInvitation.id == invitation_id,
+        models.FamilyInvitation.invited_username == encrypt_field(current_user.username),
+        models.FamilyInvitation.status == "pending"
+    ).first()
+    
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Nie znaleziono zaproszenia")
+    
+    # Check if user is already in a family
+    existing = db.query(models.FamilyMember).filter(
+        models.FamilyMember.user_id == current_user.id
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Jesteś już członkiem rodziny")
+    
+    # Add user to family
+    member = models.FamilyMember(
+        family_id=invitation.family_id,
+        user_id=current_user.id,
+        role="member"
+    )
+    db.add(member)
+    
+    # Update invitation status
+    invitation.status = "accepted"
+    invitation.responded_at = datetime.utcnow()
+    
+    db.commit()
+    
+    return {"message": "Zaakceptowano zaproszenie do rodziny"}
+
+
+@app.post("/family/invitations/{invitation_id}/decline")
+def decline_family_invitation(invitation_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    invitation = db.query(models.FamilyInvitation).filter(
+        models.FamilyInvitation.id == invitation_id,
+        models.FamilyInvitation.invited_username == encrypt_field(current_user.username),
+        models.FamilyInvitation.status == "pending"
+    ).first()
+    
+    if not invitation:
+        raise HTTPException(status_code=404, detail="Nie znaleziono zaproszenia")
+    
+    invitation.status = "declined"
+    invitation.responded_at = datetime.utcnow()
+    db.commit()
+    
+    return {"message": "Odrzucono zaproszenie"}
+
+
+@app.post("/families/{family_id}/leave")
+def leave_family(family_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    membership = db.query(models.FamilyMember).filter(
+        models.FamilyMember.family_id == family_id,
+        models.FamilyMember.user_id == current_user.id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=404, detail="Nie jesteś członkiem tej rodziny")
+    
+    # Check if user is the only admin
+    if membership.role == "admin":
+        other_admins = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id,
+            models.FamilyMember.role == "admin",
+            models.FamilyMember.user_id != current_user.id
+        ).count()
+        if other_admins == 0:
+            raise HTTPException(status_code=400, detail="Jesteś jedynym administratorem. Nie możesz opuścić rodziny.")
+    
+    db.delete(membership)
+    db.commit()
+    
+    return {"message": "Opuściłeś rodzinę"}
+
+
+@app.get("/families/{family_id}/members")
+def list_family_members(family_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Check if user is member of the family
+    membership = db.query(models.FamilyMember).filter(
+        models.FamilyMember.family_id == family_id,
+        models.FamilyMember.user_id == current_user.id
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Nie jesteś członkiem tej rodziny")
+    
+    members = db.query(models.FamilyMember).filter(
+        models.FamilyMember.family_id == family_id
+    ).all()
+    
+    result = []
+    for m in members:
+        user = db.query(models.User).filter(models.User.id == m.user_id).first()
+        if user:
+            result.append({
+                "id": user.id,
+                "username": user.username,
+                "role": m.role,
+                "joined_at": str(m.joined_at)
+            })
+    
+    return result
+
+
+@app.patch("/families/{family_id}")
+def update_family(family_id: int, data: FamilyUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Check if user is admin of the family
+    membership = db.query(models.FamilyMember).filter(
+        models.FamilyMember.family_id == family_id,
+        models.FamilyMember.user_id == current_user.id,
+        models.FamilyMember.role == "admin"
+    ).first()
+    
+    if not membership:
+        raise HTTPException(status_code=403, detail="Nie masz uprawnień do edycji rodziny")
+    
+    family = db.query(models.Family).filter(models.Family.id == family_id).first()
+    if not family:
+        raise HTTPException(status_code=404, detail="Nie znaleziono rodziny")
+    
+    if data.name is not None:
+        name = (data.name or "").strip()
+        if not name:
+            raise HTTPException(status_code=400, detail="Nazwa rodziny jest wymagana")
+        family.name = encrypt_field(name)
+    
+    db.commit()
+    db.refresh(family)
+    
+    return {
+        "id": family.id,
+        "name": decrypt_field(family.name),
+        "message": "Zaktualizowano rodzinę"
+    }
+
 
 # === ADMIN ENDPOINTS ===
 @app.get("/admin/users")

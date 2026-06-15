@@ -8,6 +8,7 @@ import ShoppingPanel from "./ShoppingPanel";
 import SchedulePanel from "./SchedulePanel";
 import EarningsPanel from "./EarningsPanel";
 import DefaultArticlesPanel from "./DefaultArticlesPanel";
+import FamilyPanel from "./FamilyPanel";
 
 const API = "https://questdo-backend.onrender.com";
 
@@ -1064,28 +1065,27 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
         return (
         <div key={task.id} className={`task-card ${task.difficulty} ${task.completed ? "done" : ""} ${checkState.showUncheckBadge ? "can-uncheck" : ""}`}>
           {editingId === task.id ? (
-            <div className="task-edit-form">
-              <input className="input-edit" value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} placeholder="Nazwa zadania" />
-              <textarea className="input-edit" value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} placeholder="Opis" />
+            <div className="edit-mode">
+              <input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} placeholder="Nazwa zadania" />
+              <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} placeholder="Opis" rows="2" />
               {!task.exp_awarded && (<>
-                <div className="add-task-meta">
-                  <select value={editForm.difficulty} onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}>
-                    <option value="easy">⚔️ Łatwe (+10 EXP)</option><option value="medium">🗡️ Średnie (+25 EXP)</option><option value="hard">💀 Trudne (+50 EXP)</option>
-                  </select>
-                  <select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
-                    {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}
-                  </select>
-                </div>
-                <DatePicker label="Termin" value={editForm.due_date || ""} onChange={(due_date) => setEditForm({ ...editForm, due_date })} />
+                <select value={editForm.difficulty} onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}>
+                  <option value="easy">⚔️ Łatwe (+10 EXP)</option><option value="medium">🗡️ Średnie (+25 EXP)</option><option value="hard">💀 Trudne (+50 EXP)</option>
+                </select>
+                <select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
+                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}
+                </select>
+                <DatePicker value={editForm.due_date || ""} onChange={(due_date) => setEditForm({ ...editForm, due_date })} />
               </>)}
               <label className="important-toggle">
                 <input type="checkbox" checked={!!editForm.important} onChange={(e) => setEditForm({ ...editForm, important: e.target.checked, reminder_offset_days: e.target.checked && editForm.reminder_offset_days === "" ? "7" : editForm.reminder_offset_days })} />
                 <span>Ważne</span>
               </label>
-              <select className="input-edit" value={editForm.reminder_offset_days ?? ""} onChange={(e) => setEditForm({ ...editForm, reminder_offset_days: e.target.value })}>
+              <select value={editForm.reminder_offset_days ?? ""} onChange={(e) => setEditForm({ ...editForm, reminder_offset_days: e.target.value })}>
                 {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
               </select>
-              <div className="edit-actions"><button className="btn-save" onClick={() => saveEdit(task)} disabled={editingTaskIds.has(task.id)}>{editingTaskIds.has(task.id) ? "⏳" : "✓ Zapisz"}</button><button className="btn-cancel-edit" onClick={cancelEdit}>✗ Anuluj</button></div>
+              <button type="button" className="save-mini" onClick={() => saveEdit(task)} disabled={editingTaskIds.has(task.id)}>{editingTaskIds.has(task.id) ? "⏳" : "✓"}</button>
+              <button type="button" className="cancel-mini" onClick={cancelEdit}>✗</button>
             </div>
           ) : (
             <>
@@ -1426,6 +1426,8 @@ export default function App() {
   const [shoppingItems, setShoppingItems] = useState([]);
   const [workEntries, setWorkEntries] = useState([]);
   const [workSummary, setWorkSummary] = useState(null);
+  const [familyId, setFamilyId] = useState(null);
+  const [showFamilyPanel, setShowFamilyPanel] = useState(false);
   const apiQueue = useRef([]);
   const isProcessingQueue = useRef(false);
 
@@ -1536,6 +1538,7 @@ export default function App() {
     };
     
     try {
+      const shoppingParams = familyId ? { family_id: familyId } : {};
       const [userRes, tasksRes, chRes, levelsRes, rareDropsRes, scheduleRes, shoppingRes, workRes, workSummaryRes] = await Promise.all([
         axios.get(`${API}/me`, { headers: noCacheHeaders }),
         axios.get(`${API}/tasks`, { headers: noCacheHeaders }),
@@ -1543,7 +1546,7 @@ export default function App() {
         axios.get(`${API}/game/levels`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
         axios.get(`${API}/rare-drops/inventory`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
         axios.get(`${API}/schedule`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
-        axios.get(`${API}/shopping`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
+        axios.get(`${API}/shopping`, { headers: noCacheHeaders, params: shoppingParams }).catch(() => ({ data: [] })),
         axios.get(`${API}/work`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
         axios.get(`${API}/work/summary`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
       ]);
@@ -1591,6 +1594,7 @@ export default function App() {
 
   useEffect(() => { if (token) fetchData(); }, [token]);
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
+  useEffect(() => { if (token) fetchData(); }, [familyId]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -2051,6 +2055,8 @@ export default function App() {
           onUserUpdate={updateUserFromModule}
           onToast={showToast}
           enqueueRequest={enqueueRequest}
+          familyId={familyId}
+          onFamilyChange={setFamilyId}
         />
       )}
 

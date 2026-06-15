@@ -168,6 +168,7 @@ class ShoppingItem(Base):
     __tablename__ = "shopping_items"
     id = Column(Integer, primary_key=True, index=True)
     owner_id = Column(Integer, ForeignKey("users.id"), index=True)
+    family_id = Column(Integer, ForeignKey("families.id"), nullable=True, index=True)
     name = Column(String)
     quantity = Column(String, default="")
     category = Column(String, default="other")
@@ -176,19 +177,22 @@ class ShoppingItem(Base):
     price = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
     owner = relationship("User")
+    family = relationship("Family", back_populates="shopping_items")
 
 
 class ShoppingHistory(Base):
     __tablename__ = "shopping_history"
     id = Column(Integer, primary_key=True, index=True)
     owner_id = Column(Integer, ForeignKey("users.id"), index=True)
-    items_json = Column(String)  # JSON string with items data
+    family_id = Column(Integer, ForeignKey("families.id"), nullable=True, index=True)
+    items_json = Column(String)
     total_items = Column(Integer, default=0)
     completed_at = Column(DateTime, default=datetime.utcnow)
-    total_spent = Column(Float, default=0.0)  # Optional: if user wants to track costs
+    total_spent = Column(Float, default=0.0)
     notes = Column(String, default="")
-    is_template = Column(Boolean, default=False)  # If true, can only be loaded as template after 24h
+    is_template = Column(Boolean, default=False)
     owner = relationship("User")
+    family = relationship("Family", back_populates="shopping_history")
 
 
 class HourlyRate(Base):
@@ -228,3 +232,38 @@ class DefaultArticle(Base):
     default_price = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
     owner = relationship("User")
+
+
+class Family(Base):
+    __tablename__ = "families"
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String)
+    created_by = Column(Integer, ForeignKey("users.id"))
+    created_at = Column(DateTime, default=datetime.utcnow)
+    members = relationship("FamilyMember", back_populates="family")
+    invitations = relationship("FamilyInvitation", back_populates="family")
+    shopping_items = relationship("ShoppingItem", back_populates="family")
+    shopping_history = relationship("ShoppingHistory", back_populates="family")
+
+
+class FamilyMember(Base):
+    __tablename__ = "family_members"
+    id = Column(Integer, primary_key=True, index=True)
+    family_id = Column(Integer, ForeignKey("families.id"))
+    user_id = Column(Integer, ForeignKey("users.id"))
+    role = Column(String, default="member")
+    joined_at = Column(DateTime, default=datetime.utcnow)
+    family = relationship("Family", back_populates="members")
+    user = relationship("User")
+
+
+class FamilyInvitation(Base):
+    __tablename__ = "family_invitations"
+    id = Column(Integer, primary_key=True, index=True)
+    family_id = Column(Integer, ForeignKey("families.id"))
+    invited_by = Column(Integer, ForeignKey("users.id"))
+    invited_username = Column(String)
+    status = Column(String, default="pending")
+    created_at = Column(DateTime, default=datetime.utcnow)
+    responded_at = Column(DateTime, nullable=True)
+    family = relationship("Family", back_populates="invitations")

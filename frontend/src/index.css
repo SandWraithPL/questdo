@@ -98,6 +98,243 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   color: #aaa;
   margin: 0;
 }
+
+.shopping-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.shopping-header h3 {
+  margin: 0;
+  color: #ff8906;
+}
+
+.family-toggle {
+  display: flex;
+  gap: 8px;
+}
+
+.family-toggle-btn {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #1a1a2e;
+  color: #fff;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.family-toggle-btn:hover {
+  background: #2a2a3e;
+}
+
+.family-toggle-btn.active {
+  background: #ff8906;
+  color: #0f0e17;
+  border-color: #ff8906;
+}
+
+.family-panel {
+  background: #1a1a2e;
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.family-panel h3 {
+  margin-bottom: 16px;
+  color: #ff8906;
+}
+
+.invitations-section {
+  background: #2a2a3e;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.invitations-section h4 {
+  margin-bottom: 12px;
+  color: #ff8906;
+}
+
+.invitation-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #1a1a2e;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.invitation-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.invitation-family {
+  font-weight: bold;
+  color: #fff;
+}
+
+.invitation-from {
+  font-size: 0.85rem;
+  color: #aaa;
+}
+
+.invitation-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.invitation-actions button {
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: none;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.no-family {
+  text-align: center;
+  padding: 20px;
+}
+
+.no-family p {
+  color: #aaa;
+  margin-bottom: 16px;
+}
+
+.create-family-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 300px;
+  margin: 0 auto;
+}
+
+.families-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.family-selector {
+  margin-bottom: 16px;
+}
+
+.family-selector label {
+  display: block;
+  margin-bottom: 8px;
+  color: #aaa;
+  font-size: 0.9rem;
+}
+
+.family-selector select {
+  width: 100%;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #0f0e17;
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.family-details {
+  background: #2a2a3e;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+.family-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.family-header h4 {
+  margin: 0;
+  color: #fff;
+}
+
+.family-role {
+  font-size: 0.85rem;
+  color: #ff8906;
+}
+
+.family-members {
+  margin-bottom: 16px;
+}
+
+.family-members h5 {
+  margin-bottom: 12px;
+  color: #aaa;
+  font-size: 0.9rem;
+}
+
+.member-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #1a1a2e;
+  border-radius: 6px;
+  margin-bottom: 8px;
+}
+
+.member-name {
+  color: #fff;
+}
+
+.member-role {
+  font-size: 1.2rem;
+}
+
+.family-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.family-actions button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  background: #ff8906;
+  color: #0f0e17;
+  font-size: 0.9rem;
+  font-weight: bold;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.family-actions button:hover {
+  background: #ffa040;
+}
+
+.family-actions button.danger-btn {
+  background: #ff4444;
+  color: #fff;
+}
+
+.family-actions button.danger-btn:hover {
+  background: #ff6666;
+}
+
+.invite-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 16px;
+  padding-top: 16px;
+  border-top: 1px solid #333;
+}
 .exp-preview-hint { font-size: 0.8rem; color: #aaa; margin: -4px 0 12px; }
 .exp-preview-hint strong { color: #ff8906; }
 

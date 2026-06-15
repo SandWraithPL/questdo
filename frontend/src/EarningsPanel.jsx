@@ -261,46 +261,46 @@ export default function EarningsPanel({
           <span className="earnings-day-total">{formatMoney(dayTotal)}</span>
         </div>
         {dayEntries.length === 0 && <p className="empty">Brak wpisów pracy na ten dzień.</p>}
-        {dayEntries.map((entry) => (
-          <div key={entry.id} className={`task-card ${entry.completed ? "done" : "medium"}`}>
-            <button type="button" className={`task-check ${entry.completed ? "checked" : ""}`} onClick={() => toggleCompleted(entry)}>
-              {entry.completed ? "✓" : ""}
-            </button>
-            <div className="task-info">
-              <h4 className={entry.completed ? "done" : ""}>{entry.start_time} – {entry.end_time}</h4>
-              {entry.notes && <p className={entry.completed ? "done-desc" : ""}>{entry.notes}</p>}
-              <div className="task-meta">
-                <span className="badge category">{entry.hours}h × {formatRate(entry.hourly_rate)}</span>
-                <span className="badge exp">Brutto {formatMoney(entry.gross)}</span>
-                {entry.tax_enabled && <span className="badge timing-late">Podatek {entry.tax_percent}% (−{formatMoney(entry.tax)})</span>}
-                <span className="badge category">Netto {formatMoney(entry.net)}</span>
-                <span className="badge exp">+10 EXP</span>
-              </div>
+        {dayEntries.map((entry) => {
+          const editing = editingId === entry.id;
+          return (
+            <div key={entry.id} className={`task-card ${entry.completed ? "done" : "medium"}`}>
+              <button type="button" className={`task-check ${entry.completed ? "checked" : ""}`} onClick={() => toggleCompleted(entry)}>
+                {entry.completed ? "✓" : ""}
+              </button>
+              {editing ? (
+                <div className="edit-mode">
+                  <DatePicker value={editDate} onChange={setEditDate} />
+                  <TimePicker value={editStartTime} onChange={setEditStartTime} />
+                  <TimePicker value={editEndTime} onChange={setEditEndTime} />
+                  <input type="number" min="0" step="0.01" placeholder="Stawka (zł)" value={editRate} onChange={(e) => setEditRate(e.target.value)} />
+                  <input placeholder="Notatka" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+                  <button type="button" className="save-mini" onClick={() => saveEdit(entry)}>✓</button>
+                  <button type="button" className="cancel-mini" onClick={() => setEditingId(null)}>✗</button>
+                </div>
+              ) : (
+                <>
+                  <div className="task-info">
+                    <h4 className={entry.completed ? "done" : ""}>{entry.start_time} – {entry.end_time}</h4>
+                    {entry.notes && <p className={entry.completed ? "done-desc" : ""}>{entry.notes}</p>}
+                    <div className="task-meta">
+                      <span className="badge category">{entry.hours}h × {formatRate(entry.hourly_rate)}</span>
+                      <span className="badge exp">Brutto {formatMoney(entry.gross)}</span>
+                      {entry.tax_enabled && <span className="badge timing-late">Podatek {entry.tax_percent}% (−{formatMoney(entry.tax)})</span>}
+                      <span className="badge category">Netto {formatMoney(entry.net)}</span>
+                      <span className="badge exp">+10 EXP</span>
+                    </div>
+                  </div>
+                  <div className="task-actions">
+                    <button type="button" className="icon-btn" onClick={() => startEdit(entry)} title="Edytuj">✏️</button>
+                    <button type="button" className="icon-btn delete" onClick={() => deleteEntry(entry)}>🗑️</button>
+                  </div>
+                </>
+              )}
             </div>
-            <div className="task-actions">
-              <button type="button" className="icon-btn" onClick={() => startEdit(entry)} title="Edytuj">✏️</button>
-              <button type="button" className="icon-btn delete" onClick={() => deleteEntry(entry)}>🗑️</button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
-
-      {editingId && (
-        <div className="add-task">
-          <h3>✏️ Edytuj wpis pracy</h3>
-          <DatePicker label="Data" value={editDate} onChange={setEditDate} />
-          <div className="add-task-meta">
-            <TimePicker value={editStartTime} onChange={setEditStartTime} label="Od:" />
-            <TimePicker value={editEndTime} onChange={setEditEndTime} label="Do:" />
-          </div>
-          <input type="number" min="0" step="0.01" placeholder="Stawka za godzinę (zł)" value={editRate} onChange={(e) => setEditRate(e.target.value)} />
-          <input placeholder="Notatka / miejsce pracy (opcjonalnie)" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
-          <div className="row">
-            <button type="button" onClick={() => saveEdit(dayEntries.find((e) => e.id === editingId))}>Zapisz zmiany</button>
-            <button type="button" className="cancel-btn" onClick={() => setEditingId(null)}>Anuluj</button>
-          </div>
-        </div>
-      )}
 
       {!showAdd ? (
         <button type="button" className="add-task-btn" onClick={() => setShowAdd(true)}>+ Dodaj pracę na ten dzień</button>

@@ -1,5 +1,6 @@
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect } from "react";
 import axios from "axios";
+import FamilyPanel from "./FamilyPanel";
 
 const SHOPPING_CATEGORIES = [
   { value: "veggies", emoji: "🥦", label: "Warzywa" },
@@ -17,7 +18,7 @@ function getCategory(cat) {
   return SHOPPING_CATEGORIES.find((c) => c.value === cat) || SHOPPING_CATEGORIES[8];
 }
 
-export default function ShoppingPanel({ api, headers, items, setItems, onUserUpdate, onToast, enqueueRequest }) {
+export default function ShoppingPanel({ api, headers, items, setItems, onUserUpdate, onToast, enqueueRequest, familyId, onFamilyChange }) {
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
   const [category, setCategory] = useState("other");
@@ -34,6 +35,8 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
   const [editPrice, setEditPrice] = useState("");
+  const [summary, setSummary] = useState(null);
+  const [showFamilyToggle, setShowFamilyToggle] = useState(false);
 
   const boughtCount = items.filter((i) => i.bought).length;
   const leftCount = items.length - boughtCount;
@@ -62,6 +65,46 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     }
   };
 
+  const loadSummary = async () => {
+    try {
+      const params = familyId ? { family_id: familyId } : {};
+      const res = await axios.get(`${api}/shopping/summary`, { headers, params });
+      setSummary(res.data);
+    } catch {
+      /* ignore */
+    }
+  };
+
+  const loadShoppingItems = async () => {
+    try {
+      const params = familyId ? { family_id: familyId } : {};
+      const res = await axios.get(`${api}/shopping`, { headers, params });
+      setItems(res.data);
+      await loadSummary();
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd ładowania listy");
+    }
+  };
+
+  useEffect(() => {
+    loadSummary();
+  }, [familyId]);
+
+  useEffect(() => {
+    loadShoppingItems();
+  }, [familyId]);
+
+  // Poll for real-time synchronization when family mode is active
+  useEffect(() => {
+    if (!familyId) return;
+    
+    const interval = setInterval(() => {
+      loadShoppingItems();
+    }, 10000); // Poll every 10 seconds
+
+    return () => clearInterval(interval);
+  }, [familyId]);
+
   const addItem = () => {
     if (!name.trim()) {
       onToast("Podaj nazwę produktu");
@@ -69,7 +112,14 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     }
     enqueueRequest(async () => {
       try {
-        const res = await axios.post(`${api}/shopping`, { name, quantity: qty, category, price: parseFloat(editPrice) || 0 }, { headers });
+        const payload = { 
+          name, 
+          quantity: qty, 
+          category, 
+          price: parseFloat(editPrice) || 0,
+          family_id: familyId || undefined
+        };
+        const res = await axios.post(`${api}/shopping`, payload, { headers });
         setItems((prev) => [res.data, ...prev]);
         setName("");
         setQty("");
@@ -77,6 +127,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
         setEditPrice("");
         setShowSuggestions(false);
         setSuggestions([]);
+        await loadSummary();
         onToast("✅ Dodano do listy zakupów");
       } catch (err) {
         onToast(err.response?.data?.detail || "Błąd dodawania");
@@ -90,6 +141,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
         const res = await axios.patch(`${api}/shopping/${item.id}`, { bought: !item.bought }, { headers });
         setItems((prev) => prev.map((i) => (i.id === item.id ? res.data.item : i)));
         applyUserFromResponse(res.data);
+        await loadSummary();
         if (res.data.exp_gained > 0) onToast(`🛒 Kupione! +${res.data.exp_gained} EXP`);
       } catch (err) {
         onToast(err.response?.data?.detail || "Błąd aktualizacji");
@@ -103,6 +155,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
         const res = await axios.delete(`${api}/shopping/${item.id}`, { headers });
         setItems((prev) => prev.filter((i) => i.id !== item.id));
         applyUserFromResponse(res.data);
+        await loadSummary();
         onToast("🗑️ Usunięto produkt");
       } catch (err) {
         onToast(err.response?.data?.detail || "Błąd usuwania");
@@ -131,6 +184,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
         setItems((prev) => prev.map((i) => (i.id === item.id ? res.data.item : i)));
         setEditingId(null);
         setEditPrice("");
+        await loadSummary();
         onToast("✅ Zapisano");
       } catch (err) {
         onToast(err.response?.data?.detail || "Błąd zapisu");
@@ -143,6 +197,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
       try {
         await axios.delete(`${api}/shopping/bought/clear`, { headers });
         setItems((prev) => prev.filter((i) => !i.bought));
+        await loadSummary();
         onToast("🗑️ Usunięto kupione produkty");
       } catch (err) {
         onToast(err.response?.data?.detail || "Błąd czyszczenia");
@@ -154,7 +209,8 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
 
   const loadHistory = async () => {
     try {
-      const res = await axios.get(`${api}/shopping/history`, { headers });
+      const params = familyId ? { family_id: familyId } : {};
+      const res = await axios.get(`${api}/shopping/history`, { headers, params });
       setHistory(res.data);
       setShowHistory(true);
     } catch (err) {
@@ -273,15 +329,18 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     }
     try {
       const itemsJson = JSON.stringify(boughtItems);
-      await axios.post(`${api}/shopping/history`, {
+      const payload = {
         items_json: itemsJson,
         total_items: boughtItems.length,
         total_spent: boughtItems.reduce((sum, i) => sum + (i.price || 0), 0),
         notes: "",
         is_template: false
-      }, { headers });
+      };
+      const params = familyId ? { family_id: familyId } : {};
+      await axios.post(`${api}/shopping/history`, payload, { headers, params });
       await axios.delete(`${api}/shopping/bought/clear`, { headers });
       setItems((prev) => prev.filter((i) => !i.bought));
+      await loadSummary();
       onToast("💾 Lista zapisana w historii");
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd zapisu historii");
@@ -291,6 +350,62 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
 
   return (
     <div className="module-panel shopping-panel">
+      <div className="shopping-header">
+        <h3>🛒 Lista zakupów</h3>
+        <div className="family-toggle">
+          <button 
+            type="button" 
+            className={`family-toggle-btn ${!familyId ? "active" : ""}`}
+            onClick={() => onFamilyChange?.(null)}
+          >
+            👤 Indywidualna
+          </button>
+          <button 
+            type="button" 
+            className={`family-toggle-btn ${familyId ? "active" : ""}`}
+            onClick={() => setShowFamilyToggle(!showFamilyToggle)}
+          >
+            👨‍👩‍👧‍👦 Rodzinna
+          </button>
+        </div>
+      </div>
+
+      {showFamilyToggle && (
+        <FamilyPanel 
+          api={api} 
+          headers={headers} 
+          onToast={onToast} 
+          onFamilyChange={(fid) => {
+            onFamilyChange?.(fid);
+            setShowFamilyToggle(false);
+          }}
+        />
+      )}
+
+      {summary && (
+        <div className="earnings-summary">
+          <div className="earnings-stat">
+            <span className="earnings-stat-label">Lista</span>
+            <strong>{summary.current_list.toFixed(2)} zł</strong>
+          </div>
+          <div className="earnings-stat">
+            <span className="earnings-stat-label">Dzień</span>
+            <strong>{Object.values(summary.by_day).slice(-1)[0]?.toFixed(2) || "0.00"} zł</strong>
+          </div>
+          <div className="earnings-stat">
+            <span className="earnings-stat-label">Tydzień</span>
+            <strong>{Object.values(summary.by_week).slice(-1)[0]?.toFixed(2) || "0.00"} zł</strong>
+          </div>
+          <div className="earnings-stat">
+            <span className="earnings-stat-label">Miesiąc</span>
+            <strong>{Object.values(summary.by_month).slice(-1)[0]?.toFixed(2) || "0.00"} zł</strong>
+          </div>
+          <div className="earnings-stat muted">
+            <span className="earnings-stat-label">Łącznie</span>
+            <strong>{summary.all_time.toFixed(2)} zł</strong>
+          </div>
+        </div>
+      )}
       <div className="add-task">
         <h3>🛒 Dodaj produkt</h3>
         <div className="form-row-inline">
@@ -329,7 +444,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
       <input className="search-input" placeholder="🔍 Szukaj produktu..." value={search} onChange={(e) => setSearch(e.target.value)} />
       
       <div className="import-export-row">
-        <button type="button" className="icon-btn" onClick={selectAll} title="Zaznacz wszystkie">✅ Zaznacz wszystkie</button>
+        <button type="button" className="icon-btn history-btn" onClick={selectAll} title="Zaznacz wszystkie">✅ Zaznacz wszystkie</button>
         <button type="button" className="icon-btn history-btn" onClick={loadHistory} title="Historia list">📜 Historia</button>
         <button type="button" className="icon-btn save-history-btn" onClick={completeShoppingList} title="Zakończ i zapisz do historii">💾 Zakończ listę</button>
       </div>
