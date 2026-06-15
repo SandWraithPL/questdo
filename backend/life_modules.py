@@ -6,7 +6,7 @@ from encryption import decrypt_field, encrypt_field
 from sqlalchemy.orm import Session
 
 SHOPPING_EXP = 2
-WORK_EXP = 8
+WORK_EXP = 10
 VALID_SHOPPING_CATEGORIES = {
     "veggies", "fruits", "dairy", "bread", "meat", "drinks", "chemicals", "sweets", "other",
 }

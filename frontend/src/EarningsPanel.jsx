@@ -2,6 +2,7 @@ import { useMemo, useState, useEffect } from "react";
 import axios from "axios";
 import SharedCalendar from "./SharedCalendar";
 import TimePicker from "./TimePicker";
+import DatePicker from "./DatePicker";
 
 function formatMoney(value) {
   return `${Number(value || 0).toFixed(2)} zł`;
@@ -273,7 +274,7 @@ export default function EarningsPanel({
                 <span className="badge exp">Brutto {formatMoney(entry.gross)}</span>
                 {entry.tax_enabled && <span className="badge timing-late">Podatek {entry.tax_percent}% (−{formatMoney(entry.tax)})</span>}
                 <span className="badge category">Netto {formatMoney(entry.net)}</span>
-                {entry.completed && <span className="badge exp">+8 EXP</span>}
+                <span className="badge exp">+10 EXP</span>
               </div>
             </div>
             <div className="task-actions">
@@ -287,7 +288,7 @@ export default function EarningsPanel({
       {editingId && (
         <div className="add-task">
           <h3>✏️ Edytuj wpis pracy</h3>
-          <input type="date" value={editDate} onChange={(e) => setEditDate(e.target.value)} />
+          <DatePicker label="Data" value={editDate} onChange={setEditDate} />
           <div className="add-task-meta">
             <TimePicker value={editStartTime} onChange={setEditStartTime} label="Od:" />
             <TimePicker value={editEndTime} onChange={setEditEndTime} label="Do:" />

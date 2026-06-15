@@ -892,19 +892,19 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 }
 
 .rate-save-btn, .rate-select-btn {
-  padding: 10px 12px;
-  border-radius: 8px;
-  border: 1px solid #333;
-  background: #1a1a2e;
+  padding: 4px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
   color: #fff;
   cursor: pointer;
-  font-size: 1rem;
-  transition: background 0.2s, border-color 0.2s;
+  font-size: 1.1rem;
+  transition: background 0.2s, transform 0.15s;
 }
 
 .rate-save-btn:hover, .rate-select-btn:hover {
   background: #2a2a3e;
-  border-color: #ff8906;
+  transform: scale(1.08);
 }
 
 .saved-rates-list {
