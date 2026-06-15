@@ -96,11 +96,11 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
       onToast("Wklej zawartość pliku");
       return;
     }
-    
+
     const entries = [];
     const lines = importText.split("\n");
     let currentEntry = null;
-    
+
     for (const line of lines) {
       if (line === "[ENTRY]") {
         currentEntry = {};
@@ -113,11 +113,23 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
         currentEntry = null;
       }
     }
-    
+
     if (currentEntry) entries.push(currentEntry);
-    
+
+    if (entries.length === 0) {
+      onToast("Nie znaleziono żadnych wpisów w pliku");
+      return;
+    }
+
+    const invalidEntries = entries.filter(e => !e.title || !e.title.trim());
+    if (invalidEntries.length > 0) {
+      onToast(`${invalidEntries.length} wpisów nie ma tytułu i zostanie pominiętych`);
+    }
+
+    const validEntries = entries.filter(e => e.title && e.title.trim());
+
     try {
-      const res = await axios.post(`${api}/schedule/import`, { entries }, { headers });
+      const res = await axios.post(`${api}/schedule/import`, { entries: validEntries }, { headers });
       setEntries((prev) => [...prev, ...Array(res.data.imported).fill({})]); // Reload needed
       setShowImport(false);
       setImportText("");

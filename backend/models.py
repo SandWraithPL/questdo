@@ -39,6 +39,9 @@ class Task(Base):
     owner_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="tasks")
     task_type = Column(String, default="quest")  # "quest" or "event"
+    event_category = Column(String, nullable=True)  # "birthday", "anniversary", "holiday", "reminder", etc.
+    recurring_pattern = Column(String, nullable=True)  # "yearly", "monthly", "weekly"
+    recurring_end_date = Column(Date, nullable=True)  # Optional end date for recurring events
 
 class Achievement(Base):
     __tablename__ = "achievements"

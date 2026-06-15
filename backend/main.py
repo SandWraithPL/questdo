@@ -93,6 +93,15 @@ def migrate_schema():
         if "task_type" not in cols:
             conn.execute(text("ALTER TABLE tasks ADD COLUMN task_type VARCHAR DEFAULT 'quest'"))
             print("Migracja: dodano kolumnę task_type")
+        if "event_category" not in cols:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN event_category VARCHAR"))
+            print("Migracja: dodano kolumnę event_category")
+        if "recurring_pattern" not in cols:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN recurring_pattern VARCHAR"))
+            print("Migracja: dodano kolumnę recurring_pattern")
+        if "recurring_end_date" not in cols:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN recurring_end_date DATE"))
+            print("Migracja: dodano kolumnę recurring_end_date")
     if "daily_quest_assignments" not in insp.get_table_names():
         models.DailyQuestAssignment.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę daily_quest_assignments")
@@ -512,12 +521,16 @@ def task_to_dict(t: models.Task) -> dict:
         "reminder_offset_days": t.reminder_offset_days,
         "due_date": str(t.due_date),
         "created_at": str(t.created_at),
+        "task_type": t.task_type or "quest",
+        "event_category": t.event_category,
+        "recurring_pattern": t.recurring_pattern,
+        "recurring_end_date": str(t.recurring_end_date) if t.recurring_end_date else None,
     }
     if t.completed and t.exp_awarded and t.completed_at:
         data["completed_at"] = str(t.completed_at)
     if t.exp_awarded and t.exp_timing:
         data["exp_timing"] = t.exp_timing
-    if not t.completed and t.due_date:
+    if not t.completed and t.due_date and t.task_type == "quest":
         preview, timing = calculate_exp_reward(t.difficulty, t.due_date, datetime.utcnow())
         data["exp_preview"] = preview
         data["exp_timing_preview"] = timing
@@ -815,6 +828,9 @@ class TaskCreate(BaseModel):
     important: Optional[bool] = False
     reminder_offset_days: Optional[int] = None
     task_type: Optional[str] = "quest"
+    event_category: Optional[str] = None
+    recurring_pattern: Optional[str] = None
+    recurring_end_date: Optional[str] = None
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -826,6 +842,9 @@ class TaskUpdate(BaseModel):
     important: Optional[bool] = None
     reminder_offset_days: Optional[int] = None
     task_type: Optional[str] = None
+    event_category: Optional[str] = None
+    recurring_pattern: Optional[str] = None
+    recurring_end_date: Optional[str] = None
 
 class Token(BaseModel):
     access_token: str
@@ -1232,6 +1251,13 @@ def get_me(current_user: models.User = Depends(get_current_user), db: Session = 
     if normalize_streak(current_user):
         db.commit()
     process_delayed_task_rewards(current_user, db)
+    
+    # Generate recurring event instances for today and next 30 days
+    today = date.today()
+    for days_ahead in range(31):
+        target_date = today + timedelta(days=days_ahead)
+        generate_recurring_event_instances(current_user, db, target_date)
+    
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
         "username": current_user.username,
@@ -1283,6 +1309,13 @@ def delete_account(
 @app.get("/tasks")
 def get_tasks(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     process_delayed_task_rewards(current_user, db)
+    
+    # Generate recurring event instances for today and next 30 days
+    today = date.today()
+    for days_ahead in range(31):
+        target_date = today + timedelta(days=days_ahead)
+        generate_recurring_event_instances(current_user, db, target_date)
+    
     tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
     return [task_to_dict(t) for t in tasks]
 
@@ -1315,6 +1348,30 @@ def get_calendar_stats(year_month: str, current_user: models.User = Depends(get_
 def create_task(task: TaskCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     due = parse_due_date(task.due_date) if task.due_date else date.today()
     task_type = task.task_type if task.task_type in ["quest", "event"] else "quest"
+    
+    # Validate recurring pattern
+    recurring_pattern = None
+    if task.recurring_pattern:
+        if task.recurring_pattern not in ["yearly", "monthly", "weekly"]:
+            raise HTTPException(status_code=400, detail="Nieprawidłowy wzorzec cykliczności")
+        recurring_pattern = task.recurring_pattern
+    
+    # Validate recurring end date
+    recurring_end_date = None
+    if task.recurring_end_date:
+        try:
+            recurring_end_date = parse_due_date(task.recurring_end_date)
+        except:
+            raise HTTPException(status_code=400, detail="Nieprawidłowa data końcowa cyklu")
+    
+    # Validate event category
+    event_category = None
+    if task.event_category:
+        valid_event_categories = ["birthday", "anniversary", "holiday", "reminder", "other"]
+        if task.event_category not in valid_event_categories:
+            raise HTTPException(status_code=400, detail="Nieprawidłowa kategoria wydarzenia")
+        event_category = task.event_category
+    
     new_task = models.Task(
         title=encrypt_field(validate_title(task.title)),
         description=encrypt_field((task.description or "").strip()[:1000]),
@@ -1324,7 +1381,10 @@ def create_task(task: TaskCreate, current_user: models.User = Depends(get_curren
         important=bool(task.important),
         reminder_offset_days=validate_reminder_offset(task.reminder_offset_days),
         owner_id=current_user.id,
-        task_type=task_type
+        task_type=task_type,
+        event_category=event_category,
+        recurring_pattern=recurring_pattern,
+        recurring_end_date=recurring_end_date
     )
     db.add(new_task)
     db.commit()
@@ -1392,6 +1452,35 @@ def update_task(task_id: int, task_update: TaskUpdate,
         task.reminder_offset_days = validate_reminder_offset(task_update.reminder_offset_days)
     if task_update.task_type is not None and task_update.task_type in ["quest", "event"]:
         task.task_type = task_update.task_type
+    
+    # Handle event category
+    if "event_category" in fields_set:
+        if task_update.event_category:
+            valid_event_categories = ["birthday", "anniversary", "holiday", "reminder", "other"]
+            if task_update.event_category not in valid_event_categories:
+                raise HTTPException(status_code=400, detail="Nieprawidłowa kategoria wydarzenia")
+            task.event_category = task_update.event_category
+        else:
+            task.event_category = None
+    
+    # Handle recurring pattern
+    if "recurring_pattern" in fields_set:
+        if task_update.recurring_pattern:
+            if task_update.recurring_pattern not in ["yearly", "monthly", "weekly"]:
+                raise HTTPException(status_code=400, detail="Nieprawidłowy wzorzec cykliczności")
+            task.recurring_pattern = task_update.recurring_pattern
+        else:
+            task.recurring_pattern = None
+    
+    # Handle recurring end date
+    if "recurring_end_date" in fields_set:
+        if task_update.recurring_end_date:
+            try:
+                task.recurring_end_date = parse_due_date(task_update.recurring_end_date)
+            except:
+                raise HTTPException(status_code=400, detail="Nieprawidłowa data końcowa cyklu")
+        else:
+            task.recurring_end_date = None
 
     if task.exp_awarded:
         if task_update.difficulty is not None or task_update.category is not None:
@@ -1491,7 +1580,8 @@ def update_task(task_id: int, task_update: TaskUpdate,
             task.completed_at = datetime.utcnow()
             if not task.delayed_rewards_forfeited:
                 task.delayed_rewards_claimed = False
-            if not task.exp_awarded:
+            # Only award XP for quests, not events
+            if not task.exp_awarded and task.task_type == "quest":
                 old_exp = current_user.exp
                 exp_gained, exp_timing = calculate_exp_reward(
                     task.difficulty, task.due_date, task.completed_at
@@ -1591,6 +1681,79 @@ def get_or_create_daily_assignment(user: models.User, db: Session, day: date) ->
     db.commit()
     db.refresh(row)
     return row
+
+
+def generate_recurring_event_instances(user: models.User, db: Session, target_date: date) -> int:
+    """Generate new instances of recurring events for a given date."""
+    created_count = 0
+    
+    # Get all recurring events for this user
+    recurring_events = db.query(models.Task).filter(
+        models.Task.owner_id == user.id,
+        models.Task.task_type == "event",
+        models.Task.recurring_pattern.isnot(None)
+    ).all()
+    
+    for event in recurring_events:
+        # Check if this event should recur on target_date
+        should_create = False
+        event_date = event.due_date
+        
+        if event.recurring_pattern == "yearly":
+            # Check if target_date is the same month/day as the event
+            if (target_date.month == event_date.month and 
+                target_date.day == event_date.day and
+                target_date.year > event_date.year):
+                should_create = True
+        elif event.recurring_pattern == "monthly":
+            # Check if target_date is the same day of month as the event
+            if (target_date.day == event_date.day and
+                target_date > event_date):
+                should_create = True
+        elif event.recurring_pattern == "weekly":
+            # Check if target_date is the same weekday as the event
+            if (target_date.weekday() == event_date.weekday() and
+                target_date > event_date):
+                should_create = True
+        
+        # Check if we've passed the recurring end date
+        if event.recurring_end_date and target_date > event.recurring_end_date:
+            should_create = False
+        
+        if should_create:
+            # Check if an instance already exists for this date
+            existing = db.query(models.Task).filter(
+                models.Task.owner_id == user.id,
+                models.Task.task_type == "event",
+                models.Task.title == decrypt_field(event.title),
+                models.Task.due_date == target_date
+            ).first()
+            
+            if not existing:
+                # Create new instance
+                new_instance = models.Task(
+                    title=event.title,
+                    description=event.description,
+                    difficulty="easy",
+                    category=event.category,
+                    due_date=target_date,
+                    important=event.important,
+                    reminder_offset_days=event.reminder_offset_days,
+                    completed=False,
+                    task_type="event",
+                    event_category=event.event_category,
+                    recurring_pattern=event.recurring_pattern,
+                    recurring_end_date=event.recurring_end_date,
+                    owner_id=user.id
+                )
+                db.add(new_instance)
+                created_count += 1
+                logger.info(f"Created recurring event instance: {decrypt_field(event.title)} on {target_date}")
+    
+    if created_count > 0:
+        db.commit()
+    
+    return created_count
 
 
 def build_challenges_payload(user: models.User, db: Session, day: Union[date, None] = None) -> dict:

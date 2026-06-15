@@ -345,6 +345,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .filter-group { display: flex; gap: 8px; }
 .filter-btn { padding: 6px 12px; border-radius: 20px; border: 1px solid #444; background: transparent; color: #aaa; cursor: pointer; font-size: 0.85rem; }
 .filter-btn.active { background: #ff8906; color: #0f0e17; border-color: #ff8906; }
+.filter-divider { width: 1px; background: #444; margin: 0 4px; }
 .search-input { width: 100%; padding: 10px 12px; margin-bottom: 12px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; font-size: 0.95rem; }
 .progress-wrap { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .progress-bar { flex: 1; height: 8px; background: #333; border-radius: 4px; overflow: hidden; }
@@ -395,6 +396,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .badge.uncheck-badge { background: #1b3a1f; color: #81c784; border: 1px solid rgba(76, 175, 80, 0.35); }
 .badge.locked-badge { background: #2a2a32; color: #888; }
 .badge.event-type { background: #2a1a3a; color: #9b59b6; }
+.badge.recurring { background: #1a2a3a; color: #5dade2; }
 .important-mark { color: #ff8f45; }
 .event-mark { color: #9b59b6; }
 .task-actions { display: flex; flex-direction: column; gap: 4px; }
@@ -465,6 +467,9 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .day-badge { min-width: 26px; text-align: center; font-size: 0.62rem; line-height: 1; background: #2a2a3e; color: #ff8906; padding: 3px 4px; border-radius: 999px; }
 .calendar-day.selected .day-badge { background: rgba(15,14,23,0.18); color: #0f0e17; }
 .day-badge.done { color: #4caf50; }
+.day-event-icons { display: flex; gap: 2px; flex-wrap: wrap; justify-content: center; }
+.event-icon { font-size: 0.65rem; line-height: 1; }
+.event-icon-more { font-size: 0.6rem; color: #888; }
 
 /* Week view */
 .week-view { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
@@ -476,17 +481,21 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .week-day-header strong { font-size: 1.15rem; color: #fff; }
 .week-day-header em { grid-column: 1 / -1; justify-self: start; font-style: normal; font-size: 0.7rem; color: #ff8906; background: #2a1f00; border-radius: 999px; padding: 2px 7px; }
 .week-day-header.today span, .week-day-header.today strong { color: #ff8906; }
+.week-day-stats { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.week-event-icons { display: flex; gap: 2px; flex-wrap: wrap; }
 .week-day-tasks { display: flex; flex-direction: column; gap: 6px; overflow: hidden; }
 .week-task { display: grid; grid-template-columns: 8px minmax(0, 1fr); align-items: center; gap: 6px; font-size: 0.76rem; color: #ddd; }
 .week-task span:last-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .week-task-dot { width: 7px; height: 7px; border-radius: 50%; background: #ff8906; }
 .week-task.important .week-task-dot { background: #f44336; }
+.week-task.event .week-task-dot { background: #9b59b6; }
 .week-task.completed { color: #777; text-decoration: line-through; }
 .week-empty, .week-more { font-size: 0.74rem; color: #666; }
 
 .day-view { padding: 4px 0 0; }
 .day-view h3 { text-align: center; margin-bottom: 14px; color: #ff8906; font-size: 1rem; text-transform: capitalize; }
 .day-task { display: flex; gap: 12px; padding: 12px; background: #0f0e17; border: 1px solid #2a2a3e; border-radius: 9px; margin-bottom: 8px; align-items: flex-start; }
+.day-task.event { border-left-color: #9b59b6; }
 .day-task.completed { opacity: 0.6; }
 .day-task.completed strong { text-decoration: line-through; }
 .day-task-info { flex: 1; min-width: 0; }
@@ -1175,38 +1184,55 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 
 .rate-input-group {
   display: flex;
-  gap: 6px;
+  gap: 8px;
   align-items: center;
+  margin-bottom: 10px;
 }
 
 .rate-input-group input {
   flex: 1;
   min-width: 120px;
-}
-
-.rate-input-group .icon-btn {
-  flex-shrink: 0;
-}
-
-.rate-save-btn, .rate-select-btn, .rate-default-btn {
-  padding: 4px 8px;
-  border-radius: 4px;
-  border: none;
-  background: transparent;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #0f0e17;
   color: #fff;
+  font-size: 0.95rem;
+}
+
+.rate-dropdown {
+  flex: 0 0 auto;
+  min-width: 160px;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #0f0e17;
+  color: #fff;
+  font-size: 0.9rem;
   cursor: pointer;
-  font-size: 1rem;
+}
+
+.rate-save-btn {
+  padding: 10px 16px;
+  border-radius: 8px;
+  border: none;
+  background: #ff8906;
+  color: #0f0e17;
+  font-weight: bold;
+  font-size: 0.9rem;
+  cursor: pointer;
   transition: background 0.2s, transform 0.15s;
   flex-shrink: 0;
+  white-space: nowrap;
 }
 
-.rate-save-btn:hover, .rate-select-btn:hover, .rate-default-btn:hover {
-  background: #2a2a3e;
-  transform: scale(1.05);
+.rate-save-btn:hover {
+  background: #ffa040;
+  transform: translateY(-1px);
 }
 
-.rate-default-btn {
-  color: #ff8906;
+.rate-save-btn:active {
+  transform: translateY(0);
 }
 
 .saved-rates-list {

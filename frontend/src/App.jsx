@@ -1,5 +1,5 @@
 /* eslint-disable react-hooks/set-state-in-effect */
-import { useState, useEffect, useMemo, useRef, useCallback } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import axios from "axios";
 import "./index.css";
 import DatePicker from "./DatePicker";
@@ -7,7 +7,7 @@ import AppTabs, { readMainTab } from "./AppTabs";
 import ShoppingPanel from "./ShoppingPanel";
 import SchedulePanel from "./SchedulePanel";
 import EarningsPanel from "./EarningsPanel";
-import DefaultArticlesPanel from "./DefaultArticlesPanel";
+import CategoriesPanel from "./CategoriesPanel";
 import FamilyPanel from "./FamilyPanel";
 
 const API = "https://questdo-backend.onrender.com";
@@ -94,6 +94,21 @@ const CATEGORIES = [
   { value: "Zdrowie", emoji: "💊" },
 ];
 
+const EVENT_CATEGORIES = [
+  { value: "birthday", emoji: "🎂", label: "Urodziny" },
+  { value: "anniversary", emoji: "💍", label: "Rocznica" },
+  { value: "holiday", emoji: "🎉", label: "Święto" },
+  { value: "reminder", emoji: "🔔", label: "Przypomnienie" },
+  { value: "other", emoji: "📅", label: "Inne" },
+];
+
+const RECURRING_PATTERNS = [
+  { value: "", label: "Brak cyklu" },
+  { value: "yearly", label: "Co rok" },
+  { value: "monthly", label: "Co miesiąc" },
+  { value: "weekly", label: "Co tydzień" },
+];
+
 function toDateStr(d) {
   if (!d) return new Date().toISOString().slice(0, 10);
   if (typeof d === "string") return d.slice(0, 10);
@@ -105,6 +120,14 @@ function toDateStr(d) {
 
 function getCategoryEmoji(cat) {
   return CATEGORIES.find((c) => c.value === cat)?.emoji || "📦";
+}
+
+function getEventCategoryEmoji(cat) {
+  return EVENT_CATEGORIES.find((c) => c.value === cat)?.emoji || "📅";
+}
+
+function getEventCategoryLabel(cat) {
+  return EVENT_CATEGORIES.find((c) => c.value === cat)?.label || "Inne";
 }
 
 function getReminderLabel(value) {
@@ -588,7 +611,14 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
   const getTasksForDate = (dateStr) => tasks.filter((t) => t.due_date === dateStr);
   const taskStats = (dateStr) => {
     const dayTasks = getTasksForDate(dateStr);
-    return { total: dayTasks.length, done: dayTasks.filter((t) => t.completed).length };
+    const quests = dayTasks.filter((t) => t.task_type !== "event");
+    const events = dayTasks.filter((t) => t.task_type === "event");
+    return { 
+      total: quests.length, 
+      done: quests.filter((t) => t.completed).length,
+      events: events,
+      eventCategories: events.map((e) => e.event_category).filter(Boolean),
+    };
   };
 
   const selectDay = (dateStr) => {
@@ -643,6 +673,14 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
       days.push(
         <button key={dateStr} type="button" className={`calendar-day ${isSelected ? "selected" : ""} ${isToday ? "today" : ""}`} onClick={() => selectDay(dateStr)}>
           <span className="day-number">{day}</span>
+          {stats.eventCategories.length > 0 && (
+            <div className="day-event-icons">
+              {stats.eventCategories.slice(0, 3).map((cat, idx) => (
+                <span key={idx} className="event-icon">{getEventCategoryEmoji(cat)}</span>
+              ))}
+              {stats.eventCategories.length > 3 && <span className="event-icon-more">+</span>}
+            </div>
+          )}
           {stats.total > 0 && <span className={`day-badge ${stats.done === stats.total ? "done" : ""}`}>{stats.done}/{stats.total}</span>}
         </button>
       );
@@ -668,12 +706,22 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
           <div className={`week-day-header ${isToday ? "today" : ""}`}>
             <span>{WEEKDAYS_LONG[i]}</span>
             <strong>{d.getDate()}</strong>
-            <em>{stats.total ? `${stats.done}/${stats.total}` : "0"}</em>
+            <div className="week-day-stats">
+              {stats.eventCategories.length > 0 && (
+                <div className="week-event-icons">
+                  {stats.eventCategories.slice(0, 2).map((cat, idx) => (
+                    <span key={idx} className="event-icon">{getEventCategoryEmoji(cat)}</span>
+                  ))}
+                  {stats.eventCategories.length > 2 && <span className="event-icon-more">+</span>}
+                </div>
+              )}
+              <em>{stats.total ? `${stats.done}/${stats.total}` : "0"}</em>
+            </div>
           </div>
           <div className="week-day-tasks">
             {dayTasks.length === 0 && <span className="week-empty">Brak questów</span>}
             {dayTasks.slice(0, 4).map(task => (
-              <div key={task.id} className={`week-task ${task.completed ? "completed" : ""} ${task.important ? "important" : ""}`}>
+              <div key={task.id} className={`week-task ${task.completed ? "completed" : ""} ${task.important ? "important" : ""} ${task.task_type === "event" ? "event" : ""}`}>
                 <span className="week-task-dot" />
                 <span>{task.title}</span>
               </div>
@@ -692,23 +740,29 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
       <div className="day-view">
         <h3>{selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</h3>
         {dayTasks.length === 0 && <p className="empty">Brak zadań na ten dzień</p>}
-        {dayTasks.map(task => (
-          <div key={task.id} className={`day-task ${task.completed ? "completed" : ""}`}>
-            {task.completed ? <div className="task-check checked locked">✓</div> : (
-              <button type="button" className="task-check" onClick={() => onTaskToggle(task)} />
-            )}
-            <div className="day-task-info">
-              <strong>{task.important ? "Ważne · " : ""}{task.title}</strong>
-              {task.description && <p>{task.description}</p>}
-              <div className="task-meta">
-                <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>
-                <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>
-                {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
+        {dayTasks.map(task => {
+          const isEvent = task.task_type === "event";
+          return (
+            <div key={task.id} className={`day-task ${task.completed ? "completed" : ""} ${isEvent ? "event" : ""}`}>
+              {!isEvent && (task.completed ? <div className="task-check checked locked">✓</div> : (
+                <button type="button" className="task-check" onClick={() => onTaskToggle(task)} />
+              ))}
+              {isEvent && <div className="task-check event-indicator">{getEventCategoryEmoji(task.event_category)}</div>}
+              <div className="day-task-info">
+                <strong>{isEvent && <span className="event-mark">{getEventCategoryEmoji(task.event_category)} </span>}{task.important ? "Ważne · " : ""}{task.title}</strong>
+                {task.description && <p>{task.description}</p>}
+                <div className="task-meta">
+                  {isEvent && <span className="badge event-type">{getEventCategoryLabel(task.event_category)}</span>}
+                  {!isEvent && <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>}
+                  <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>
+                  {isEvent && task.recurring_pattern && <span className="badge recurring">{task.recurring_pattern === "yearly" ? "🔄 Co rok" : task.recurring_pattern === "monthly" ? "🔄 Co miesiąc" : "🔄 Co tydzień"}</span>}
+                  {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
+                </div>
               </div>
+              <button type="button" className="icon-btn delete" onClick={() => onTaskDelete(task)}>🗑</button>
             </div>
-            <button type="button" className="icon-btn delete" onClick={() => onTaskDelete(task)}>🗑</button>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };
@@ -986,9 +1040,10 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
-function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onError, onUncheck, loadingTaskIds, deletingTaskIds, editingTaskIds }) {
+function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToast, onUncheck, loadingTaskIds, deletingTaskIds, editingTaskIds }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState("all");
   const [editingId, setEditingId] = useState(null);
   const [editForm, setEditForm] = useState({});
 
@@ -997,7 +1052,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
       if (canUncheckTask(task) && onUncheck) {
         onUncheck(task);
       } else if (!canUncheckTask(task)) {
-        onError("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
+        onToast("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
       }
     } else {
       onToggle(task);
@@ -1011,12 +1066,14 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
     let list = tasks.filter((t) => t.due_date === dateStr);
     if (filter === "done") list = list.filter((t) => t.completed);
     if (filter === "active") list = list.filter((t) => !t.completed);
+    if (typeFilter === "quest") list = list.filter((t) => t.task_type !== "event");
+    if (typeFilter === "event") list = list.filter((t) => t.task_type === "event");
     if (search.trim()) {
       const q = search.toLowerCase();
       list = list.filter((t) => t.title.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q) || t.category.toLowerCase().includes(q));
     }
     return list;
-  }, [tasks, dateStr, filter, search]);
+  }, [tasks, dateStr, filter, search, typeFilter]);
 
   const allDay = tasks.filter((t) => t.due_date === dateStr);
   const doneCount = allDay.filter((t) => t.completed).length;
@@ -1034,11 +1091,14 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
       important: !!task.important,
       reminder_offset_days: task.reminder_offset_days ?? "",
       task_type: task.task_type || "quest",
+      event_category: task.event_category || "",
+      recurring_pattern: task.recurring_pattern || "",
+      recurring_end_date: task.recurring_end_date || "",
     });
   };
   const cancelEdit = () => { setEditingId(null); setEditForm({}); };
   const saveEdit = async (task) => {
-    if (!editForm.title?.trim()) { onError("Tytuł jest wymagany"); return; }
+    if (!editForm.title?.trim()) { onToast("Tytuł jest wymagany"); return; }
     try {
       const payload = {
         title: editForm.title.trim(),
@@ -1046,17 +1106,24 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
         important: !!editForm.important,
         reminder_offset_days: parseReminderValue(editForm.reminder_offset_days),
         task_type: editForm.task_type,
+        event_category: editForm.event_category || null,
+        recurring_pattern: editForm.recurring_pattern || null,
+        recurring_end_date: editForm.recurring_end_date || null,
         ...(task.exp_awarded ? {} : { difficulty: editForm.difficulty, category: editForm.category, due_date: editForm.due_date }),
       };
       await onSave(task.id, payload);
       cancelEdit();
-    } catch (e) { onError(e.response?.data?.detail || "Błąd zapisu"); }
+    } catch (e) { onToast(e.response?.data?.detail || "Błąd zapisu"); }
   };
 
   return (
     <div className="day-tasks-panel">
       <div className="tasks-header"><h3>Questy · {dateLabel}</h3>
-        <div className="filter-group">{["all", "active", "done"].map(f => <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "all" ? "Wszystkie" : f === "active" ? "Aktywne" : "Ukończone"}</button>)}</div>
+        <div className="filter-group">
+          {["all", "active", "done"].map(f => <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "all" ? "Wszystkie" : f === "active" ? "Aktywne" : "Ukończone"}</button>)}
+          <div className="filter-divider" />
+          {["all", "quest", "event"].map(f => <button key={f} className={`filter-btn ${typeFilter === f ? "active" : ""}`} onClick={() => setTypeFilter(f)}>{f === "all" ? "Wszystkie typy" : f === "quest" ? "⚔️ Questy" : "📅 Wydarzenia"}</button>)}
+        </div>
       </div>
       <input className="search-input" type="search" placeholder="🔍 Szukaj questa..." value={search} onChange={(e) => setSearch(e.target.value)} />
       {allDay.length > 0 && (<div className="progress-wrap"><div className="progress-bar"><div className="progress-fill" style={{ width: `${percent}%` }} /></div><span>{percent}% ukończone ({doneCount}/{allDay.length})</span></div>)}
@@ -1086,6 +1153,16 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
               </>)}
               {editForm.task_type === "event" && (
                 <>
+                  <select value={editForm.event_category || ""} onChange={(e) => setEditForm({ ...editForm, event_category: e.target.value })}>
+                    <option value="">Wybierz kategorię wydarzenia</option>
+                    {EVENT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
+                  </select>
+                  <select value={editForm.recurring_pattern || ""} onChange={(e) => setEditForm({ ...editForm, recurring_pattern: e.target.value })}>
+                    {RECURRING_PATTERNS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                  </select>
+                  {editForm.recurring_pattern && (
+                    <DatePicker value={editForm.recurring_end_date || ""} onChange={(recurring_end_date) => setEditForm({ ...editForm, recurring_end_date })} label="Data końcowa cyklu (opcjonalne)" />
+                  )}
                   <select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
                     {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}
                   </select>
@@ -1118,16 +1195,17 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
               )}
               {isEvent && <div className="task-check event-indicator">📅</div>}
               <div className="task-info">
-                <h4 className={task.completed ? "done" : ""}>{isEvent && <span className="event-mark">📅 </span>}{task.important && <span className="important-mark">Ważne · </span>}{task.title}</h4>
+                <h4 className={task.completed ? "done" : ""}>{isEvent && <span className="event-mark">{getEventCategoryEmoji(task.event_category)} </span>}{task.important && <span className="important-mark">Ważne · </span>}{task.title}</h4>
                 {task.description && <p className={task.completed ? "done-desc" : ""}>{task.description}</p>}
                 <div className="task-meta">
-                  {isEvent && <span className="badge event-type">Wydarzenie</span>}
+                  {isEvent && <span className="badge event-type">{getEventCategoryLabel(task.event_category)}</span>}
                   {!isEvent && <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>}
                   <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>
                   {!isEvent && <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>}
                   {task.exp_awarded && task.exp_timing && (() => { const info = EXP_TIMING_LABELS[task.exp_timing]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
                   {!task.exp_awarded && !isEvent && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = EXP_TIMING_LABELS[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
                   {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
+                  {isEvent && task.recurring_pattern && <span className="badge recurring">{task.recurring_pattern === "yearly" ? "🔄 Co rok" : task.recurring_pattern === "monthly" ? "🔄 Co miesiąc" : "🔄 Co tydzień"}</span>}
                   {checkState.showUncheckBadge && <span className="badge uncheck-badge">↩️ Można odznaczyć (24h)</span>}
                   {task.completed && checkState.disabled && <span className="badge locked-badge">🔒 Zablokowane</span>}
                 </div>
@@ -1433,6 +1511,9 @@ export default function App() {
   const [important, setImportant] = useState(false);
   const [reminderOffset, setReminderOffset] = useState("");
   const [taskType, setTaskType] = useState("quest");
+  const [eventCategory, setEventCategory] = useState("");
+  const [recurringPattern, setRecurringPattern] = useState("");
+  const [recurringEndDate, setRecurringEndDate] = useState("");
   const [notificationsEnabled, setNotificationsEnabled] = useState(readNotificationsPreference);
   const [standalonePwa, setStandalonePwa] = useState(false);
   const notificationsUnsupported = !("Notification" in window);
@@ -1473,7 +1554,6 @@ export default function App() {
     }, 3000);
   };
 
-  const [pwaHintDismissed, setPwaHintDismissed] = useState(readPwaHintDismissed);
 
   const enableNotifications = async () => {
     const permission = await ensureNotificationPermission();
@@ -1667,6 +1747,9 @@ export default function App() {
       important,
       reminder_offset_days: parseReminderValue(reminderOffset),
       task_type: taskType,
+      event_category: taskType === "event" ? eventCategory || null : null,
+      recurring_pattern: taskType === "event" ? recurringPattern || null : null,
+      recurring_end_date: taskType === "event" ? recurringEndDate || null : null,
     };
 
     // Clear form
@@ -1676,6 +1759,9 @@ export default function App() {
     setTaskType("quest");
     setImportant(false);
     setReminderOffset("");
+    setEventCategory("");
+    setRecurringPattern("");
+    setRecurringEndDate("");
     setShowAddTask(false);
 
     // Add to queue (no optimistic updates)
@@ -1965,12 +2051,10 @@ export default function App() {
         if (data.history) setHistory(data.history);
 
         showToast("🗑️ Zadanie usunięte");
-
-        await fetchData();
       } catch (err) {
         if (err.response?.status === 404) {
           showToast("Zadanie już nie istnieje");
-          await fetchData(); // Refresh to show current state
+          setTasks(prev => prev.filter(t => t.id !== task.id));
         } else {
           showToast(err.response?.data?.detail || "Błąd usuwania – spróbuj ponownie");
         }
@@ -2020,7 +2104,7 @@ export default function App() {
       <PwaInstallBanner
         standalonePwa={standalonePwa}
         onShowToast={showToast}
-        onDismissForever={() => setPwaHintDismissed(true)}
+        onDismissForever={() => {}}
       />
       <PlayerSummary user={user} progress={progress} />
       <AppTabs activeTab={mainTab} onTabChange={setMainTab} />
@@ -2029,12 +2113,24 @@ export default function App() {
         <>
       <ChallengesBar challenges={challenges} />
       <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onError={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} editingTaskIds={editingTaskIds} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} editingTaskIds={editingTaskIds} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">
             <select value={taskType} onChange={(e) => setTaskType(e.target.value)}><option value="quest">⚔️ Quest (do wykonania)</option><option value="event">📅 Wydarzenie (urodziny, notatka)</option></select>
             {taskType === "quest" && <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}><option value="easy">⚔️ Łatwe (+10 EXP)</option><option value="medium">🗡️ Średnie (+25 EXP)</option><option value="hard">💀 Trudne (+50 EXP)</option></select>}
+            {taskType === "event" && (
+              <>
+                <select value={eventCategory} onChange={(e) => setEventCategory(e.target.value)}>
+                  <option value="">Wybierz kategorię wydarzenia</option>
+                  {EVENT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
+                </select>
+                <select value={recurringPattern} onChange={(e) => setRecurringPattern(e.target.value)}>
+                  {RECURRING_PATTERNS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
+                </select>
+                {recurringPattern && <DatePicker value={recurringEndDate} onChange={setRecurringEndDate} label="Data końcowa cyklu (opcjonalne)" />}
+              </>
+            )}
             <select value={category} onChange={(e) => setCategory(e.target.value)}>{CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}</select>
             <DatePicker value={taskDate} onChange={setTaskDate} label="Termin" />
           </div>
@@ -2102,7 +2198,7 @@ export default function App() {
       )}
 
       {mainTab === "settings" && (
-        <DefaultArticlesPanel
+        <CategoriesPanel
           api={API}
           headers={headers}
           onToast={showToast}

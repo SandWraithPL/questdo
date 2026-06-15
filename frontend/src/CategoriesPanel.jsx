@@ -6,7 +6,7 @@ function getCategory(cat) {
   return SHOPPING_CATEGORIES.find((c) => c.value === cat) || SHOPPING_CATEGORIES[8];
 }
 
-export default function DefaultArticlesPanel({ api, headers, onToast }) {
+export default function CategoriesPanel({ api, headers, onToast }) {
   const [articles, setArticles] = useState([]);
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
@@ -17,7 +17,7 @@ export default function DefaultArticlesPanel({ api, headers, onToast }) {
   const [editQty, setEditQty] = useState("");
   const [editCat, setEditCat] = useState("other");
   const [editPrice, setEditPrice] = useState("");
-  const [defaultCategory, setDefaultCategory] = useState("other");
+  const [defaultHourlyRate, setDefaultHourlyRate] = useState("");
 
   const loadArticles = async () => {
     try {
@@ -30,13 +30,13 @@ export default function DefaultArticlesPanel({ api, headers, onToast }) {
 
   useEffect(() => {
     loadArticles();
-    loadDefaultCategory();
+    loadDefaultHourlyRate();
   }, []);
 
-  const loadDefaultCategory = async () => {
+  const loadDefaultHourlyRate = async () => {
     try {
-      const res = await axios.get(`${api}/settings/default-category`, { headers });
-      setDefaultCategory(res.data.category || "other");
+      const res = await axios.get(`${api}/settings/default-hourly-rate`, { headers });
+      setDefaultHourlyRate(res.data.rate ? String(res.data.rate) : "");
     } catch {
       /* ignore */
     }
@@ -104,28 +104,44 @@ export default function DefaultArticlesPanel({ api, headers, onToast }) {
     }
   };
 
-  const saveDefaultCategory = async () => {
+  const saveDefaultHourlyRate = async () => {
+    const rate = parseFloat(String(defaultHourlyRate).replace(",", "."));
+    if (!rate || rate <= 0) {
+      onToast("Podaj stawkę godzinową");
+      return;
+    }
     try {
-      await axios.post(`${api}/settings/default-category`, { category }, { headers });
-      setDefaultCategory(category);
-      onToast("💾 Zapisano domyślną kategorię");
+      await axios.post(`${api}/settings/default-hourly-rate`, { rate }, { headers });
+      setDefaultHourlyRate(String(rate));
+      onToast("💾 Zapisano domyślną stawkę godzinową");
     } catch (err) {
-      onToast(err.response?.data?.detail || "Błąd zapisu domyślnej kategorii");
+      onToast(err.response?.data?.detail || "Błąd zapisu domyślnej stawki");
     }
   };
 
   return (
     <div className="module-panel">
       <div className="add-task">
-        <h3>⚙️ Ustawienia domyślne</h3>
+        <h3>⚙️ Ustawienia kategorii i stawek</h3>
         <div className="form-row-inline">
-          <label style={{color: '#aaa', fontSize: '0.9rem', minWidth: '120px'}}>Domyślna kategoria:</label>
-          <select value={defaultCategory} onChange={(e) => setDefaultCategory(e.target.value)} style={{flex: 1}}>
-            {SHOPPING_CATEGORIES.map((c) => (
-              <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
-            ))}
-          </select>
-          <button type="button" className="icon-btn" onClick={saveDefaultCategory} title="Zapisz domyślną kategorię" style={{padding: '4px 8px', fontSize: '0.9rem'}}>💾</button>
+          <label style={{color: '#aaa', fontSize: '0.9rem', minWidth: '140px'}}>Domyślna stawka godzinowa:</label>
+          <input 
+            type="number" 
+            min="0" 
+            step="0.01" 
+            placeholder="Stawka (zł/h)" 
+            value={defaultHourlyRate} 
+            onChange={(e) => setDefaultHourlyRate(e.target.value)} 
+            style={{flex: 1}}
+          />
+          <button 
+            type="button" 
+            className="add-task-btn" 
+            onClick={saveDefaultHourlyRate}
+            style={{padding: '8px 16px', fontSize: '0.9rem'}}
+          >
+            Zapisz
+          </button>
         </div>
       </div>
       <div className="add-task">

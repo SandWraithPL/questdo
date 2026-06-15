@@ -3,6 +3,7 @@ import axios from "axios";
 import SharedCalendar, { weekdayIndex, WEEKDAYS_LONG } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
+import { applyUserFromResponse } from "./helpers";
 
 function formatMoney(value) {
   return `${Number(value || 0).toFixed(2)} zł`;
@@ -50,7 +51,7 @@ export default function EarningsPanel({
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [taxPercent, setTaxPercent] = useState("12");
   const [savedRates, setSavedRates] = useState([]);
-  const [showRateSelector, setShowRateSelector] = useState(false);
+  const [showRateDropdown, setShowRateDropdown] = useState(false);
   const [defaultHourlyRate, setDefaultHourlyRate] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editDate, setEditDate] = useState("");
@@ -127,6 +128,14 @@ export default function EarningsPanel({
     }
   };
 
+  const handleRateChange = (value) => {
+    setHourlyRate(value);
+    const rate = parseFloat(String(value).replace(",", "."));
+    if (rate && rate > 0) {
+      saveCurrentRate();
+    }
+  };
+
   const saveAsDefaultRate = async () => {
     const rate = parseFloat(String(hourlyRate).replace(",", "."));
     if (!rate || rate <= 0) {
@@ -144,7 +153,7 @@ export default function EarningsPanel({
 
   const selectSavedRate = (rate) => {
     setHourlyRate(String(rate));
-    setShowRateSelector(false);
+    setShowRateDropdown(false);
   };
 
   const deleteSavedRate = async (rateId) => {
@@ -157,17 +166,6 @@ export default function EarningsPanel({
     }
   };
 
-  const applyUserFromResponse = (data) => {
-    if (data?.exp !== undefined) {
-      onUserUpdate({
-        exp: data.exp,
-        level: data.level,
-        title: data.title,
-        next_level_exp: data.next_level_exp,
-        next_level_title: data.next_level_title,
-      });
-    }
-  };
 
   const addEntry = () => {
     const rate = parseFloat(String(hourlyRate).replace(",", "."));
@@ -209,7 +207,7 @@ export default function EarningsPanel({
       try {
         const res = await axios.patch(`${api}/work/${entry.id}`, { completed: !entry.completed }, { headers });
         setEntries((prev) => prev.map((e) => (e.id === entry.id ? res.data.entry : e)));
-        applyUserFromResponse(res.data);
+        applyUserFromResponse(res.data, onUserUpdate);
         await refreshSummary();
         if (res.data.exp_gained > 0) onToast(`💰 Praca potwierdzona! +${res.data.exp_gained} EXP`);
       } catch (err) {
@@ -223,7 +221,7 @@ export default function EarningsPanel({
       try {
         const res = await axios.delete(`${api}/work/${entry.id}`, { headers });
         setEntries((prev) => prev.filter((e) => e.id !== entry.id));
-        applyUserFromResponse(res.data);
+        applyUserFromResponse(res.data, onUserUpdate);
         await refreshSummary();
         onToast("🗑️ Usunięto wpis");
       } catch (err) {
@@ -241,7 +239,7 @@ export default function EarningsPanel({
     setEditNotes(entry.notes || "");
     setEditIsRecurring(entry.is_recurring || false);
     setEditDayOfWeek(entry.day_of_week || 0);
-    setEditEndDate(entry.end_date || "");
+    setEditEndDate(entry.end_date ? entry.end_date.slice(0, 10) : "");
   };
 
   const saveEdit = (entry) => {
@@ -396,13 +394,18 @@ export default function EarningsPanel({
             <TimePicker value={endTime} onChange={setEndTime} label="Do:" />
           </div>
           <div className="rate-input-group">
-            <input type="number" min="0" step="0.01" placeholder="Stawka za godzinę (zł) *" value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} />
-            <button type="button" className="icon-btn rate-save-btn" onClick={saveCurrentRate} title="Zapisz stawkę">💾</button>
-            <button type="button" className="icon-btn rate-select-btn" onClick={() => setShowRateSelector(!showRateSelector)} title="Wybierz zapisaną stawkę">📋</button>
+            <input type="number" min="0" step="0.01" placeholder="Stawka za godzinę (zł) *" value={hourlyRate} onChange={(e) => handleRateChange(e.target.value)} />
+            <select value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} className="rate-dropdown">
+              <option value="">Wybierz zapisaną stawkę</option>
+              {savedRates.sort((a, b) => b.rate - a.rate).map((rate) => (
+                <option key={rate.id} value={rate.rate}>{formatRate(rate.rate)}</option>
+              ))}
+            </select>
+            <button type="button" className="rate-save-btn" onClick={saveCurrentRate}>Zapisz</button>
           </div>
-          {showRateSelector && savedRates.length > 0 && (
+          {savedRates.length > 0 && (
             <div className="saved-rates-list">
-              {savedRates.map((rate) => (
+              {savedRates.sort((a, b) => b.rate - a.rate).map((rate) => (
                 <div key={rate.id} className="saved-rate-item">
                   <span onClick={() => selectSavedRate(rate.rate)}>{formatRate(rate.rate)}</span>
                   <button type="button" className="icon-btn delete" onClick={() => deleteSavedRate(rate.id)}>🗑️</button>

@@ -1,6 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import axios from "axios";
 import FamilyPanel from "./FamilyPanel";
+import { applyUserFromResponse } from "./helpers";
 
 const SHOPPING_CATEGORIES = [
   { value: "veggies", emoji: "🥦", label: "Warzywa" },
@@ -55,17 +56,6 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     return list;
   }, [items, filter, search]);
 
-  const applyUserFromResponse = (data) => {
-    if (data?.exp !== undefined) {
-      onUserUpdate({
-        exp: data.exp,
-        level: data.level,
-        title: data.title,
-        next_level_exp: data.next_level_exp,
-        next_level_title: data.next_level_title,
-      });
-    }
-  };
 
   const loadSummary = async () => {
     try {
@@ -160,7 +150,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
       try {
         const res = await axios.patch(`${api}/shopping/${item.id}`, { bought: !item.bought }, { headers });
         setItems((prev) => prev.map((i) => (i.id === item.id ? res.data.item : i)));
-        applyUserFromResponse(res.data);
+        applyUserFromResponse(res.data, onUserUpdate);
         await loadSummary();
         if (res.data.exp_gained > 0) onToast(`🛒 Kupione! +${res.data.exp_gained} EXP`);
       } catch (err) {
@@ -174,7 +164,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
       try {
         const res = await axios.delete(`${api}/shopping/${item.id}`, { headers });
         setItems((prev) => prev.filter((i) => i.id !== item.id));
-        applyUserFromResponse(res.data);
+        applyUserFromResponse(res.data, onUserUpdate);
         await loadSummary();
         onToast("🗑️ Usunięto produkt");
       } catch (err) {
