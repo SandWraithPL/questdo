@@ -1514,7 +1514,6 @@ export default function App() {
   const [workEntries, setWorkEntries] = useState([]);
   const [workSummary, setWorkSummary] = useState(null);
   const [familyId, setFamilyId] = useState(null);
-  const [showFamilyPanel, setShowFamilyPanel] = useState(false);
   const apiQueue = useRef([]);
   const isProcessingQueue = useRef(false);
 
