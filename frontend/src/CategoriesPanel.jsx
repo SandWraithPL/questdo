@@ -9,6 +9,12 @@ function formatMoney(value) {
   return `${formatted} zł`;
 }
 
+// Funkcja konwertująca przecinek na kropkę dla API
+function parseRateInput(value) {
+  if (!value) return "";
+  return value.replace(",", ".");
+}
+
 function getCategory(cat) {
   return SHOPPING_CATEGORIES.find((c) => c.value === cat) || SHOPPING_CATEGORIES[8];
 }
@@ -43,7 +49,8 @@ export default function CategoriesPanel({ api, headers, onToast }) {
   const loadDefaultHourlyRate = async () => {
     try {
       const res = await axios.get(`${api}/settings/default-hourly-rate`, { headers });
-      setDefaultHourlyRate(res.data.rate ? String(res.data.rate) : "");
+      const rate = res.data.rate ? parseFloat(res.data.rate).toFixed(2).replace(".", ",") : "";
+      setDefaultHourlyRate(rate);
     } catch {
       /* ignore */
     }
@@ -59,7 +66,7 @@ export default function CategoriesPanel({ api, headers, onToast }) {
         name,
         quantity: qty,
         category,
-        default_price: parseFloat(price) || 0
+        default_price: parseFloat(parseRateInput(price)) || 0
       }, { headers });
       setName("");
       setQty("");
@@ -77,7 +84,7 @@ export default function CategoriesPanel({ api, headers, onToast }) {
     setEditName(article.name);
     setEditQty(article.quantity || "");
     setEditCat(article.category || "other");
-    setEditPrice(article.default_price ? String(article.default_price) : "");
+    setEditPrice(article.default_price ? article.default_price.toFixed(2).replace(".", ",") : "");
   };
 
   const saveEdit = async () => {
@@ -87,7 +94,7 @@ export default function CategoriesPanel({ api, headers, onToast }) {
         name: editName,
         quantity: editQty,
         category: editCat,
-        default_price: parseFloat(editPrice) || 0
+        default_price: parseFloat(parseRateInput(editPrice)) || 0
       }, { headers });
       setEditingId(null);
       setEditName("");
@@ -112,22 +119,21 @@ export default function CategoriesPanel({ api, headers, onToast }) {
   };
 
   const saveDefaultHourlyRate = async () => {
-    const rate = parseFloat(String(defaultHourlyRate).replace(",", "."));
+    const rateValue = parseRateInput(defaultHourlyRate);
+    const rate = parseFloat(rateValue);
     if (!rate || rate <= 0) {
       onToast("Podaj stawkę godzinową");
       return;
     }
     try {
       await axios.post(`${api}/settings/default-hourly-rate`, { rate }, { headers });
-      setDefaultHourlyRate(String(rate));
+      const formattedRate = rate.toFixed(2).replace(".", ",");
+      setDefaultHourlyRate(formattedRate);
       onToast("💾 Zapisano domyślną stawkę godzinową");
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd zapisu domyślnej stawki");
     }
   };
-
-  // Format display value for default hourly rate
-  const displayDefaultRate = defaultHourlyRate ? parseFloat(defaultHourlyRate).toFixed(2).replace(".", ",") : "";
 
   return (
     <div className="module-panel">
@@ -136,15 +142,12 @@ export default function CategoriesPanel({ api, headers, onToast }) {
         <div className="form-row-inline" style={{ alignItems: "center" }}>
           <label style={{ color: "#aaa", fontSize: "0.9rem", minWidth: "160px" }}>Domyślna stawka godzinowa:</label>
           <input 
-            type="number" 
-            min="0" 
-            step="0.01" 
+            type="text" 
             placeholder="Stawka (zł/h)" 
             value={defaultHourlyRate} 
             onChange={(e) => setDefaultHourlyRate(e.target.value)} 
             style={{ flex: 1 }}
           />
-          <span style={{ color: "#ff8906", fontWeight: "bold", minWidth: "80px" }}>{displayDefaultRate ? `${displayDefaultRate} zł/h` : "brak"}</span>
           <button 
             type="button" 
             className="add-task-btn" 
@@ -165,7 +168,7 @@ export default function CategoriesPanel({ api, headers, onToast }) {
             onKeyDown={(e) => e.key === "Enter" && addArticle()} 
           />
           <input className="input-small" placeholder="Ilość" value={qty} onChange={(e) => setQty(e.target.value)} />
-          <input className="input-small" placeholder="Cena (zł)" value={price} onChange={(e) => setPrice(e.target.value)} type="number" step="0.01" min="0" />
+          <input className="input-small" placeholder="Cena (zł)" value={price} onChange={(e) => setPrice(e.target.value)} />
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
             {SHOPPING_CATEGORIES.map((c) => (
               <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
@@ -188,7 +191,7 @@ export default function CategoriesPanel({ api, headers, onToast }) {
                 <div className="edit-mode">
                   <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nazwa" />
                   <input className="input-small" value={editQty} onChange={(e) => setEditQty(e.target.value)} placeholder="Ilość" />
-                  <input className="input-small" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} placeholder="Cena (zł)" type="number" step="0.01" min="0" />
+                  <input className="input-small" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} placeholder="Cena (zł)" />
                   <select value={editCat} onChange={(e) => setEditCat(e.target.value)}>
                     {SHOPPING_CATEGORIES.map((c) => (
                       <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>

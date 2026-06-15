@@ -27,6 +27,19 @@ function getCategory(cat) {
   return SHOPPING_CATEGORIES.find((c) => c.value === cat) || SHOPPING_CATEGORIES[8];
 }
 
+// Funkcja formatująca datę z uwzględnieniem lokalnej strefy czasowej
+function formatLocalDateTime(dateString) {
+  const date = new Date(dateString);
+  return date.toLocaleDateString("pl-PL", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  });
+}
+
 export default function ShoppingPanel({ api, headers, items, setItems, onUserUpdate, onToast, enqueueRequest, familyId, onFamilyChange }) {
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
@@ -134,7 +147,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     
     const interval = setInterval(() => {
       loadShoppingItems();
-    }, 10000); // Poll every 10 seconds
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [familyId]);
@@ -240,7 +253,11 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     }
   };
 
-  const deleteHistory = async (historyId) => {
+  const deleteHistory = async (historyId, canEdit) => {
+    if (!canEdit) {
+      onToast("Nie można usunąć tej listy (minęło więcej niż 24h)");
+      return;
+    }
     try {
       await axios.delete(`${api}/shopping/history/${historyId}`, { headers });
       setHistory((prev) => prev.filter((h) => h.id !== historyId));
@@ -531,18 +548,48 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
             <p className="empty">Brak zapisanych list w historii.</p>
           ) : (
             <div className="history-list">
-              {history.map((h) => (
-                <div key={h.id} className="history-card">
-                  <div className="history-info">
-                    <span className="history-date">{new Date(h.completed_at).toLocaleDateString("pl-PL", { day: "numeric", month: "long", year: "numeric", hour: "2-digit", minute: "2-digit" })}</span>
-                    <span className="history-count">{h.total_items} produktów</span>
+              {history.map((h) => {
+                // Oblicz czy można edytować/usunąć (mniej niż 24h)
+                const completedAt = new Date(h.completed_at);
+                const now = new Date();
+                const hoursSinceCompletion = (now - completedAt) / (1000 * 60 * 60);
+                const canEdit = hoursSinceCompletion < 24;
+                
+                return (
+                  <div key={h.id} className="history-card" style={{ cursor: "pointer" }} onClick={() => viewHistoryDetail(h.id)}>
+                    <div className="history-info">
+                      <span className="history-date">{formatLocalDateTime(h.completed_at)}</span>
+                      <span className="history-count">{h.total_items} produktów</span>
+                      <span className="history-total" style={{ color: "#ff8906", fontSize: "0.85rem" }}>
+                        💰 {formatMoney(h.total_spent)}
+                      </span>
+                      {!canEdit && (
+                        <span className="badge locked-badge" style={{ marginTop: "4px" }}>🔒 Zablokowane (24h)</span>
+                      )}
+                    </div>
+                    <div className="history-actions" onClick={(e) => e.stopPropagation()}>
+                      <button 
+                        type="button" 
+                        className="icon-btn" 
+                        onClick={() => loadFromHistory(h.id)} 
+                        title="Wczytaj listę"
+                      >
+                        📋
+                      </button>
+                      <button 
+                        type="button" 
+                        className="icon-btn delete" 
+                        onClick={() => deleteHistory(h.id, canEdit)} 
+                        title={canEdit ? "Usuń" : "Nie można usunąć (minęło 24h)"}
+                        disabled={!canEdit}
+                        style={{ opacity: canEdit ? 1 : 0.5 }}
+                      >
+                        🗑️
+                      </button>
+                    </div>
                   </div>
-                  <div className="history-actions">
-                    <button type="button" className="icon-btn" onClick={() => loadFromHistory(h.id)} title="Wczytaj listę">📋</button>
-                    <button type="button" className="icon-btn delete" onClick={() => deleteHistory(h.id)} title="Usuń">🗑️</button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
         </div>
@@ -551,10 +598,17 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
       {selectedHistory && historyDetail && (
         <div className="history-detail-panel">
           <div className="history-header">
-            <h3>📋 Szczegóły listy z {new Date(historyDetail.completed_at).toLocaleDateString("pl-PL")}</h3>
+            <h3>📋 Szczegóły listy z {formatLocalDateTime(historyDetail.completed_at)}</h3>
             <button type="button" className="icon-btn" onClick={() => { setSelectedHistory(null); setHistoryDetail(null); }}>✕</button>
           </div>
           <div className="history-items">
+            <div className="history-summary" style={{ marginBottom: "12px", padding: "8px", background: "#2a2a3e", borderRadius: "8px" }}>
+              <span>📦 {historyDetail.total_items} produktów</span>
+              <span style={{ marginLeft: "16px", color: "#ff8906" }}>💰 {formatMoney(historyDetail.total_spent)}</span>
+              {!historyDetail.can_edit && (
+                <span className="badge locked-badge" style={{ marginLeft: "16px" }}>🔒 Tylko podgląd (minęło 24h)</span>
+              )}
+            </div>
             {JSON.parse(historyDetail.items_json).map((item, idx) => {
               const cat = getCategory(item.category);
               return (
@@ -572,7 +626,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
             })}
           </div>
           <div className="history-footer">
-            <p>{historyDetail.can_edit ? "Możesz edytować tę listę (mniej niż 24h)" : "Tylko podgląd (minęło więcej niż 24h)"}</p>
+            <p>{historyDetail.can_edit ? "✅ Możesz edytować tę listę (mniej niż 24h)" : "🔒 Tylko podgląd (minęło więcej niż 24h)"}</p>
           </div>
         </div>
       )}

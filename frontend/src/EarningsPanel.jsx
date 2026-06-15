@@ -12,11 +12,17 @@ function formatMoney(value) {
   return `${formatted} zł`;
 }
 
-// Funkcja formatująca stawkę z przecinkiem i 2 miejscami po przecinku
+// Funkcja formatująca stawkę z przecinkiem i 2 miejscami po przecinku (do wyświetlania)
 function formatRate(value) {
   const num = Number(value || 0);
   const formatted = num.toFixed(2).replace(".", ",");
   return `${formatted} zł/h`;
+}
+
+// Funkcja konwertująca przecinek na kropkę dla API
+function parseRateInput(value) {
+  if (!value) return "";
+  return value.replace(",", ".");
 }
 
 function matchWorkToDate(entry, dateStr) {
@@ -54,7 +60,6 @@ export default function EarningsPanel({
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [taxPercent, setTaxPercent] = useState("12");
   const [savedRates, setSavedRates] = useState([]);
-  const [showRateDropdown, setShowRateDropdown] = useState(false);
   const [defaultHourlyRate, setDefaultHourlyRate] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editDate, setEditDate] = useState("");
@@ -87,7 +92,9 @@ export default function EarningsPanel({
   const loadDefaultHourlyRate = async () => {
     try {
       const res = await axios.get(`${api}/settings/default-hourly-rate`, { headers });
-      setDefaultHourlyRate(res.data.rate ? String(res.data.rate) : "");
+      // Format z przecinkiem dla wyświetlania
+      const rate = res.data.rate ? parseFloat(res.data.rate).toFixed(2).replace(".", ",") : "";
+      setDefaultHourlyRate(rate);
     } catch {
       /* ignore */
     }
@@ -118,7 +125,8 @@ export default function EarningsPanel({
   };
 
   const saveCurrentRate = async () => {
-    const rate = parseFloat(String(hourlyRate).replace(",", "."));
+    const rateValue = parseRateInput(hourlyRate);
+    const rate = parseFloat(rateValue);
     if (!rate || rate <= 0) {
       onToast("Podaj stawkę godzinową");
       return;
@@ -141,14 +149,16 @@ export default function EarningsPanel({
   };
 
   const saveAsDefaultRate = async () => {
-    const rate = parseFloat(String(hourlyRate).replace(",", "."));
+    const rateValue = parseRateInput(hourlyRate);
+    const rate = parseFloat(rateValue);
     if (!rate || rate <= 0) {
       onToast("Podaj stawkę godzinową");
       return;
     }
     try {
       await axios.post(`${api}/settings/default-hourly-rate`, { rate }, { headers });
-      setDefaultHourlyRate(String(rate));
+      const formattedRate = rate.toFixed(2).replace(".", ",");
+      setDefaultHourlyRate(formattedRate);
       onToast("💾 Zapisano jako domyślną stawkę");
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd zapisu domyślnej stawki");
@@ -156,8 +166,8 @@ export default function EarningsPanel({
   };
 
   const selectSavedRate = (rate) => {
-    setHourlyRate(String(rate));
-    setShowRateDropdown(false);
+    // Format z przecinkiem dla wyświetlenia w inpucie
+    setHourlyRate(rate.toFixed(2).replace(".", ","));
   };
 
   const deleteSavedRate = async (rateId) => {
@@ -171,7 +181,8 @@ export default function EarningsPanel({
   };
 
   const addEntry = () => {
-    const rate = parseFloat(String(hourlyRate).replace(",", "."));
+    const rateValue = parseRateInput(hourlyRate);
+    const rate = parseFloat(rateValue);
     if (!rate || rate <= 0) {
       onToast("Podaj stawkę godzinową");
       return;
@@ -238,7 +249,7 @@ export default function EarningsPanel({
     setEditDate(entry.work_date);
     setEditStartTime(entry.start_time);
     setEditEndTime(entry.end_time);
-    setEditRate(entry.hourly_rate);
+    setEditRate(entry.hourly_rate.toFixed(2).replace(".", ","));
     setEditNotes(entry.notes || "");
     setEditIsRecurring(entry.is_recurring || false);
     setEditDayOfWeek(entry.day_of_week || 0);
@@ -248,7 +259,8 @@ export default function EarningsPanel({
   const saveEdit = (entry) => {
     enqueueRequest(async () => {
       try {
-        const rate = parseFloat(String(editRate).replace(",", "."));
+        const rateValue = parseRateInput(editRate);
+        const rate = parseFloat(rateValue);
         if (!rate || rate <= 0) {
           onToast("Podaj stawkę godzinową");
           return;
@@ -272,9 +284,6 @@ export default function EarningsPanel({
       }
     });
   };
-
-  // Format display value for default hourly rate (z przecinkiem)
-  const displayDefaultRate = defaultHourlyRate ? parseFloat(defaultHourlyRate).toFixed(2).replace(".", ",") : "";
 
   return (
     <div className="module-panel earnings-panel">
@@ -340,7 +349,7 @@ export default function EarningsPanel({
                   <DatePicker value={editDate} onChange={setEditDate} />
                   <TimePicker value={editStartTime} onChange={setEditStartTime} />
                   <TimePicker value={editEndTime} onChange={setEditEndTime} />
-                  <input type="number" min="0" step="0.01" placeholder="Stawka (zł)" value={editRate} onChange={(e) => setEditRate(e.target.value)} />
+                  <input type="text" placeholder="Stawka (zł)" value={editRate} onChange={(e) => setEditRate(e.target.value)} />
                   <input placeholder="Notatka" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
                   <label className="important-toggle">
                     <input type="checkbox" checked={editIsRecurring} onChange={(e) => setEditIsRecurring(e.target.checked)} />
@@ -400,34 +409,25 @@ export default function EarningsPanel({
             <TimePicker value={endTime} onChange={setEndTime} label="Do:" />
           </div>
 
-          {/* Domyślna stawka */}
-          <div className="form-row-inline" style={{ alignItems: "center", marginBottom: "12px" }}>
-            <label style={{ color: "#aaa", fontSize: "0.9rem", minWidth: "160px" }}>Domyślna stawka godzinowa:</label>
-            <span style={{ color: "#ff8906", fontWeight: "bold" }}>{displayDefaultRate ? `${displayDefaultRate} zł/h` : "brak"}</span>
-            <button type="button" className="icon-btn" onClick={saveAsDefaultRate} style={{ marginLeft: "auto" }} title="Zapisz bieżącą jako domyślną">
-              💾
-            </button>
-          </div>
-
           <div className="rate-input-group">
             <input 
-              type="number" 
-              min="0" 
-              step="0.01" 
+              type="text" 
               placeholder="Stawka za godzinę (zł) *" 
               value={hourlyRate} 
               onChange={(e) => handleRateChange(e.target.value)} 
-              style={{ flex: 1, minWidth: "120px" }}
+              style={{ flex: 2, minWidth: "120px" }}
             />
             <select 
               value={hourlyRate} 
               onChange={(e) => setHourlyRate(e.target.value)} 
               className="rate-dropdown"
-              style={{ flex: "0 0 auto", width: "auto", minWidth: "140px", maxWidth: "180px" }}
+              style={{ flex: "0 0 auto", width: "auto", minWidth: "140px" }}
             >
               <option value="">Wybierz zapisaną</option>
               {savedRates.sort((a, b) => b.rate - a.rate).map((rate) => (
-                <option key={rate.id} value={rate.rate}>{formatRate(rate.rate)}</option>
+                <option key={rate.id} value={rate.rate.toFixed(2).replace(".", ",")}>
+                  {formatRate(rate.rate)}
+                </option>
               ))}
             </select>
             <button 
@@ -440,6 +440,15 @@ export default function EarningsPanel({
               {isSavingRate ? "⏳" : "💾 Zapisz"}
             </button>
           </div>
+
+          <button 
+            type="button" 
+            className="add-task-btn" 
+            onClick={saveAsDefaultRate}
+            style={{ marginBottom: "12px", background: "#2a2a3e" }}
+          >
+            ⭐ Zapisz jako domyślną
+          </button>
 
           {savedRates.length > 0 && (
             <div className="saved-rates-list">
