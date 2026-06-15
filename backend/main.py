@@ -152,6 +152,23 @@ def migrate_schema():
     if "work_entries" not in insp.get_table_names():
         models.WorkEntry.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę work_entries")
+    if "default_articles" not in insp.get_table_names():
+        models.DefaultArticle.__table__.create(bind=engine)
+        print("Migracja: utworzono tabelę default_articles")
+
+    if "shopping_items" in insp.get_table_names():
+        shopping_cols = {c["name"] for c in insp.get_columns("shopping_items")}
+        if "price" not in shopping_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE shopping_items ADD COLUMN price FLOAT DEFAULT 0.0"))
+            print("Migracja: dodano kolumnę shopping_items.price")
+
+    if "shopping_history" in insp.get_table_names():
+        history_cols = {c["name"] for c in insp.get_columns("shopping_history")}
+        if "is_template" not in history_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE shopping_history ADD COLUMN is_template BOOLEAN DEFAULT FALSE"))
+            print("Migracja: dodano kolumnę shopping_history.is_template")
 
     db = next(get_db())
     rare_drop_count = db.query(models.RareDrop).count()
@@ -816,6 +833,7 @@ class ShoppingUpdate(BaseModel):
     quantity: Optional[str] = None
     category: Optional[str] = None
     bought: Optional[bool] = None
+    price: Optional[float] = None
 
 
 class WorkCreate(BaseModel):
@@ -2013,6 +2031,8 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
         row.quantity = encrypt_field(body.quantity.strip())
     if body.category is not None:
         row.category = validate_shopping_category(body.category)
+    if body.price is not None:
+        row.price = max(0.0, float(body.price))
     if body.bought is not None:
         row.bought = bool(body.bought)
         if row.bought and not was_bought and not row.exp_awarded:
@@ -2352,6 +2372,21 @@ class ShoppingHistoryCreate(BaseModel):
     total_items: int
     total_spent: float = 0.0
     notes: str = ""
+    is_template: bool = False
+
+
+class DefaultArticleCreate(BaseModel):
+    name: str
+    quantity: Optional[str] = ""
+    category: Optional[str] = "other"
+    default_price: float = 0.0
+
+
+class DefaultArticleUpdate(BaseModel):
+    name: Optional[str] = None
+    quantity: Optional[str] = None
+    category: Optional[str] = None
+    default_price: Optional[float] = None
 
 @app.get("/shopping/history")
 def get_shopping_history(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -2364,7 +2399,8 @@ def get_shopping_history(current_user: models.User = Depends(get_current_user), 
         "total_items": h.total_items,
         "completed_at": h.completed_at.isoformat(),
         "total_spent": h.total_spent,
-        "notes": h.notes
+        "notes": h.notes,
+        "is_template": h.is_template
     } for h in history]
 
 @app.get("/shopping/history/{history_id}")
@@ -2377,13 +2413,19 @@ def get_shopping_history_detail(history_id: int, current_user: models.User = Dep
     if not history:
         raise HTTPException(status_code=404, detail="Nie znaleziono historii")
     
+    hours_since_completion = (datetime.utcnow() - history.completed_at).total_seconds() / 3600
+    can_edit = hours_since_completion < 24
+    
     return {
         "id": history.id,
         "items_json": history.items_json,
         "total_items": history.total_items,
         "completed_at": history.completed_at.isoformat(),
         "total_spent": history.total_spent,
-        "notes": history.notes
+        "notes": history.notes,
+        "is_template": history.is_template,
+        "can_edit": can_edit,
+        "hours_since_completion": hours_since_completion
     }
 
 @app.post("/shopping/history")
@@ -2393,7 +2435,8 @@ def create_shopping_history(data: ShoppingHistoryCreate, current_user: models.Us
         items_json=data.items_json,
         total_items=data.total_items,
         total_spent=data.total_spent,
-        notes=data.notes
+        notes=data.notes,
+        is_template=data.is_template
     )
     db.add(history)
     db.commit()
@@ -2410,14 +2453,171 @@ def delete_shopping_history(history_id: int, current_user: models.User = Depends
         models.ShoppingHistory.id == history_id,
         models.ShoppingHistory.owner_id == current_user.id
     ).first()
-    
+
     if not history:
         raise HTTPException(status_code=404, detail="Nie znaleziono historii")
-    
+
     db.delete(history)
     db.commit()
-    
-    return {"message": "Usunięto historię"}
+
+    return {"message": "Usunięto historii"}
+
+
+@app.post("/shopping/history/{history_id}/load")
+def load_shopping_from_history(history_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    history = db.query(models.ShoppingHistory).filter(
+        models.ShoppingHistory.id == history_id,
+        models.ShoppingHistory.owner_id == current_user.id
+    ).first()
+
+    if not history:
+        raise HTTPException(status_code=404, detail="Nie znaleziono historii")
+
+    hours_since_completion = (datetime.utcnow() - history.completed_at).total_seconds() / 3600
+    can_edit = hours_since_completion < 24
+
+    items_data = json.loads(history.items_json)
+    created_items = []
+
+    for item_data in items_data:
+        item = models.ShoppingItem(
+            owner_id=current_user.id,
+            name=encrypt_field(item_data.get("name", "")),
+            quantity=encrypt_field(item_data.get("quantity", "")),
+            category=item_data.get("category", "other"),
+            bought=False,
+            price=item_data.get("price", 0.0)
+        )
+        db.add(item)
+        db.flush()
+        created_items.append(lm.shopping_to_dict(item))
+
+    if can_edit:
+        db.delete(history)
+        db.commit()
+        return {
+            "message": "Wczytano listę z historii (edycja możliwa)",
+            "items": created_items,
+            "deleted_history": True
+        }
+    else:
+        db.commit()
+        return {
+            "message": "Wczytano listę jako szablon (tylko podgląd)",
+            "items": created_items,
+            "deleted_history": False
+        }
+
+
+@app.get("/default-articles")
+def get_default_articles(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    articles = db.query(models.DefaultArticle).filter(
+        models.DefaultArticle.owner_id == current_user.id
+    ).order_by(models.DefaultArticle.name).all()
+
+    return [{
+        "id": a.id,
+        "name": a.name,
+        "quantity": a.quantity,
+        "category": a.category,
+        "default_price": a.default_price,
+        "created_at": a.created_at.isoformat()
+    } for a in articles]
+
+
+@app.get("/default-articles/search")
+def search_default_articles(q: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not q or len(q) < 2:
+        return []
+
+    search_pattern = f"%{q.lower()}%"
+    articles = db.query(models.DefaultArticle).filter(
+        models.DefaultArticle.owner_id == current_user.id,
+        models.DefaultArticle.name.ilike(search_pattern)
+    ).order_by(models.DefaultArticle.name).limit(20).all()
+
+    return [{
+        "id": a.id,
+        "name": a.name,
+        "quantity": a.quantity,
+        "category": a.category,
+        "default_price": a.default_price
+    } for a in articles]
+
+
+@app.post("/default-articles")
+def create_default_article(data: DefaultArticleCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    name = (data.name or "").strip()
+    if not name:
+        raise HTTPException(status_code=400, detail="Nazwa artykułu jest wymagana")
+
+    article = models.DefaultArticle(
+        owner_id=current_user.id,
+        name=name,
+        quantity=data.quantity or "",
+        category=validate_shopping_category(data.category or "other"),
+        default_price=max(0.0, float(data.default_price or 0.0))
+    )
+    db.add(article)
+    db.commit()
+    db.refresh(article)
+
+    return {
+        "id": article.id,
+        "name": article.name,
+        "quantity": article.quantity,
+        "category": article.category,
+        "default_price": article.default_price,
+        "message": "Dodano artykuł domyślny"
+    }
+
+
+@app.patch("/default-articles/{article_id}")
+def update_default_article(article_id: int, data: DefaultArticleUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    article = db.query(models.DefaultArticle).filter(
+        models.DefaultArticle.id == article_id,
+        models.DefaultArticle.owner_id == current_user.id
+    ).first()
+
+    if not article:
+        raise HTTPException(status_code=404, detail="Nie znaleziono artykułu")
+
+    if data.name is not None:
+        article.name = data.name.strip()
+    if data.quantity is not None:
+        article.quantity = data.quantity
+    if data.category is not None:
+        article.category = validate_shopping_category(data.category)
+    if data.default_price is not None:
+        article.default_price = max(0.0, float(data.default_price))
+
+    db.commit()
+    db.refresh(article)
+
+    return {
+        "id": article.id,
+        "name": article.name,
+        "quantity": article.quantity,
+        "category": article.category,
+        "default_price": article.default_price,
+        "message": "Zaktualizowano artykuł"
+    }
+
+
+@app.delete("/default-articles/{article_id}")
+def delete_default_article(article_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    article = db.query(models.DefaultArticle).filter(
+        models.DefaultArticle.id == article_id,
+        models.DefaultArticle.owner_id == current_user.id
+    ).first()
+
+    if not article:
+        raise HTTPException(status_code=404, detail="Nie znaleziono artykułu")
+
+    db.delete(article)
+    db.commit()
+
+    return {"message": "Usunięto artykuł domyślny"}
 
 
 class HourlyRateCreate(BaseModel):

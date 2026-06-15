@@ -3,6 +3,7 @@ const TABS = [
   { id: "schedule", label: "Plan", icon: "📚" },
   { id: "shopping", label: "Zakupy", icon: "🛒" },
   { id: "earnings", label: "Zarobki", icon: "💰" },
+  { id: "settings", label: "Ustawienia", icon: "⚙️" },
 ];
 
 const TAB_STORAGE_KEY = "questdo-main-tab";

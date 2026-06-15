@@ -7,6 +7,7 @@ import AppTabs, { readMainTab } from "./AppTabs";
 import ShoppingPanel from "./ShoppingPanel";
 import SchedulePanel from "./SchedulePanel";
 import EarningsPanel from "./EarningsPanel";
+import DefaultArticlesPanel from "./DefaultArticlesPanel";
 
 const API = "https://questdo-backend.onrender.com";
 
@@ -2066,6 +2067,14 @@ export default function App() {
           onUserUpdate={updateUserFromModule}
           onToast={showToast}
           enqueueRequest={enqueueRequest}
+        />
+      )}
+
+      {mainTab === "settings" && (
+        <DefaultArticlesPanel
+          api={API}
+          headers={headers}
+          onToast={showToast}
         />
       )}
 

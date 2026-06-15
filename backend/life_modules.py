@@ -56,6 +56,7 @@ def shopping_to_dict(item: models.ShoppingItem) -> dict:
         "category": item.category,
         "bought": item.bought,
         "exp_awarded": item.exp_awarded,
+        "price": item.price if hasattr(item, 'price') else 0.0,
         "created_at": str(item.created_at),
     }
 

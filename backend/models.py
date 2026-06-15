@@ -173,6 +173,7 @@ class ShoppingItem(Base):
     category = Column(String, default="other")
     bought = Column(Boolean, default=False)
     exp_awarded = Column(Boolean, default=False)
+    price = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
     owner = relationship("User")
 
@@ -186,6 +187,7 @@ class ShoppingHistory(Base):
     completed_at = Column(DateTime, default=datetime.utcnow)
     total_spent = Column(Float, default=0.0)  # Optional: if user wants to track costs
     notes = Column(String, default="")
+    is_template = Column(Boolean, default=False)  # If true, can only be loaded as template after 24h
     owner = relationship("User")
 
 
@@ -212,5 +214,17 @@ class WorkEntry(Base):
     tax_percent = Column(Float, default=0.0)
     completed = Column(Boolean, default=False)
     exp_awarded = Column(Boolean, default=False)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    owner = relationship("User")
+
+
+class DefaultArticle(Base):
+    __tablename__ = "default_articles"
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
+    name = Column(String)
+    quantity = Column(String, default="")
+    category = Column(String, default="other")
+    default_price = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)
     owner = relationship("User")

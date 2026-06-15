@@ -48,6 +48,56 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .add-task button:disabled { opacity: 0.65; cursor: wait; }
 .cancel-btn { background: #333 !important; color: #fff !important; }
 .cancel-btn:hover:not(:disabled) { background: #444 !important; }
+
+.suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: #1a1a2e;
+  border: 1px solid #333;
+  border-radius: 8px;
+  margin-top: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 1000;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.suggestion-item {
+  padding: 10px 12px;
+  cursor: pointer;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-bottom: 1px solid #2a2a3e;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item:hover {
+  background: #2a2a3e;
+}
+
+.suggestion-price {
+  color: #ff8906;
+  font-size: 0.85rem;
+}
+
+.history-footer {
+  padding: 12px;
+  background: #1a1a2e;
+  border-radius: 8px;
+  margin-top: 12px;
+}
+
+.history-footer p {
+  font-size: 0.85rem;
+  color: #aaa;
+  margin: 0;
+}
 .exp-preview-hint { font-size: 0.8rem; color: #aaa; margin: -4px 0 12px; }
 .exp-preview-hint strong { color: #ff8906; }
 
