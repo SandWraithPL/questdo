@@ -193,7 +193,7 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
             rows={6}
           />
           <div className="row">
-            <button type="button" onClick={handleImport}>Importuj</button>
+            <button type="button" className="add-task-btn" onClick={handleImport}>Importuj</button>
             <button type="button" className="cancel-btn" onClick={() => setShowImport(false)}>Anuluj</button>
           </div>
         </div>
@@ -225,7 +225,7 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
             <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
           )}
           <div className="row">
-            <button type="button" onClick={addEntry}>Dodaj do planu</button>
+            <button type="button" className="add-task-btn" onClick={addEntry}>Dodaj do planu</button>
             <button type="button" className="cancel-btn" onClick={() => setShowAdd(false)}>Anuluj</button>
           </div>
         </div>

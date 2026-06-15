@@ -1,6 +1,6 @@
 import { useMemo, useState, useEffect } from "react";
 import axios from "axios";
-import SharedCalendar from "./SharedCalendar";
+import SharedCalendar, { weekdayIndex, WEEKDAYS_LONG } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
 
@@ -10,6 +10,23 @@ function formatMoney(value) {
 
 function formatRate(value) {
   return `${Number(value || 0).toFixed(2)} zł/h`;
+}
+
+function matchWorkToDate(entry, dateStr) {
+  const targetDate = new Date(dateStr);
+  if (entry.is_recurring) {
+    // Check if the date is within the recurring period
+    if (entry.end_date) {
+      const endDate = new Date(entry.end_date);
+      if (targetDate > endDate) {
+        return false;
+      }
+    }
+    // Check if the day of week matches
+    return entry.day_of_week === weekdayIndex(dateStr);
+  }
+  // For non-recurring entries, match exact date
+  return entry.work_date === dateStr;
 }
 
 export default function EarningsPanel({
@@ -41,13 +58,19 @@ export default function EarningsPanel({
   const [editEndTime, setEditEndTime] = useState("");
   const [editRate, setEditRate] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [isRecurring, setIsRecurring] = useState(false);
+  const [dayOfWeek, setDayOfWeek] = useState(0);
+  const [endDate, setEndDate] = useState("");
+  const [editIsRecurring, setEditIsRecurring] = useState(false);
+  const [editDayOfWeek, setEditDayOfWeek] = useState(0);
+  const [editEndDate, setEditEndDate] = useState("");
 
   const selectedStr = selectedDate instanceof Date
     ? selectedDate.toISOString().slice(0, 10)
     : String(selectedDate).slice(0, 10);
 
   const dayEntries = useMemo(
-    () => entries.filter((e) => e.work_date === selectedStr).sort((a, b) => a.start_time.localeCompare(b.start_time)),
+    () => entries.filter((e) => matchWorkToDate(e, selectedStr)).sort((a, b) => a.start_time.localeCompare(b.start_time)),
     [entries, selectedStr],
   );
 
@@ -162,12 +185,18 @@ export default function EarningsPanel({
           notes,
           tax_enabled: taxEnabled,
           tax_percent: parseFloat(taxPercent) || 0,
+          is_recurring: isRecurring,
+          day_of_week: isRecurring ? dayOfWeek : null,
+          end_date: isRecurring && endDate ? endDate : null,
         }, { headers });
         setEntries((prev) => [res.data, ...prev]);
         await refreshSummary();
         setShowAdd(false);
         setHourlyRate(defaultHourlyRate || "");
         setNotes("");
+        setIsRecurring(false);
+        setDayOfWeek(0);
+        setEndDate("");
         onToast("✅ Dodano wpis pracy");
       } catch (err) {
         onToast(err.response?.data?.detail || "Błąd dodawania");
@@ -210,6 +239,9 @@ export default function EarningsPanel({
     setEditEndTime(entry.end_time);
     setEditRate(entry.hourly_rate);
     setEditNotes(entry.notes || "");
+    setEditIsRecurring(entry.is_recurring || false);
+    setEditDayOfWeek(entry.day_of_week || 0);
+    setEditEndDate(entry.end_date || "");
   };
 
   const saveEdit = (entry) => {
@@ -226,6 +258,9 @@ export default function EarningsPanel({
           end_time: editEndTime,
           hourly_rate: rate,
           notes: editNotes,
+          is_recurring: editIsRecurring,
+          day_of_week: editIsRecurring ? editDayOfWeek : null,
+          end_date: editIsRecurring && editEndDate ? editEndDate : null,
         }, { headers });
         setEntries((prev) => prev.map((e) => (e.id === entry.id ? res.data.entry : e)));
         await refreshSummary();
@@ -262,13 +297,15 @@ export default function EarningsPanel({
         items={entries}
         selectedDate={selectedDate}
         onDateSelect={onDateSelect}
-        matchItemToDate={(item, dateStr) => item.work_date === dateStr}
+        matchItemToDate={matchWorkToDate}
         getItemLabel={(item) => `${item.start_time}–${item.end_time} · ${formatMoney(item.net)}`}
         isItemCompleted={(item) => item.completed}
         renderItemMeta={(item) => (
           <div className="task-meta">
             <span className="badge category">{item.hours}h × {formatRate(item.hourly_rate)}</span>
             {item.tax_enabled && <span className="badge timing-late">Podatek {item.tax_percent}%</span>}
+            {item.is_recurring && <span className="badge category">🔁 {WEEKDAYS_LONG[item.day_of_week]}</span>}
+            {item.end_date && <span className="badge timing-late">Do {item.end_date}</span>}
             {item.completed && <span className="badge exp">Potwierdzone</span>}
           </div>
         )}
@@ -301,6 +338,20 @@ export default function EarningsPanel({
                   <TimePicker value={editEndTime} onChange={setEditEndTime} />
                   <input type="number" min="0" step="0.01" placeholder="Stawka (zł)" value={editRate} onChange={(e) => setEditRate(e.target.value)} />
                   <input placeholder="Notatka" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
+                  <label className="important-toggle">
+                    <input type="checkbox" checked={editIsRecurring} onChange={(e) => setEditIsRecurring(e.target.checked)} />
+                    <span>Cykliczne</span>
+                  </label>
+                  {editIsRecurring ? (
+                    <>
+                      <select value={editDayOfWeek} onChange={(e) => setEditDayOfWeek(Number(e.target.value))}>
+                        {WEEKDAYS_LONG.map((day, idx) => (
+                          <option key={day} value={idx}>{day}</option>
+                        ))}
+                      </select>
+                      <input type="date" placeholder="Data zakończenia" value={editEndDate} onChange={(e) => setEditEndDate(e.target.value)} />
+                    </>
+                  ) : null}
                   <button type="button" className="save-mini" onClick={() => saveEdit(entry)}>✓</button>
                   <button type="button" className="cancel-mini" onClick={() => setEditingId(null)}>✗</button>
                 </div>
@@ -314,6 +365,8 @@ export default function EarningsPanel({
                       <span className="badge exp">Brutto {formatMoney(entry.gross)}</span>
                       {entry.tax_enabled && <span className="badge timing-late">Podatek {entry.tax_percent}% (−{formatMoney(entry.tax)})</span>}
                       <span className="badge category">Netto {formatMoney(entry.net)}</span>
+                      {entry.is_recurring && <span className="badge category">🔁 {WEEKDAYS_LONG[entry.day_of_week]}</span>}
+                      {entry.end_date && <span className="badge timing-late">Do {entry.end_date}</span>}
                       <span className="badge exp">+10 EXP</span>
                     </div>
                   </div>
@@ -366,8 +419,22 @@ export default function EarningsPanel({
           {taxEnabled && (
             <input type="number" min="0" max="100" step="0.1" placeholder="Procent podatku" value={taxPercent} onChange={(e) => setTaxPercent(e.target.value)} />
           )}
+          <label className="important-toggle">
+            <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} />
+            <span>Cykliczne (co tydzień)</span>
+          </label>
+          {isRecurring ? (
+            <>
+              <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))}>
+                {WEEKDAYS_LONG.map((day, idx) => (
+                  <option key={day} value={idx}>{day}</option>
+                ))}
+              </select>
+              <input type="date" placeholder="Data zakończenia (opcjonalnie)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
+            </>
+          ) : null}
           <div className="row">
-            <button type="button" onClick={addEntry}>Zapisz wpis</button>
+            <button type="button" className="add-task-btn" onClick={addEntry}>Zapisz wpis</button>
             <button type="button" className="cancel-btn" onClick={() => setShowAdd(false)}>Anuluj</button>
           </div>
         </div>

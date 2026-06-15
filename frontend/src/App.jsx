@@ -706,7 +706,7 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
                 {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
               </div>
             </div>
-            <button type="button" onClick={() => onTaskDelete(task)}>🗑</button>
+            <button type="button" className="icon-btn delete" onClick={() => onTaskDelete(task)}>🗑</button>
           </div>
         ))}
       </div>
@@ -1033,6 +1033,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
       due_date: task.due_date,
       important: !!task.important,
       reminder_offset_days: task.reminder_offset_days ?? "",
+      task_type: task.task_type || "quest",
     });
   };
   const cancelEdit = () => { setEditingId(null); setEditForm({}); };
@@ -1044,6 +1045,7 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
         description: editForm.description,
         important: !!editForm.important,
         reminder_offset_days: parseReminderValue(editForm.reminder_offset_days),
+        task_type: editForm.task_type,
         ...(task.exp_awarded ? {} : { difficulty: editForm.difficulty, category: editForm.category, due_date: editForm.due_date }),
       };
       await onSave(task.id, payload);
@@ -1062,13 +1064,18 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
       {dayTasks.length === 0 && <div className="empty">{allDay.length ? "Brak questów pasujących do filtrów." : "Brak questów na ten dzień. Dodaj pierwszy! ⚔️"}</div>}
       {dayTasks.map((task) => {
         const checkState = getTaskCheckState(task);
+        const isEvent = task.task_type === "event";
         return (
-        <div key={task.id} className={`task-card ${task.difficulty} ${task.completed ? "done" : ""} ${checkState.showUncheckBadge ? "can-uncheck" : ""}`}>
+        <div key={task.id} className={`task-card ${isEvent ? "event" : task.difficulty} ${task.completed ? "done" : ""} ${checkState.showUncheckBadge ? "can-uncheck" : ""}`}>
           {editingId === task.id ? (
             <div className="edit-mode">
               <input value={editForm.title} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} placeholder="Nazwa zadania" />
               <textarea value={editForm.description} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} placeholder="Opis" rows="2" />
-              {!task.exp_awarded && (<>
+              <select value={editForm.task_type || "quest"} onChange={(e) => setEditForm({ ...editForm, task_type: e.target.value })}>
+                <option value="quest">⚔️ Quest (do wykonania)</option>
+                <option value="event">📅 Wydarzenie (urodziny, notatka)</option>
+              </select>
+              {editForm.task_type !== "event" && !task.exp_awarded && (<>
                 <select value={editForm.difficulty} onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}>
                   <option value="easy">⚔️ Łatwe (+10 EXP)</option><option value="medium">🗡️ Średnie (+25 EXP)</option><option value="hard">💀 Trudne (+50 EXP)</option>
                 </select>
@@ -1077,6 +1084,14 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
                 </select>
                 <DatePicker value={editForm.due_date || ""} onChange={(due_date) => setEditForm({ ...editForm, due_date })} />
               </>)}
+              {editForm.task_type === "event" && (
+                <>
+                  <select value={editForm.category} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
+                    {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}
+                  </select>
+                  <DatePicker value={editForm.due_date || ""} onChange={(due_date) => setEditForm({ ...editForm, due_date })} />
+                </>
+              )}
               <label className="important-toggle">
                 <input type="checkbox" checked={!!editForm.important} onChange={(e) => setEditForm({ ...editForm, important: e.target.checked, reminder_offset_days: e.target.checked && editForm.reminder_offset_days === "" ? "7" : editForm.reminder_offset_days })} />
                 <span>Ważne</span>
@@ -1089,32 +1104,36 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onErro
             </div>
           ) : (
             <>
-              <button
-                type="button"
-                className={`task-check ${checkState.className} ${loadingTaskIds.has(task.id) ? "loading" : ""}`}
-                disabled={checkState.disabled || loadingTaskIds.has(task.id)}
-                onClick={() => handleToggleClick(task)}
-                title={checkState.title}
-                aria-label={checkState.title}
-              >
-                {loadingTaskIds.has(task.id) ? "⏳" : (task.completed ? "✓" : "")}
-              </button>
+              {!isEvent && (
+                <button
+                  type="button"
+                  className={`task-check ${checkState.className} ${loadingTaskIds.has(task.id) ? "loading" : ""}`}
+                  disabled={checkState.disabled || loadingTaskIds.has(task.id)}
+                  onClick={() => handleToggleClick(task)}
+                  title={checkState.title}
+                  aria-label={checkState.title}
+                >
+                  {loadingTaskIds.has(task.id) ? "⏳" : (task.completed ? "✓" : "")}
+                </button>
+              )}
+              {isEvent && <div className="task-check event-indicator">📅</div>}
               <div className="task-info">
-                <h4 className={task.completed ? "done" : ""}>{task.important && <span className="important-mark">Ważne · </span>}{task.title}</h4>
+                <h4 className={task.completed ? "done" : ""}>{isEvent && <span className="event-mark">📅 </span>}{task.important && <span className="important-mark">Ważne · </span>}{task.title}</h4>
                 {task.description && <p className={task.completed ? "done-desc" : ""}>{task.description}</p>}
                 <div className="task-meta">
-                  <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>
+                  {isEvent && <span className="badge event-type">Wydarzenie</span>}
+                  {!isEvent && <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>}
                   <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>
-                  <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>
+                  {!isEvent && <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>}
                   {task.exp_awarded && task.exp_timing && (() => { const info = EXP_TIMING_LABELS[task.exp_timing]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
-                  {!task.exp_awarded && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = EXP_TIMING_LABELS[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
+                  {!task.exp_awarded && !isEvent && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = EXP_TIMING_LABELS[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
                   {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
                   {checkState.showUncheckBadge && <span className="badge uncheck-badge">↩️ Można odznaczyć (24h)</span>}
                   {task.completed && checkState.disabled && <span className="badge locked-badge">🔒 Zablokowane</span>}
                 </div>
               </div>
               <div className="task-actions">
-                {!task.completed && <button className="icon-btn" onClick={() => startEdit(task)} disabled={editingTaskIds.has(task.id)}>✏️</button>}
+                <button className="icon-btn" onClick={() => startEdit(task)} disabled={editingTaskIds.has(task.id)}>✏️</button>
                 <button className="task-delete" onClick={() => onDelete(task)} disabled={deletingTaskIds.has(task.id)}>{deletingTaskIds.has(task.id) ? "⏳" : "🗑"}</button>
               </div>
             </>
@@ -1413,6 +1432,7 @@ export default function App() {
   const [taskDate, setTaskDate] = useState(toDateStr(new Date()));
   const [important, setImportant] = useState(false);
   const [reminderOffset, setReminderOffset] = useState("");
+  const [taskType, setTaskType] = useState("quest");
   const [notificationsEnabled, setNotificationsEnabled] = useState(readNotificationsPreference);
   const [standalonePwa, setStandalonePwa] = useState(false);
   const notificationsUnsupported = !("Notification" in window);
@@ -1641,16 +1661,19 @@ export default function App() {
     const apiPayload = {
       title,
       description: desc,
-      difficulty,
+      difficulty: taskType === "quest" ? difficulty : "easy",
       category,
       due_date: taskDate,
       important,
       reminder_offset_days: parseReminderValue(reminderOffset),
+      task_type: taskType,
     };
 
     // Clear form
     setTitle("");
     setDesc("");
+    setDifficulty("easy");
+    setTaskType("quest");
     setImportant(false);
     setReminderOffset("");
     setShowAddTask(false);
@@ -2010,7 +2033,8 @@ export default function App() {
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">
-            <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}><option value="easy">⚔️ Łatwe (+10 EXP)</option><option value="medium">🗡️ Średnie (+25 EXP)</option><option value="hard">💀 Trudne (+50 EXP)</option></select>
+            <select value={taskType} onChange={(e) => setTaskType(e.target.value)}><option value="quest">⚔️ Quest (do wykonania)</option><option value="event">📅 Wydarzenie (urodziny, notatka)</option></select>
+            {taskType === "quest" && <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}><option value="easy">⚔️ Łatwe (+10 EXP)</option><option value="medium">🗡️ Średnie (+25 EXP)</option><option value="hard">💀 Trudne (+50 EXP)</option></select>}
             <select value={category} onChange={(e) => setCategory(e.target.value)}>{CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}</select>
             <DatePicker value={taskDate} onChange={setTaskDate} label="Termin" />
           </div>
@@ -2023,9 +2047,10 @@ export default function App() {
               {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
-          {(() => { const p = getExpPreview(difficulty, taskDate); const info = EXP_TIMING_LABELS[p.timing]; return <p className="exp-preview-hint">Ukończ dziś: <strong>+{p.amount} EXP</strong> ({info.text})</p>; })()}
+          {taskType === "quest" && (() => { const p = getExpPreview(difficulty, taskDate); const info = EXP_TIMING_LABELS[p.timing]; return <p className="exp-preview-hint">Ukończ dziś: <strong>+{p.amount} EXP</strong> ({info.text})</p>; })()}
+          {taskType === "event" && <p className="exp-preview-hint">📅 Wydarzenie kalendarzowe - bez EXP, tylko informacja</p>}
           <div className="row">
-            <button onClick={addTask} disabled={isAddingTask}>{isAddingTask ? "⏳ Dodawanie..." : "Dodaj Quest"}</button>
+            <button onClick={addTask} disabled={isAddingTask}>{isAddingTask ? "⏳ Dodawanie..." : taskType === "quest" ? "Dodaj Quest" : "Dodaj Wydarzenie"}</button>
             <button onClick={() => setShowAddTask(false)} className="cancel-btn">Anuluj</button>
           </div>
         </div>

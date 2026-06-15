@@ -90,6 +90,9 @@ def migrate_schema():
         if "exp_timing" not in cols:
             conn.execute(text("ALTER TABLE tasks ADD COLUMN exp_timing VARCHAR"))
             print("Migracja: dodano kolumnę exp_timing")
+        if "task_type" not in cols:
+            conn.execute(text("ALTER TABLE tasks ADD COLUMN task_type VARCHAR DEFAULT 'quest'"))
+            print("Migracja: dodano kolumnę task_type")
     if "daily_quest_assignments" not in insp.get_table_names():
         models.DailyQuestAssignment.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę daily_quest_assignments")
@@ -160,6 +163,20 @@ def migrate_schema():
     if "work_entries" not in insp.get_table_names():
         models.WorkEntry.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę work_entries")
+    elif "work_entries" in insp.get_table_names():
+        work_cols = {c["name"] for c in insp.get_columns("work_entries")}
+        if "is_recurring" not in work_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE work_entries ADD COLUMN is_recurring BOOLEAN DEFAULT FALSE"))
+            print("Migracja: dodano kolumnę work_entries.is_recurring")
+        if "day_of_week" not in work_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE work_entries ADD COLUMN day_of_week INTEGER"))
+            print("Migracja: dodano kolumnę work_entries.day_of_week")
+        if "end_date" not in work_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE work_entries ADD COLUMN end_date DATE"))
+            print("Migracja: dodano kolumnę work_entries.end_date")
     if "default_articles" not in insp.get_table_names():
         models.DefaultArticle.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę default_articles")
@@ -796,6 +813,7 @@ class TaskCreate(BaseModel):
     due_date: str
     important: Optional[bool] = False
     reminder_offset_days: Optional[int] = None
+    task_type: Optional[str] = "quest"
 
 class TaskUpdate(BaseModel):
     title: Optional[str] = None
@@ -806,6 +824,7 @@ class TaskUpdate(BaseModel):
     due_date: Optional[str] = None
     important: Optional[bool] = None
     reminder_offset_days: Optional[int] = None
+    task_type: Optional[str] = None
 
 class Token(BaseModel):
     access_token: str
@@ -872,6 +891,9 @@ class WorkCreate(BaseModel):
     notes: Optional[str] = ""
     tax_enabled: Optional[bool] = False
     tax_percent: Optional[float] = 0.0
+    is_recurring: Optional[bool] = False
+    day_of_week: Optional[int] = None
+    end_date: Optional[str] = None
 
 
 class WorkUpdate(BaseModel):
@@ -883,6 +905,9 @@ class WorkUpdate(BaseModel):
     tax_enabled: Optional[bool] = None
     tax_percent: Optional[float] = None
     completed: Optional[bool] = None
+    is_recurring: Optional[bool] = None
+    day_of_week: Optional[int] = None
+    end_date: Optional[str] = None
 
 
 class FamilyCreate(BaseModel):
@@ -1288,20 +1313,22 @@ def get_calendar_stats(year_month: str, current_user: models.User = Depends(get_
 @app.post("/tasks")
 def create_task(task: TaskCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     due = parse_due_date(task.due_date) if task.due_date else date.today()
+    task_type = task.task_type if task.task_type in ["quest", "event"] else "quest"
     new_task = models.Task(
         title=encrypt_field(validate_title(task.title)),
         description=encrypt_field((task.description or "").strip()[:1000]),
-        difficulty=validate_difficulty(task.difficulty or "easy"),
+        difficulty=validate_difficulty(task.difficulty or "easy") if task_type == "quest" else "easy",
         category=validate_category(task.category or "Inne"),
         due_date=due,
         important=bool(task.important),
         reminder_offset_days=validate_reminder_offset(task.reminder_offset_days),
-        owner_id=current_user.id
+        owner_id=current_user.id,
+        task_type=task_type
     )
     db.add(new_task)
     db.commit()
     db.refresh(new_task)
-    return {"id": new_task.id, "message": "Task created", "due_date": str(new_task.due_date)}
+    return {"id": new_task.id, "message": "Task created", "due_date": str(new_task.due_date), "task_type": new_task.task_type}
 
 @app.patch("/tasks/{task_id}")
 def update_task(task_id: int, task_update: TaskUpdate,
@@ -1362,6 +1389,8 @@ def update_task(task_id: int, task_update: TaskUpdate,
         task.important = bool(task_update.important)
     if "reminder_offset_days" in fields_set:
         task.reminder_offset_days = validate_reminder_offset(task_update.reminder_offset_days)
+    if task_update.task_type is not None and task_update.task_type in ["quest", "event"]:
+        task.task_type = task_update.task_type
 
     if task.exp_awarded:
         if task_update.difficulty is not None or task_update.category is not None:
@@ -2232,6 +2261,25 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
         lm.hours_between(entry.start_time, entry.end_time)
     except ValueError:
         raise HTTPException(status_code=400, detail="Nieprawidłowy format godziny (HH:MM)")
+    
+    # Validate cyclic fields
+    if entry.is_recurring:
+        if entry.day_of_week is None or entry.day_of_week < 0 or entry.day_of_week > 6:
+            raise HTTPException(status_code=400, detail="Dzień tygodnia jest wymagany dla cyklicznych wpisów (0-6)")
+        if entry.end_date:
+            try:
+                end_date = date.fromisoformat(entry.end_date)
+                work_date = parse_due_date(entry.work_date)
+                if end_date < work_date:
+                    raise HTTPException(status_code=400, detail="Data zakończenia nie może być wcześniejsza niż data rozpoczęcia")
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Nieprawidłowa data zakończenia (YYYY-MM-DD)")
+    else:
+        if entry.day_of_week is not None:
+            raise HTTPException(status_code=400, detail="Dzień tygodnia tylko dla cyklicznych wpisów")
+        if entry.end_date is not None:
+            raise HTTPException(status_code=400, detail="Data zakończenia tylko dla cyklicznych wpisów")
+    
     enc = lm.encrypt_work_fields(entry.hourly_rate, entry.notes)
     row = models.WorkEntry(
         owner_id=current_user.id,
@@ -2242,6 +2290,9 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
         notes=enc["notes"],
         tax_enabled=bool(entry.tax_enabled),
         tax_percent=max(0.0, min(100.0, float(entry.tax_percent or 0))),
+        is_recurring=bool(entry.is_recurring),
+        day_of_week=entry.day_of_week if entry.is_recurring else None,
+        end_date=date.fromisoformat(entry.end_date) if entry.end_date and entry.is_recurring else None,
     )
     db.add(row)
     db.commit()
@@ -2286,6 +2337,23 @@ def update_work(entry_id: int, body: WorkUpdate, current_user: models.User = Dep
             current_user.exp = max(0, current_user.exp - lm.WORK_EXP)
             row.exp_awarded = False
             exp_gained = -lm.WORK_EXP
+    
+    # Handle cyclic fields
+    if body.is_recurring is not None:
+        row.is_recurring = bool(body.is_recurring)
+    if body.day_of_week is not None:
+        if body.day_of_week < 0 or body.day_of_week > 6:
+            raise HTTPException(status_code=400, detail="Dzień tygodnia musi być w zakresie 0-6")
+        row.day_of_week = body.day_of_week
+    if body.end_date is not None:
+        try:
+            end_date = date.fromisoformat(body.end_date)
+            if end_date < row.work_date:
+                raise HTTPException(status_code=400, detail="Data zakończenia nie może być wcześniejsza niż data rozpoczęcia")
+            row.end_date = end_date
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Nieprawidłowa data zakończenia (YYYY-MM-DD)")
+    
     try:
         lm.hours_between(row.start_time, row.end_time)
     except ValueError:

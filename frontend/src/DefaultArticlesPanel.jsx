@@ -145,7 +145,7 @@ export default function DefaultArticlesPanel({ api, headers, onToast }) {
             ))}
           </select>
         </div>
-        <button type="button" onClick={addArticle}>+ Dodaj artykuł</button>
+        <button type="button" className="add-task-btn" onClick={addArticle}>+ Dodaj artykuł</button>
       </div>
 
       <div className="product-list">

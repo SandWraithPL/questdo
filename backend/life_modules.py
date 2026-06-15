@@ -92,6 +92,9 @@ def work_to_dict(entry: models.WorkEntry) -> dict:
         "completed": entry.completed,
         "exp_awarded": entry.exp_awarded,
         "created_at": str(entry.created_at),
+        "is_recurring": entry.is_recurring,
+        "day_of_week": entry.day_of_week,
+        "end_date": str(entry.end_date) if entry.end_date else None,
         **earnings,
     }
 

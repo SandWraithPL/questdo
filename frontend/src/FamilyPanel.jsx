@@ -147,7 +147,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
                 onChange={(e) => setFamilyName(e.target.value)} 
               />
               <div className="row">
-                <button type="button" onClick={createFamily}>Utwórz</button>
+                <button type="button" className="add-task-btn" onClick={createFamily}>Utwórz</button>
                 <button type="button" className="cancel-btn" onClick={() => setShowCreate(false)}>Anuluj</button>
               </div>
             </div>
@@ -210,7 +210,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
                     onChange={(e) => setInviteUsername(e.target.value)} 
                   />
                   <div className="row">
-                    <button type="button" onClick={inviteUser}>Wyślij zaproszenie</button>
+                    <button type="button" className="add-task-btn" onClick={inviteUser}>Wyślij zaproszenie</button>
                     <button type="button" className="cancel-btn" onClick={() => setShowInvite(false)}>Anuluj</button>
                   </div>
                 </div>

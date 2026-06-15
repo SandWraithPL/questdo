@@ -38,6 +38,7 @@ class Task(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     owner_id = Column(Integer, ForeignKey("users.id"))
     owner = relationship("User", back_populates="tasks")
+    task_type = Column(String, default="quest")  # "quest" or "event"
 
 class Achievement(Base):
     __tablename__ = "achievements"
@@ -221,6 +222,9 @@ class WorkEntry(Base):
     completed = Column(Boolean, default=False)
     exp_awarded = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
+    is_recurring = Column(Boolean, default=False)
+    day_of_week = Column(Integer, nullable=True)
+    end_date = Column(Date, nullable=True)
     owner = relationship("User")
 
 

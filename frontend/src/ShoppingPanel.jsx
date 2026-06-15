@@ -465,7 +465,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
             ))}
           </select>
         </div>
-        <button type="button" onClick={addItem}>+ Dodaj do listy</button>
+        <button type="button" className="add-task-btn" onClick={addItem}>+ Dodaj do listy</button>
       </div>
 
       <input className="search-input" placeholder="🔍 Szukaj produktu..." value={search} onChange={(e) => setSearch(e.target.value)} />

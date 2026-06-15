@@ -171,7 +171,7 @@ export default function SharedCalendar({
               <strong>{getItemLabel(item)}</strong>
               {renderItemMeta?.(item)}
             </div>
-            {onItemDelete && <button type="button" onClick={() => onItemDelete(item)}>🗑</button>}
+            {onItemDelete && <button type="button" className="icon-btn delete" onClick={() => onItemDelete(item)}>🗑</button>}
           </div>
         ))}
       </div>
