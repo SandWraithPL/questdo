@@ -59,7 +59,6 @@ export default function EarningsPanel({
   const [notes, setNotes] = useState("");
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [taxPercent, setTaxPercent] = useState("12");
-  const [savedRates, setSavedRates] = useState([]);
   const [defaultHourlyRate, setDefaultHourlyRate] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editDate, setEditDate] = useState("");
@@ -73,7 +72,7 @@ export default function EarningsPanel({
   const [editIsRecurring, setEditIsRecurring] = useState(false);
   const [editDayOfWeek, setEditDayOfWeek] = useState(0);
   const [editEndDate, setEditEndDate] = useState("");
-  const [isSavingRate, setIsSavingRate] = useState(false);
+  const [isSavingDefault, setIsSavingDefault] = useState(false);
 
   const selectedStr = selectedDate instanceof Date
     ? selectedDate.toISOString().slice(0, 10)
@@ -85,14 +84,12 @@ export default function EarningsPanel({
   );
 
   useEffect(() => {
-    loadSavedRates();
     loadDefaultHourlyRate();
   }, []);
 
   const loadDefaultHourlyRate = async () => {
     try {
       const res = await axios.get(`${api}/settings/default-hourly-rate`, { headers });
-      // Format z przecinkiem dla wyświetlania
       const rate = res.data.rate ? parseFloat(res.data.rate).toFixed(2).replace(".", ",") : "";
       setDefaultHourlyRate(rate);
     } catch {
@@ -115,39 +112,6 @@ export default function EarningsPanel({
     }
   };
 
-  const loadSavedRates = async () => {
-    try {
-      const res = await axios.get(`${api}/hourly-rates`, { headers });
-      setSavedRates(res.data);
-    } catch {
-      /* ignore */
-    }
-  };
-
-  const saveCurrentRate = async () => {
-    const rateValue = parseRateInput(hourlyRate);
-    const rate = parseFloat(rateValue);
-    if (!rate || rate <= 0) {
-      onToast("Podaj stawkę godzinową");
-      return;
-    }
-    if (isSavingRate) return;
-    setIsSavingRate(true);
-    try {
-      await axios.post(`${api}/hourly-rates`, { rate, label: "" }, { headers });
-      await loadSavedRates();
-      onToast("💾 Zapisano stawkę");
-    } catch (err) {
-      onToast(err.response?.data?.detail || "Błąd zapisu stawki");
-    } finally {
-      setIsSavingRate(false);
-    }
-  };
-
-  const handleRateChange = (value) => {
-    setHourlyRate(value);
-  };
-
   const saveAsDefaultRate = async () => {
     const rateValue = parseRateInput(hourlyRate);
     const rate = parseFloat(rateValue);
@@ -155,6 +119,8 @@ export default function EarningsPanel({
       onToast("Podaj stawkę godzinową");
       return;
     }
+    if (isSavingDefault) return;
+    setIsSavingDefault(true);
     try {
       await axios.post(`${api}/settings/default-hourly-rate`, { rate }, { headers });
       const formattedRate = rate.toFixed(2).replace(".", ",");
@@ -162,22 +128,13 @@ export default function EarningsPanel({
       onToast("💾 Zapisano jako domyślną stawkę");
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd zapisu domyślnej stawki");
+    } finally {
+      setIsSavingDefault(false);
     }
   };
 
-  const selectSavedRate = (rate) => {
-    // Format z przecinkiem dla wyświetlenia w inpucie
-    setHourlyRate(rate.toFixed(2).replace(".", ","));
-  };
-
-  const deleteSavedRate = async (rateId) => {
-    try {
-      await axios.delete(`${api}/hourly-rates/${rateId}`, { headers });
-      await loadSavedRates();
-      onToast("🗑️ Usunięto stawkę");
-    } catch (err) {
-      onToast(err.response?.data?.detail || "Błąd usuwania stawki");
-    }
+  const handleRateChange = (value) => {
+    setHourlyRate(value);
   };
 
   const addEntry = () => {
@@ -409,57 +366,24 @@ export default function EarningsPanel({
             <TimePicker value={endTime} onChange={setEndTime} label="Do:" />
           </div>
 
-          <div className="rate-input-group">
+          <div className="rate-input-group" style={{ alignItems: "center" }}>
             <input 
               type="text" 
               placeholder="Stawka za godzinę (zł) *" 
               value={hourlyRate} 
               onChange={(e) => handleRateChange(e.target.value)} 
-              style={{ flex: 2, minWidth: "120px" }}
+              style={{ flex: 1 }}
             />
-            <select 
-              value={hourlyRate} 
-              onChange={(e) => setHourlyRate(e.target.value)} 
-              className="rate-dropdown"
-              style={{ flex: "0 0 auto", width: "auto", minWidth: "140px" }}
-            >
-              <option value="">Wybierz zapisaną</option>
-              {savedRates.sort((a, b) => b.rate - a.rate).map((rate) => (
-                <option key={rate.id} value={rate.rate.toFixed(2).replace(".", ",")}>
-                  {formatRate(rate.rate)}
-                </option>
-              ))}
-            </select>
             <button 
               type="button" 
-              className="rate-save-btn" 
-              onClick={saveCurrentRate} 
-              disabled={isSavingRate}
-              style={{ flex: "0 0 auto", whiteSpace: "nowrap", minHeight: "44px" }}
+              className="add-task-btn" 
+              onClick={saveAsDefaultRate} 
+              disabled={isSavingDefault}
+              style={{ whiteSpace: "nowrap", minHeight: "44px" }}
             >
-              {isSavingRate ? "⏳" : "💾 Zapisz"}
+              {isSavingDefault ? "⏳" : "⭐ Zapisz jako domyślną"}
             </button>
           </div>
-
-          <button 
-            type="button" 
-            className="add-task-btn" 
-            onClick={saveAsDefaultRate}
-            style={{ marginBottom: "12px", background: "#2a2a3e" }}
-          >
-            ⭐ Zapisz jako domyślną
-          </button>
-
-          {savedRates.length > 0 && (
-            <div className="saved-rates-list">
-              {savedRates.sort((a, b) => b.rate - a.rate).map((rate) => (
-                <div key={rate.id} className="saved-rate-item">
-                  <span onClick={() => selectSavedRate(rate.rate)}>{formatRate(rate.rate)}</span>
-                  <button type="button" className="icon-btn delete" onClick={() => deleteSavedRate(rate.id)}>🗑️</button>
-                </div>
-              ))}
-            </div>
-          )}
 
           <input placeholder="Notatka / miejsce pracy (opcjonalnie)" value={notes} onChange={(e) => setNotes(e.target.value)} />
           

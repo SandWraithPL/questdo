@@ -139,7 +139,7 @@ export default function CategoriesPanel({ api, headers, onToast }) {
     <div className="module-panel">
       <div className="add-task">
         <h3>⚙️ Ustawienia kategorii i stawek</h3>
-        <div className="form-row-inline" style={{ alignItems: "center" }}>
+        <div className="rate-input-group" style={{ alignItems: "center" }}>
           <label style={{ color: "#aaa", fontSize: "0.9rem", minWidth: "160px" }}>Domyślna stawka godzinowa:</label>
           <input 
             type="text" 
@@ -152,7 +152,7 @@ export default function CategoriesPanel({ api, headers, onToast }) {
             type="button" 
             className="add-task-btn" 
             onClick={saveDefaultHourlyRate}
-            style={{ padding: "8px 16px", fontSize: "0.9rem", flex: "0 0 auto" }}
+            style={{ whiteSpace: "nowrap", minHeight: "44px" }}
           >
             Zapisz
           </button>

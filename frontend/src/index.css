@@ -426,11 +426,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .toast { background: #ff8906; color: #0f0e17; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 0.95rem; animation: slideIn 0.3s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
 @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
-@media (max-width: 600px) {
-  .toast-stack { top: 16px; right: 16px; left: 16px; bottom: auto; }
-  .toast { font-size: 0.9rem; padding: 10px 16px; }
-}
-
 .calendar-section { background: #1a1a2e; border-radius: 12px; margin-bottom: 18px; border: 1px solid #2a2a3e; overflow: hidden; }
 .calendar-section--collapsed { margin-bottom: 12px; }
 .calendar-section-bar { display: flex; align-items: stretch; gap: 8px; padding: 10px 12px; border-bottom: 1px solid transparent; }
@@ -681,6 +676,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .dp-today-btn { width: 100% !important; margin-top: 10px !important; padding: 8px !important; border: none !important; border-radius: 6px !important; background: #2a2a3e !important; color: #ff8906 !important; font-weight: bold !important; cursor: pointer !important; font-size: 0.85rem !important; }
 .dp-today-btn:hover { background: #333 !important; }
 
+/* ========== MEDIA QUERIES ========== */
 @media (max-width: 600px) {
   .app { padding: 12px; }
   
@@ -807,6 +803,50 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .user-row { flex-direction: column; align-items: flex-start; gap: 8px; padding: 10px; }
   .user-info { width: 100%; }
   .delete-user-btn { width: 100%; }
+
+  /* Rate input group - mobile */
+  .rate-input-group {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+  
+  .rate-input-group input {
+    width: 100%;
+    min-width: auto;
+  }
+  
+  .rate-dropdown {
+    width: 100% !important;
+    min-width: auto !important;
+    max-width: none !important;
+  }
+  
+  .rate-save-btn {
+    width: 100%;
+  }
+  
+  .earnings-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .form-row-inline {
+    flex-direction: column;
+    align-items: flex-start !important;
+  }
+  
+  .form-row-inline .input-small {
+    width: 100%;
+  }
+  
+  .app-tab { min-width: 64px; padding: 8px 4px; }
+  .app-tab-label { font-size: 0.65rem; }
+  
+  .time-picker-select {
+    font-size: 1.1rem;
+    padding: 12px;
+    padding-right: 35px;
+  }
 }
 
 .toast-update {
@@ -992,14 +1032,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   font-size: 0.95rem;
 }
 
-@media (max-width: 600px) {
-  .app-tab { min-width: 64px; padding: 8px 4px; }
-  .app-tab-label { font-size: 0.65rem; }
-  .earnings-summary { grid-template-columns: repeat(2, 1fr); }
-  .form-row-inline { flex-direction: column; }
-  .form-row-inline .input-small { flex: 1; }
-}
-
 .time-picker {
   display: flex;
   flex-direction: column;
@@ -1051,50 +1083,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   color: #aaa;
   font-weight: bold;
   padding: 0 4px;
-}
-
-@media (max-width: 600px) {
-  .time-picker-select {
-    font-size: 1.1rem;
-    padding: 12px;
-    padding-right: 35px;
-  }
-}
-
-@media (max-width: 600px) {
-  .rate-input-group {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-  }
-  
-  .rate-input-group input {
-    width: 100%;
-    min-width: auto;
-  }
-  
-  .rate-dropdown {
-    width: 100% !important;
-    min-width: auto !important;
-    max-width: none !important;
-  }
-  
-  .rate-save-btn {
-    width: 100%;
-  }
-  
-  .earnings-summary {
-    grid-template-columns: repeat(2, 1fr);
-  }
-  
-  .form-row-inline {
-    flex-direction: column;
-    align-items: flex-start !important;
-  }
-  
-  .form-row-inline .input-small {
-    width: 100%;
-  }
 }
 
 .import-export-buttons {
@@ -1300,4 +1288,163 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 
 .saved-rate-item span:hover {
   text-decoration: underline;
+}
+
+.family-panel .add-task {
+  background: #1a1a2e;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.family-panel .add-task h3 {
+  margin-bottom: 12px;
+  color: #ff8906;
+  font-size: 1rem;
+}
+
+.family-panel .row {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.family-panel .row button {
+  flex: 1;
+  padding: 10px;
+  font-size: 0.9rem;
+}
+
+.invitations-section {
+  background: #2a2a3e;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+}
+
+.invitations-section h4 {
+  margin-bottom: 12px;
+  color: #ff8906;
+  font-size: 0.95rem;
+}
+
+.invitation-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #1a1a2e;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+
+.invitation-card:last-child {
+  margin-bottom: 0;
+}
+
+.invitation-info {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.invitation-family {
+  font-weight: bold;
+  color: #fff;
+}
+
+.invitation-from {
+  font-size: 0.8rem;
+  color: #aaa;
+}
+
+.invitation-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.no-family {
+  text-align: center;
+  padding: 20px;
+}
+
+.no-family p {
+  color: #aaa;
+  margin-bottom: 16px;
+}
+
+.family-selector {
+  margin-bottom: 16px;
+}
+
+.family-selector label {
+  display: block;
+  margin-bottom: 8px;
+  color: #aaa;
+  font-size: 0.85rem;
+}
+
+.family-details {
+  background: #2a2a3e;
+  border-radius: 12px;
+  padding: 16px;
+}
+
+.family-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #333;
+}
+
+.family-header h4 {
+  margin: 0;
+  color: #fff;
+  font-size: 1rem;
+}
+
+.family-role {
+  font-size: 0.8rem;
+  color: #ff8906;
+}
+
+.family-members {
+  margin-bottom: 16px;
+}
+
+.family-members h5 {
+  margin-bottom: 10px;
+  color: #aaa;
+  font-size: 0.85rem;
+}
+
+.member-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 12px;
+  background: #1a1a2e;
+  border-radius: 6px;
+  margin-bottom: 6px;
+}
+
+.member-item:last-child {
+  margin-bottom: 0;
+}
+
+.member-name {
+  color: #fff;
+  font-size: 0.9rem;
+}
+
+.member-role {
+  font-size: 1rem;
+}
+
+.family-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
