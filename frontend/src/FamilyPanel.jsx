@@ -9,7 +9,6 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
   const [familyName, setFamilyName] = useState("");
   const [inviteUsername, setInviteUsername] = useState("");
   const [selectedFamily, setSelectedFamily] = useState(null);
-  const [showMembers, setShowMembers] = useState(false);
 
   const loadFamilies = async () => {
     try {

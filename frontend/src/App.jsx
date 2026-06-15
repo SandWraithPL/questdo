@@ -40,15 +40,6 @@ const DEFAULT_LEVELS_META = [
   { threshold: 7000, level: 20, title: "Legenda" },
 ];
 const NOTIFICATIONS_PREF_KEY = "questdo-notifications-enabled";
-const TASK_ACHIEVEMENT_REQUIREMENTS = {
-  first_step: 1,
-  second_bite: 3,
-  scout_badge: 10,
-  veteran_wall: 25,
-  hundred_club: 50,
-  mission_archive: 100,
-  invincible_grind: 200,
-};
 const EXP_MAP = { easy: 10, medium: 25, hard: 50 };
 const EXP_TIMING_LABELS = {
   early: { text: "Wcześnie +50%", className: "timing-early" },
@@ -64,6 +55,32 @@ const REMINDER_OPTIONS = [
   { value: "3", label: "3 dni wcześniej" },
   { value: "7", label: "Tydzień wcześniej" },
 ];
+
+// Cache dla poziomów (optymalizacja)
+const LEVELS_CACHE_KEY = "questdo-levels-cache";
+const LEVELS_CACHE_DURATION = 24 * 60 * 60 * 1000;
+
+const getCachedLevels = () => {
+  try {
+    const cached = localStorage.getItem(LEVELS_CACHE_KEY);
+    if (cached) {
+      const { data, timestamp } = JSON.parse(cached);
+      if (Date.now() - timestamp < LEVELS_CACHE_DURATION) {
+        return data;
+      }
+    }
+  } catch { /* ignore */ }
+  return null;
+};
+
+const setCachedLevels = (data) => {
+  try {
+    localStorage.setItem(LEVELS_CACHE_KEY, JSON.stringify({
+      data,
+      timestamp: Date.now()
+    }));
+  } catch { /* ignore */ }
+};
 
 function getExpPreview(difficulty, dueDateStr) {
   const base = EXP_MAP[difficulty] || 10;
@@ -201,10 +218,6 @@ function writeNotificationsPreference(enabled) {
   }
 }
 
-function countCompletedTasks(tasks) {
-  return tasks.filter((t) => t.completed && t.exp_awarded).length;
-}
-
 function Toast({ toasts, onRemove }) {
   return (
     <div className="toast-stack">
@@ -231,13 +244,6 @@ function canUncheckTask(task) {
   const completedAt = new Date(task.completed_at);
   const hoursSinceCompletion = (Date.now() - completedAt.getTime()) / (1000 * 60 * 60);
   return hoursSinceCompletion < 24;
-}
-
-function sortTasks(list) {
-  return [...list].sort((a, b) => {
-    if (a.completed !== b.completed) return a.completed ? 1 : -1;
-    return new Date(a.due_date) - new Date(b.due_date);
-  });
 }
 
 function getTaskCheckState(task) {
@@ -1623,11 +1629,21 @@ export default function App() {
     
     try {
       const shoppingParams = familyId ? { family_id: familyId } : {};
-      const [userRes, tasksRes, chRes, levelsRes, rareDropsRes, scheduleRes, shoppingRes, workRes, workSummaryRes] = await Promise.all([
+      
+      // Poziomy z cache (optymalizacja)
+      let levelsRes;
+      const cachedLevels = getCachedLevels();
+      if (cachedLevels) {
+        levelsRes = { data: cachedLevels };
+      } else {
+        levelsRes = await axios.get(`${API}/game/levels`, { headers: noCacheHeaders }).catch(() => ({ data: null }));
+        if (levelsRes.data) setCachedLevels(levelsRes.data);
+      }
+      
+      const [userRes, tasksRes, chRes, rareDropsRes, scheduleRes, shoppingRes, workRes, workSummaryRes] = await Promise.all([
         axios.get(`${API}/me`, { headers: noCacheHeaders }),
         axios.get(`${API}/tasks`, { headers: noCacheHeaders }),
         axios.get(`${API}/challenges`, { headers: noCacheHeaders }),
-        axios.get(`${API}/game/levels`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
         axios.get(`${API}/rare-drops/inventory`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
         axios.get(`${API}/schedule`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
         axios.get(`${API}/shopping`, { headers: noCacheHeaders, params: shoppingParams }).catch(() => ({ data: [] })),
@@ -1861,12 +1877,38 @@ export default function App() {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
 
+    // Optimistic update
+    const originalTask = { ...task };
+    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+
     enqueueRequest(async () => {
       try {
-        await axios.patch(`${API}/tasks/${id}`, updates, { headers });
-        await fetchData();
+        const response = await axios.patch(`${API}/tasks/${id}`, updates, { headers });
+        const data = response.data;
+        
+        if (data.exp !== undefined) {
+          setUser(prev => ({
+            ...prev,
+            exp: data.exp,
+            level: data.level,
+            title: data.title,
+            next_level_exp: data.next_level_exp,
+            next_level_title: data.next_level_title,
+            streak: data.streak,
+          }));
+        }
+        
+        if (data.task) {
+          setTasks(prev => prev.map(t => t.id === id ? data.task : t));
+        }
+        
+        if (data.achievements) setAchievements(data.achievements);
+        if (data.history) setHistory(data.history);
+        
         showToast("✅ Zadanie zapisane");
       } catch (err) {
+        // Rollback optimistic update
+        setTasks(prev => prev.map(t => t.id === id ? originalTask : t));
         showToast(err.response?.data?.detail || "Błąd zapisu – spróbuj ponownie");
       }
     });
