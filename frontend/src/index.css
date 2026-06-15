@@ -40,7 +40,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .add-task-meta { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 10px; overflow: visible !important; }
 .add-task-meta select, .add-task-meta input[type="date"] { width: 100%; margin-bottom: 0; min-width: 0; }
 .add-task-meta input[type="date"] { grid-column: 1 / -1; }
-.row { display: flex; gap: 10px; }
+.row { display: flex; gap: 10px; margin-top: 10px; }
 .add-task .row button { flex: 1; width: auto; margin-bottom: 0; }
 .add-task button { width: 100%; padding: 12px; border-radius: 8px; border: none; background: #ff8906; color: #0f0e17; font-weight: bold; font-size: 1rem; cursor: pointer; transition: background 0.2s, transform 0.15s, opacity 0.2s; }
 .add-task button:hover:not(:disabled) { background: #ffa040; transform: translateY(-1px); }
@@ -193,11 +193,12 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 }
 
 .invitation-actions button {
-  padding: 6px 12px;
-  border-radius: 6px;
+  padding: 8px 12px;
+  border-radius: 8px;
   border: none;
   cursor: pointer;
-  font-size: 1rem;
+  font-size: 0.9rem;
+  font-weight: bold;
 }
 
 .no-family {
@@ -303,7 +304,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 }
 
 .family-actions button {
-  padding: 8px 16px;
+  padding: 10px 16px;
   border-radius: 8px;
   border: none;
   background: #ff8906;
@@ -414,7 +415,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .btn-cancel-edit { flex: 1; padding: 8px; border: none; border-radius: 8px; background: #333; color: #fff; cursor: pointer; }
 .task-options-row { display: grid; grid-template-columns: minmax(120px, auto) 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
 .task-options-row select { margin-bottom: 0; }
-.important-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border: 1px solid #333; border-radius: 8px; background: #0f0e17; color: #fff; cursor: pointer; font-weight: bold; }
+.important-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border: 1px solid #333; border-radius: 8px; background: #0f0e17; color: #fff; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
 .important-toggle input { width: 18px; height: 18px; margin: 0; accent-color: #ff8906; }
 .important-toggle span { color: #ff8f45; }
 
@@ -446,10 +447,10 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .calendar-header { display: grid; grid-template-columns: 1fr auto auto; align-items: center; gap: 10px; margin-bottom: 14px; }
 .calendar-nav { display: grid; grid-template-columns: 36px minmax(0, 1fr) 36px; align-items: center; gap: 8px; min-width: 0; }
 .calendar-nav h2 { color: #ff8906; text-align: center; font-size: 1rem; text-transform: capitalize; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.calendar-header button { min-height: 34px; padding: 0 12px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; cursor: pointer; }
+.calendar-header button { min-height: 36px; padding: 0 12px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; cursor: pointer; font-size: 0.9rem; }
 .calendar-header button:hover { border-color: #ff8906; color: #ff8906; }
 .view-buttons { display: inline-grid; grid-template-columns: repeat(3, minmax(62px, 1fr)); gap: 4px; padding: 4px; border-radius: 10px; background: #0f0e17; border: 1px solid #333; }
-.view-buttons button { border: none; border-radius: 7px; min-height: 30px; padding: 0 10px; font-size: 0.8rem; background: transparent; color: #aaa; }
+.view-buttons button { border: none; border-radius: 8px; min-height: 32px; padding: 0 12px; font-size: 0.85rem; background: transparent; color: #aaa; }
 .view-buttons button.active { background: #ff8906; color: #0f0e17; font-weight: bold; }
 .calendar-today { color: #ff8906 !important; font-weight: bold; }
 .calendar-weekdays { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); text-align: center; margin-bottom: 6px; gap: 4px; }
@@ -574,7 +575,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .profile-menu { position: absolute; top: 100%; right: 0; margin-top: 8px; background: #1a1a2e; border-radius: 12px; padding: 16px; min-width: 250px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
 .profile-info-dropdown { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #333; }
 .profile-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }
-.profile-tabs button { padding: 7px; border: 1px solid #333; border-radius: 8px; background: #0f0e17; color: #aaa; cursor: pointer; font-size: 0.78rem; }
+.profile-tabs button { padding: 8px; border: 1px solid #333; border-radius: 8px; background: #0f0e17; color: #aaa; cursor: pointer; font-size: 0.8rem; }
 .profile-tabs button.active { border-color: #ff8906; color: #ff8906; background: rgba(255,137,6,0.08); }
 .achievements-list { max-height: 200px; overflow-y: auto; margin-bottom: 12px; }
 .achievements-list h4 { margin-bottom: 8px; color: #ff8906; }
@@ -605,8 +606,8 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .history-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid #2a2a3e; font-size: 0.8rem; }
 .history-item strong { color: #ff8906; font-size: 0.75rem; }
 .history-item span { color: #ddd; line-height: 1.35; }
-.logout-btn { width: 100%; padding: 8px; background: #e74c3c; color: white; border: none; border-radius: 8px; cursor: pointer; margin-top: 8px; }
-.delete-account-btn { width: 100%; margin-top: 8px; padding: 8px; background: transparent; border: 1px solid #e74c3c; color: #e74c3c; border-radius: 8px; cursor: pointer; font-size: 0.85rem; }
+.logout-btn { width: 100%; padding: 10px; background: #e74c3c; color: white; border: none; border-radius: 8px; cursor: pointer; margin-top: 8px; font-weight: bold; }
+.delete-account-btn { width: 100%; margin-top: 8px; padding: 10px; background: transparent; border: 1px solid #e74c3c; color: #e74c3c; border-radius: 8px; cursor: pointer; font-size: 0.9rem; }
 .delete-account-form { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
 .delete-account-form input { padding: 8px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; }
 .delete-account-confirm { padding: 8px; background: #e74c3c; color: #fff; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; }
@@ -617,7 +618,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .admin-panel { background: #1a1a2e; border-radius: 12px; padding: 24px; max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto; }
 .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #333; }
 .admin-header h2 { color: #ff8906; margin: 0; }
-.admin-close { background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; padding: 4px 8px; border-radius: 6px; }
+.admin-close { background: none; border: none; color: #fff; font-size: 1.5rem; cursor: pointer; padding: 6px 10px; border-radius: 8px; }
 .admin-close:hover { background: #333; }
 .admin-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 12px; margin-bottom: 24px; }
 .stat-card { background: #0f0e17; border-radius: 8px; padding: 16px; text-align: center; }
@@ -1181,6 +1182,10 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .rate-input-group input {
   flex: 1;
   min-width: 120px;
+}
+
+.rate-input-group .icon-btn {
+  flex-shrink: 0;
 }
 
 .rate-save-btn, .rate-select-btn, .rate-default-btn {
