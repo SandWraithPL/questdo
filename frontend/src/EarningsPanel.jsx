@@ -5,28 +5,31 @@ import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
 import { applyUserFromResponse } from "./helpers";
 
+// Funkcja formatująca pieniądze z przecinkiem i 2 miejscami po przecinku
 function formatMoney(value) {
-  return `${Number(value || 0).toFixed(2)} zł`;
+  const num = Number(value || 0);
+  const formatted = num.toFixed(2).replace(".", ",");
+  return `${formatted} zł`;
 }
 
+// Funkcja formatująca stawkę z przecinkiem i 2 miejscami po przecinku
 function formatRate(value) {
-  return `${Number(value || 0).toFixed(2)} zł/h`;
+  const num = Number(value || 0);
+  const formatted = num.toFixed(2).replace(".", ",");
+  return `${formatted} zł/h`;
 }
 
 function matchWorkToDate(entry, dateStr) {
   const targetDate = new Date(dateStr);
   if (entry.is_recurring) {
-    // Check if the date is within the recurring period
     if (entry.end_date) {
       const endDate = new Date(entry.end_date);
       if (targetDate > endDate) {
         return false;
       }
     }
-    // Check if the day of week matches
     return entry.day_of_week === weekdayIndex(dateStr);
   }
-  // For non-recurring entries, match exact date
   return entry.work_date === dateStr;
 }
 
@@ -65,6 +68,7 @@ export default function EarningsPanel({
   const [editIsRecurring, setEditIsRecurring] = useState(false);
   const [editDayOfWeek, setEditDayOfWeek] = useState(0);
   const [editEndDate, setEditEndDate] = useState("");
+  const [isSavingRate, setIsSavingRate] = useState(false);
 
   const selectedStr = selectedDate instanceof Date
     ? selectedDate.toISOString().slice(0, 10)
@@ -119,21 +123,21 @@ export default function EarningsPanel({
       onToast("Podaj stawkę godzinową");
       return;
     }
+    if (isSavingRate) return;
+    setIsSavingRate(true);
     try {
       await axios.post(`${api}/hourly-rates`, { rate, label: "" }, { headers });
       await loadSavedRates();
       onToast("💾 Zapisano stawkę");
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd zapisu stawki");
+    } finally {
+      setIsSavingRate(false);
     }
   };
 
   const handleRateChange = (value) => {
     setHourlyRate(value);
-    const rate = parseFloat(String(value).replace(",", "."));
-    if (rate && rate > 0) {
-      saveCurrentRate();
-    }
   };
 
   const saveAsDefaultRate = async () => {
@@ -165,7 +169,6 @@ export default function EarningsPanel({
       onToast(err.response?.data?.detail || "Błąd usuwania stawki");
     }
   };
-
 
   const addEntry = () => {
     const rate = parseFloat(String(hourlyRate).replace(",", "."));
@@ -269,6 +272,9 @@ export default function EarningsPanel({
       }
     });
   };
+
+  // Format display value for default hourly rate (z przecinkiem)
+  const displayDefaultRate = defaultHourlyRate ? parseFloat(defaultHourlyRate).toFixed(2).replace(".", ",") : "";
 
   return (
     <div className="module-panel earnings-panel">
@@ -393,16 +399,48 @@ export default function EarningsPanel({
             <TimePicker value={startTime} onChange={setStartTime} label="Od:" />
             <TimePicker value={endTime} onChange={setEndTime} label="Do:" />
           </div>
+
+          {/* Domyślna stawka */}
+          <div className="form-row-inline" style={{ alignItems: "center", marginBottom: "12px" }}>
+            <label style={{ color: "#aaa", fontSize: "0.9rem", minWidth: "160px" }}>Domyślna stawka godzinowa:</label>
+            <span style={{ color: "#ff8906", fontWeight: "bold" }}>{displayDefaultRate ? `${displayDefaultRate} zł/h` : "brak"}</span>
+            <button type="button" className="icon-btn" onClick={saveAsDefaultRate} style={{ marginLeft: "auto" }} title="Zapisz bieżącą jako domyślną">
+              💾
+            </button>
+          </div>
+
           <div className="rate-input-group">
-            <input type="number" min="0" step="0.01" placeholder="Stawka za godzinę (zł) *" value={hourlyRate} onChange={(e) => handleRateChange(e.target.value)} />
-            <select value={hourlyRate} onChange={(e) => setHourlyRate(e.target.value)} className="rate-dropdown">
-              <option value="">Wybierz zapisaną stawkę</option>
+            <input 
+              type="number" 
+              min="0" 
+              step="0.01" 
+              placeholder="Stawka za godzinę (zł) *" 
+              value={hourlyRate} 
+              onChange={(e) => handleRateChange(e.target.value)} 
+              style={{ flex: 1, minWidth: "120px" }}
+            />
+            <select 
+              value={hourlyRate} 
+              onChange={(e) => setHourlyRate(e.target.value)} 
+              className="rate-dropdown"
+              style={{ flex: "0 0 auto", width: "auto", minWidth: "140px", maxWidth: "180px" }}
+            >
+              <option value="">Wybierz zapisaną</option>
               {savedRates.sort((a, b) => b.rate - a.rate).map((rate) => (
                 <option key={rate.id} value={rate.rate}>{formatRate(rate.rate)}</option>
               ))}
             </select>
-            <button type="button" className="rate-save-btn" onClick={saveCurrentRate}>Zapisz</button>
+            <button 
+              type="button" 
+              className="rate-save-btn" 
+              onClick={saveCurrentRate} 
+              disabled={isSavingRate}
+              style={{ flex: "0 0 auto", whiteSpace: "nowrap", minHeight: "44px" }}
+            >
+              {isSavingRate ? "⏳" : "💾 Zapisz"}
+            </button>
           </div>
+
           {savedRates.length > 0 && (
             <div className="saved-rates-list">
               {savedRates.sort((a, b) => b.rate - a.rate).map((rate) => (
@@ -413,7 +451,9 @@ export default function EarningsPanel({
               ))}
             </div>
           )}
+
           <input placeholder="Notatka / miejsce pracy (opcjonalnie)" value={notes} onChange={(e) => setNotes(e.target.value)} />
+          
           <label className="important-toggle">
             <input type="checkbox" checked={taxEnabled} onChange={(e) => setTaxEnabled(e.target.checked)} />
             <span>Odlicz podatek</span>
@@ -421,6 +461,7 @@ export default function EarningsPanel({
           {taxEnabled && (
             <input type="number" min="0" max="100" step="0.1" placeholder="Procent podatku" value={taxPercent} onChange={(e) => setTaxPercent(e.target.value)} />
           )}
+          
           <label className="important-toggle">
             <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} />
             <span>Cykliczne (co tydzień)</span>
@@ -435,6 +476,7 @@ export default function EarningsPanel({
               <input type="date" placeholder="Data zakończenia (opcjonalnie)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
             </>
           ) : null}
+          
           <div className="row">
             <button type="button" className="add-task-btn" onClick={addEntry}>Zapisz wpis</button>
             <button type="button" className="cancel-btn" onClick={() => setShowAdd(false)}>Anuluj</button>
