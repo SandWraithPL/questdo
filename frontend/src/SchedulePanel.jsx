@@ -3,14 +3,21 @@ import axios from "axios";
 import SharedCalendar, { weekdayIndex, WEEKDAYS_LONG } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
 
-function matchScheduleToDate(entry, dateStr) {
+function matchScheduleToDate(entry, dateStr, freeDays = []) {
+  const isFreeDay = freeDays.some(fd => fd.date === dateStr);
+  
   if (entry.is_recurring) {
+    // Skip recurring entries on free days
+    if (isFreeDay) {
+      return false;
+    }
     return entry.day_of_week === weekdayIndex(dateStr);
   }
+  // Allow manual override for non-recurring entries
   return entry.entry_date === dateStr;
 }
 
-export default function SchedulePanel({ api, headers, entries, setEntries, selectedDate, onDateSelect, onToast, enqueueRequest }) {
+export default function SchedulePanel({ api, headers, entries, setEntries, selectedDate, onDateSelect, onToast, enqueueRequest, freeDays = [] }) {
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
   const [lecturer, setLecturer] = useState("");
@@ -27,8 +34,8 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
   const [importText, setImportText] = useState("");
 
   const dayEntries = useMemo(
-    () => entries.filter((e) => matchScheduleToDate(e, selectedDate instanceof Date ? selectedDate.toISOString().slice(0, 10) : String(selectedDate).slice(0, 10))),
-    [entries, selectedDate],
+    () => entries.filter((e) => matchScheduleToDate(e, selectedDate instanceof Date ? selectedDate.toISOString().slice(0, 10) : String(selectedDate).slice(0, 10), freeDays)),
+    [entries, selectedDate, freeDays],
   );
 
   const sortedDayEntries = [...dayEntries].sort((a, b) => a.start_time.localeCompare(b.start_time));
@@ -152,7 +159,7 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
         items={entries}
         selectedDate={selectedDate}
         onDateSelect={onDateSelect}
-        matchItemToDate={matchScheduleToDate}
+        matchItemToDate={(item, dateStr) => matchScheduleToDate(item, dateStr, freeDays)}
         getItemLabel={(item) => item.title}
         isItemCompleted={() => false}
         renderItemMeta={(item) => (
@@ -168,6 +175,7 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
         itemNoun="zajęć"
         collapsedStorageKey="questdo-schedule-calendar-collapsed"
         defaultCollapsed={false}
+        freeDays={freeDays}
       />
 
       <div className="day-tasks-panel">

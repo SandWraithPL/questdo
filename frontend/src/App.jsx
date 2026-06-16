@@ -599,12 +599,17 @@ function readCalendarCollapsedPreference() {
   return true;
 }
 
-function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete }) {
+function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete, freeDays = [] }) {
   const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
   const [view, setView] = useState("month");
   const [collapsed, setCollapsed] = useState(readCalendarCollapsedPreference);
   const selectedStr = toDateStr(selectedDate);
   const selectedDateObj = selectedDate instanceof Date ? selectedDate : new Date(selectedStr + "T12:00:00");
+
+  const getFreeDayType = (dateStr) => {
+    const freeDay = freeDays.find(fd => fd.date === dateStr);
+    return freeDay ? freeDay.day_type : null;
+  };
 
   const getTasksForDate = (dateStr) => tasks.filter((t) => t.due_date === dateStr);
   const taskStats = (dateStr) => {
@@ -668,9 +673,13 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
       const stats = taskStats(dateStr);
       const isSelected = selectedStr === dateStr;
       const isToday = toDateStr(new Date()) === dateStr;
+      const freeDayType = getFreeDayType(dateStr);
       days.push(
-        <button key={dateStr} type="button" className={`calendar-day ${isSelected ? "selected" : ""} ${isToday ? "today" : ""}`} onClick={() => selectDay(dateStr)}>
+        <button key={dateStr} type="button" className={`calendar-day ${isSelected ? "selected" : ""} ${isToday ? "today" : ""} ${freeDayType ? `free-day free-day-${freeDayType}` : ""}`} onClick={() => selectDay(dateStr)}>
           <span className="day-number">{day}</span>
+          {freeDayType === "holiday" && <span className="free-day-icon">🎉</span>}
+          {freeDayType === "deans_day" && <span className="free-day-icon">🎓</span>}
+          {freeDayType === "rector_day" && <span className="free-day-icon">🏛️</span>}
           {stats.eventCategories.length > 0 && (
             <div className="day-event-icons">
               {stats.eventCategories.slice(0, 3).map((cat, idx) => (
@@ -699,11 +708,15 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
       const stats = taskStats(dateStr);
       const isToday = dateStr === toDateStr(new Date());
       const isSelected = selectedStr === dateStr;
+      const freeDayType = getFreeDayType(dateStr);
       days.push(
-        <button key={dateStr} type="button" className={`week-day ${isSelected ? "week-day-selected" : ""}`} onClick={() => selectDay(dateStr)}>
+        <button key={dateStr} type="button" className={`week-day ${isSelected ? "week-day-selected" : ""} ${freeDayType ? `week-day-free week-day-free-${freeDayType}` : ""}`} onClick={() => selectDay(dateStr)}>
           <div className={`week-day-header ${isToday ? "today" : ""}`}>
             <span>{WEEKDAYS_LONG[i]}</span>
             <strong>{d.getDate()}</strong>
+            {freeDayType === "holiday" && <span className="week-free-icon">🎉</span>}
+            {freeDayType === "deans_day" && <span className="week-free-icon">🎓</span>}
+            {freeDayType === "rector_day" && <span className="week-free-icon">🏛️</span>}
             <div className="week-day-stats">
               {stats.eventCategories.length > 0 && (
                 <div className="week-event-icons">
@@ -734,9 +747,15 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
 
   const renderDayView = () => {
     const dayTasks = getTasksForDate(selectedStr);
+    const freeDayType = getFreeDayType(selectedStr);
     return (
       <div className="day-view">
-        <h3>{selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</h3>
+        <h3>
+          {selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          {freeDayType === "holiday" && <span className="day-free-indicator"> 🎉 Święto</span>}
+          {freeDayType === "deans_day" && <span className="day-free-indicator"> 🎓 Dzień dziekański</span>}
+          {freeDayType === "rector_day" && <span className="day-free-indicator"> 🏛️ Dzień rektorski</span>}
+        </h3>
         {dayTasks.length === 0 && <p className="empty">Brak zadań na ten dzień</p>}
         {dayTasks.map(task => {
           const isEvent = task.task_type === "event";
@@ -1520,6 +1539,7 @@ export default function App() {
   const [workEntries, setWorkEntries] = useState([]);
   const [workSummary, setWorkSummary] = useState(null);
   const [familyId, setFamilyId] = useState(null);
+  const [freeDays, setFreeDays] = useState([]);
   const [pwaHintDismissed, setPwaHintDismissed] = useState(readPwaHintDismissed);
   const apiQueue = useRef([]);
   const isProcessingQueue = useRef(false);
@@ -1641,7 +1661,7 @@ export default function App() {
         if (levelsRes.data) setCachedLevels(levelsRes.data);
       }
       
-      const [userRes, tasksRes, chRes, rareDropsRes, scheduleRes, shoppingRes, workRes, workSummaryRes] = await Promise.all([
+      const [userRes, tasksRes, chRes, rareDropsRes, scheduleRes, shoppingRes, workRes, workSummaryRes, freeDaysRes] = await Promise.all([
         axios.get(`${API}/me`, { headers: noCacheHeaders }),
         axios.get(`${API}/tasks`, { headers: noCacheHeaders }),
         axios.get(`${API}/challenges`, { headers: noCacheHeaders }),
@@ -1650,6 +1670,7 @@ export default function App() {
         axios.get(`${API}/shopping`, { headers: noCacheHeaders, params: shoppingParams }).catch(() => ({ data: [] })),
         axios.get(`${API}/work`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
         axios.get(`${API}/work/summary`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
+        axios.get(`${API}/free-days`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
       ]);
       const achRes = await axios.get(`${API}/achievements`, { headers: noCacheHeaders });
       const historyRes = await axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] }));
@@ -1678,6 +1699,7 @@ export default function App() {
       setShoppingItems(shoppingRes.data || []);
       setWorkEntries(workRes.data || []);
       setWorkSummary(workSummaryRes.data || null);
+      setFreeDays(freeDaysRes.data || []);
     } catch (err) {
       console.error("Fetch error:", err);
       localStorage.removeItem("token");
@@ -2102,7 +2124,7 @@ export default function App() {
       {mainTab === "tasks" && (
         <>
       <ChallengesBar challenges={challenges} />
-      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} />
+      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} freeDays={freeDays} />
       <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
@@ -2160,6 +2182,7 @@ export default function App() {
           onDateSelect={handleDateSelect}
           onToast={showToast}
           enqueueRequest={enqueueRequest}
+          freeDays={freeDays}
         />
       )}
 
@@ -2190,6 +2213,7 @@ export default function App() {
           onUserUpdate={updateUserFromModule}
           onToast={showToast}
           enqueueRequest={enqueueRequest}
+          freeDays={freeDays}
         />
       )}
 

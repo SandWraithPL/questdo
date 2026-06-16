@@ -25,9 +25,15 @@ function parseRateInput(value) {
   return value.replace(",", ".");
 }
 
-function matchWorkToDate(entry, dateStr) {
+function matchWorkToDate(entry, dateStr, freeDays = []) {
   const targetDate = new Date(dateStr);
+  const isFreeDay = freeDays.some(fd => fd.date === dateStr);
+  
   if (entry.is_recurring) {
+    // Skip recurring entries on free days
+    if (isFreeDay) {
+      return false;
+    }
     if (entry.end_date) {
       const endDate = new Date(entry.end_date);
       if (targetDate > endDate) {
@@ -36,6 +42,7 @@ function matchWorkToDate(entry, dateStr) {
     }
     return entry.day_of_week === weekdayIndex(dateStr);
   }
+  // Allow manual override for non-recurring entries
   return entry.work_date === dateStr;
 }
 
@@ -51,6 +58,7 @@ export default function EarningsPanel({
   onUserUpdate,
   onToast,
   enqueueRequest,
+  freeDays = [],
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [startTime, setStartTime] = useState("08:00");
@@ -79,8 +87,8 @@ export default function EarningsPanel({
     : String(selectedDate).slice(0, 10);
 
   const dayEntries = useMemo(
-    () => entries.filter((e) => matchWorkToDate(e, selectedStr)).sort((a, b) => a.start_time.localeCompare(b.start_time)),
-    [entries, selectedStr],
+    () => entries.filter((e) => matchWorkToDate(e, selectedStr, freeDays)).sort((a, b) => a.start_time.localeCompare(b.start_time)),
+    [entries, selectedStr, freeDays],
   );
 
   useEffect(() => {
@@ -289,7 +297,7 @@ export default function EarningsPanel({
         items={entries}
         selectedDate={selectedDate}
         onDateSelect={onDateSelect}
-        matchItemToDate={matchWorkToDate}
+        matchItemToDate={(item, dateStr) => matchWorkToDate(item, dateStr, freeDays)}
         getItemLabel={(item) => `${item.start_time}–${item.end_time} · ${formatMoney(item.net)}`}
         isItemCompleted={(item) => item.completed}
         renderItemMeta={(item) => (
@@ -308,6 +316,7 @@ export default function EarningsPanel({
         itemNoun="wpisów"
         collapsedStorageKey="questdo-earnings-calendar-collapsed"
         defaultCollapsed={false}
+        freeDays={freeDays}
       />
 
       <div className="day-tasks-panel">

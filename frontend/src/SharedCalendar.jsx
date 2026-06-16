@@ -33,6 +33,7 @@ export default function SharedCalendar({
   itemNoun = "wpisów",
   collapsedStorageKey = "questdo-shared-calendar-collapsed",
   defaultCollapsed = true,
+  freeDays = [],
 }) {
   const [cursor, setCursor] = useState(() => (selectedDate instanceof Date ? selectedDate : new Date()));
   const [view, setView] = useState("month");
@@ -48,6 +49,11 @@ export default function SharedCalendar({
 
   const selectedStr = toDateStr(selectedDate);
   const selectedDateObj = selectedDate instanceof Date ? selectedDate : new Date(`${selectedStr}T12:00:00`);
+
+  const getFreeDayType = (dateStr) => {
+    const freeDay = freeDays.find(fd => fd.date === dateStr);
+    return freeDay ? freeDay.day_type : null;
+  };
 
   const getItemsForDate = (dateStr) => items.filter((item) => matchItemToDate(item, dateStr));
   const itemStats = (dateStr) => {
@@ -104,9 +110,13 @@ export default function SharedCalendar({
       const stats = itemStats(dateStr);
       const isSelected = selectedStr === dateStr;
       const isToday = toDateStr(new Date()) === dateStr;
+      const freeDayType = getFreeDayType(dateStr);
       days.push(
-        <button key={dateStr} type="button" className={`calendar-day ${isSelected ? "selected" : ""} ${isToday ? "today" : ""}`} onClick={() => selectDay(dateStr)}>
+        <button key={dateStr} type="button" className={`calendar-day ${isSelected ? "selected" : ""} ${isToday ? "today" : ""} ${freeDayType ? `free-day free-day-${freeDayType}` : ""}`} onClick={() => selectDay(dateStr)}>
           <span className="day-number">{day}</span>
+          {freeDayType === "holiday" && <span className="free-day-icon">🎉</span>}
+          {freeDayType === "deans_day" && <span className="free-day-icon">🎓</span>}
+          {freeDayType === "rector_day" && <span className="free-day-icon">🏛️</span>}
           {stats.total > 0 && <span className={`day-badge ${stats.done === stats.total ? "done" : ""}`}>{stats.done}/{stats.total}</span>}
         </button>
       );
@@ -127,11 +137,15 @@ export default function SharedCalendar({
       const stats = itemStats(dateStr);
       const isToday = dateStr === toDateStr(new Date());
       const isSelected = selectedStr === dateStr;
+      const freeDayType = getFreeDayType(dateStr);
       days.push(
-        <button key={dateStr} type="button" className={`week-day ${isSelected ? "week-day-selected" : ""}`} onClick={() => selectDay(dateStr)}>
+        <button key={dateStr} type="button" className={`week-day ${isSelected ? "week-day-selected" : ""} ${freeDayType ? `week-day-free week-day-free-${freeDayType}` : ""}`} onClick={() => selectDay(dateStr)}>
           <div className={`week-day-header ${isToday ? "today" : ""}`}>
             <span>{WEEKDAYS_LONG[i]}</span>
             <strong>{d.getDate()}</strong>
+            {freeDayType === "holiday" && <span className="week-free-icon">🎉</span>}
+            {freeDayType === "deans_day" && <span className="week-free-icon">🎓</span>}
+            {freeDayType === "rector_day" && <span className="week-free-icon">🏛️</span>}
             <em>{stats.total ? `${stats.done}/${stats.total}` : "0"}</em>
           </div>
           <div className="week-day-tasks">
@@ -152,9 +166,15 @@ export default function SharedCalendar({
 
   const renderDayView = () => {
     const dayItems = getItemsForDate(selectedStr);
+    const freeDayType = getFreeDayType(selectedStr);
     return (
       <div className="day-view">
-        <h3>{selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}</h3>
+        <h3>
+          {selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
+          {freeDayType === "holiday" && <span className="day-free-indicator"> 🎉 Święto</span>}
+          {freeDayType === "deans_day" && <span className="day-free-indicator"> 🎓 Dzień dziekański</span>}
+          {freeDayType === "rector_day" && <span className="day-free-indicator"> 🏛️ Dzień rektorski</span>}
+        </h3>
         {dayItems.length === 0 && <p className="empty">{emptyLabel}</p>}
         {dayItems.map((item) => (
           <div key={item.id} className={`day-task ${isItemCompleted(item) ? "completed" : ""}`}>
