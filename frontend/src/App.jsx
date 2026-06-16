@@ -118,7 +118,6 @@ const EVENT_CATEGORIES = [
   { value: "anniversary", emoji: "💍", label: "Rocznica" },
   { value: "holiday", emoji: "🎉", label: "Święto" },
   { value: "reminder", emoji: "🔔", label: "Przypomnienie" },
-  { value: "other", emoji: "📅", label: "Inne" },
 ];
 
 const RECURRING_PATTERNS = [

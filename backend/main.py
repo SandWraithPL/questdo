@@ -225,6 +225,28 @@ def migrate_schema():
     if "recurring_events" not in insp.get_table_names():
         models.RecurringEvent.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę recurring_events")
+    elif "recurring_events" in insp.get_table_names():
+        re_cols = {c["name"] for c in insp.get_columns("recurring_events")}
+        if "interval_type" not in re_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE recurring_events ADD COLUMN interval_type VARCHAR"))
+            print("Migracja: dodano kolumnę recurring_events.interval_type")
+        if "interval_value" not in re_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE recurring_events ADD COLUMN interval_value INTEGER"))
+            print("Migracja: dodano kolumnę recurring_events.interval_value")
+        if "start_date" not in re_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE recurring_events ADD COLUMN start_date DATE"))
+            print("Migracja: dodano kolumnę recurring_events.start_date")
+        if "end_date" not in re_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE recurring_events ADD COLUMN end_date DATE"))
+            print("Migracja: dodano kolumnę recurring_events.end_date")
+
+    if "free_days" not in insp.get_table_names():
+        models.FreeDay.__table__.create(bind=engine)
+        print("Migracja: utworzono tabelę free_days")
 
     db = next(get_db())
     rare_drop_count = db.query(models.RareDrop).count()
@@ -949,15 +971,41 @@ class FamilyUpdate(BaseModel):
 class RecurringEventCreate(BaseModel):
     title: str
     category: str = "birthday"
-    month: int
-    day: int
+    # Legacy fields for backward compatibility
+    month: Optional[int] = None
+    day: Optional[int] = None
+    # New fields for arbitrary intervals
+    interval_type: Optional[str] = None  # daily, weekly, monthly, yearly
+    interval_value: Optional[int] = None  # e.g., 2 for "every 2 weeks"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
 
 
 class RecurringEventUpdate(BaseModel):
     title: Optional[str] = None
     category: Optional[str] = None
+    # Legacy fields for backward compatibility
     month: Optional[int] = None
     day: Optional[int] = None
+    # New fields for arbitrary intervals
+    interval_type: Optional[str] = None  # daily, weekly, monthly, yearly
+    interval_value: Optional[int] = None  # e.g., 2 for "every 2 weeks"
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+
+
+class FreeDayCreate(BaseModel):
+    date: str
+    day_type: str = "holiday"  # holiday, deans_day, rector_day
+    hours: Optional[str] = None
+    notes: Optional[str] = ""
+
+
+class FreeDayUpdate(BaseModel):
+    date: Optional[str] = None
+    day_type: Optional[str] = None
+    hours: Optional[str] = None
+    notes: Optional[str] = None
 
 
 def validate_schedule_payload(data: ScheduleCreate | ScheduleUpdate, is_create: bool = False) -> None:
@@ -1385,7 +1433,7 @@ def create_task(task: TaskCreate, current_user: models.User = Depends(get_curren
     # Validate event category
     event_category = None
     if task.event_category:
-        valid_event_categories = ["birthday", "anniversary", "holiday", "reminder", "other"]
+        valid_event_categories = ["birthday", "anniversary", "holiday", "reminder"]
         if task.event_category not in valid_event_categories:
             raise HTTPException(status_code=400, detail="Nieprawidłowa kategoria wydarzenia")
         event_category = task.event_category
@@ -1474,7 +1522,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
     # Handle event category
     if "event_category" in fields_set:
         if task_update.event_category:
-            valid_event_categories = ["birthday", "anniversary", "holiday", "reminder", "other"]
+            valid_event_categories = ["birthday", "anniversary", "holiday", "reminder"]
             if task_update.event_category not in valid_event_categories:
                 raise HTTPException(status_code=400, detail="Nieprawidłowa kategoria wydarzenia")
             task.event_category = task_update.event_category
@@ -2307,8 +2355,6 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
             raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
     elif row.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
-    exp_gained = 0
-    level_ups = []
     was_bought = row.bought
     if body.name is not None:
         row.name = encrypt_field(body.name.strip())
@@ -2320,14 +2366,6 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
         row.price = max(0.0, float(body.price))
     if body.bought is not None:
         row.bought = bool(body.bought)
-        if row.bought and not was_bought and not row.exp_awarded:
-            row.exp_awarded = True
-            level_ups = lm.award_small_exp(current_user, lm.SHOPPING_EXP)
-            exp_gained = lm.SHOPPING_EXP
-        if not row.bought and was_bought and row.exp_awarded:
-            current_user.exp = max(0, current_user.exp - lm.SHOPPING_EXP)
-            row.exp_awarded = False
-            exp_gained = -lm.SHOPPING_EXP
     db.commit()
     db.refresh(row)
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
@@ -2547,8 +2585,6 @@ def update_work(entry_id: int, body: WorkUpdate, current_user: models.User = Dep
         "title": title,
         "next_level_exp": next_exp,
         "next_level_title": next_title,
-        "exp_gained": exp_gained,
-        "level_ups": level_ups,
     }
 
 
@@ -2560,8 +2596,6 @@ def delete_work(entry_id: int, current_user: models.User = Depends(get_current_u
     ).first()
     if not row:
         raise HTTPException(status_code=404, detail="Nie znaleziono wpisu pracy")
-    if row.exp_awarded:
-        current_user.exp = max(0, current_user.exp - lm.WORK_EXP)
     db.delete(row)
     db.commit()
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
@@ -3477,21 +3511,50 @@ def list_recurring_events(current_user: models.User = Depends(get_current_user),
 def create_recurring_event(data: RecurringEventCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not data.title.strip():
         raise HTTPException(status_code=400, detail="Nazwa wydarzenia jest wymagana")
-    if not (1 <= data.month <= 12):
-        raise HTTPException(status_code=400, detail="Nieprawidłowy miesiąc (1-12)")
-    if not (1 <= data.day <= 31):
-        raise HTTPException(status_code=400, detail="Nieprawidłowy dzień (1-31)")
 
-    valid_categories = ["birthday", "anniversary", "holiday", "reminder", "other"]
+    valid_categories = ["birthday", "anniversary", "holiday", "reminder"]
     if data.category not in valid_categories:
         raise HTTPException(status_code=400, detail="Nieprawidłowa kategoria")
+
+    # Validate either legacy fields (month/day) or new interval fields
+    using_legacy = data.month is not None and data.day is not None
+    using_interval = data.interval_type is not None and data.start_date is not None
+
+    if not using_legacy and not using_interval:
+        raise HTTPException(status_code=400, detail="Podaj miesiąc i dzień (stary format) lub typ interwału i datę początkową (nowy format)")
+
+    if using_legacy:
+        if not (1 <= data.month <= 12):
+            raise HTTPException(status_code=400, detail="Nieprawidłowy miesiąc (1-12)")
+        if not (1 <= data.day <= 31):
+            raise HTTPException(status_code=400, detail="Nieprawidłowy dzień (1-31)")
+
+    if using_interval:
+        valid_interval_types = ["daily", "weekly", "monthly", "yearly"]
+        if data.interval_type not in valid_interval_types:
+            raise HTTPException(status_code=400, detail="Nieprawidłowy typ interwału (daily, weekly, monthly, yearly)")
+        if data.interval_value is not None and data.interval_value <= 0:
+            raise HTTPException(status_code=400, detail="Wartość interwału musi być dodatnia")
+        try:
+            date.fromisoformat(data.start_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Nieprawidłowa data początkowa (YYYY-MM-DD)")
+        if data.end_date:
+            try:
+                date.fromisoformat(data.end_date)
+            except ValueError:
+                raise HTTPException(status_code=400, detail="Nieprawidłowa data końcowa (YYYY-MM-DD)")
 
     event = models.RecurringEvent(
         owner_id=current_user.id,
         title=data.title,
         category=data.category,
-        month=data.month,
-        day=data.day
+        month=data.month if using_legacy else None,
+        day=data.day if using_legacy else None,
+        interval_type=data.interval_type if using_interval else None,
+        interval_value=data.interval_value if using_interval else None,
+        start_date=date.fromisoformat(data.start_date) if using_interval and data.start_date else None,
+        end_date=date.fromisoformat(data.end_date) if using_interval and data.end_date else None
     )
     db.add(event)
     db.commit()
@@ -3503,6 +3566,10 @@ def create_recurring_event(data: RecurringEventCreate, current_user: models.User
         "category": event.category,
         "month": event.month,
         "day": event.day,
+        "interval_type": event.interval_type,
+        "interval_value": event.interval_value,
+        "start_date": str(event.start_date) if event.start_date else None,
+        "end_date": str(event.end_date) if event.end_date else None,
         "created_at": str(event.created_at)
     }
 
@@ -3523,7 +3590,7 @@ def update_recurring_event(event_id: int, data: RecurringEventUpdate, current_us
         event.title = data.title
 
     if data.category is not None:
-        valid_categories = ["birthday", "anniversary", "holiday", "reminder", "other"]
+        valid_categories = ["birthday", "anniversary", "holiday", "reminder"]
         if data.category not in valid_categories:
             raise HTTPException(status_code=400, detail="Nieprawidłowa kategoria")
         event.category = data.category
@@ -3538,6 +3605,29 @@ def update_recurring_event(event_id: int, data: RecurringEventUpdate, current_us
             raise HTTPException(status_code=400, detail="Nieprawidłowy dzień (1-31)")
         event.day = data.day
 
+    if data.interval_type is not None:
+        valid_interval_types = ["daily", "weekly", "monthly", "yearly"]
+        if data.interval_type not in valid_interval_types:
+            raise HTTPException(status_code=400, detail="Nieprawidłowy typ interwału (daily, weekly, monthly, yearly)")
+        event.interval_type = data.interval_type
+
+    if data.interval_value is not None:
+        if data.interval_value <= 0:
+            raise HTTPException(status_code=400, detail="Wartość interwału musi być dodatnia")
+        event.interval_value = data.interval_value
+
+    if data.start_date is not None:
+        try:
+            event.start_date = date.fromisoformat(data.start_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Nieprawidłowa data początkowa (YYYY-MM-DD)")
+
+    if data.end_date is not None:
+        try:
+            event.end_date = date.fromisoformat(data.end_date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Nieprawidłowa data końcowa (YYYY-MM-DD)")
+
     db.commit()
     db.refresh(event)
 
@@ -3547,6 +3637,10 @@ def update_recurring_event(event_id: int, data: RecurringEventUpdate, current_us
         "category": event.category,
         "month": event.month,
         "day": event.day,
+        "interval_type": event.interval_type,
+        "interval_value": event.interval_value,
+        "start_date": str(event.start_date) if event.start_date else None,
+        "end_date": str(event.end_date) if event.end_date else None,
         "created_at": str(event.created_at)
     }
 
@@ -3565,6 +3659,134 @@ def delete_recurring_event(event_id: int, current_user: models.User = Depends(ge
     db.commit()
 
     return {"message": "Usunięto wydarzenie cykliczne"}
+
+
+# === FREE DAYS ENDPOINTS ===
+@app.get("/free-days")
+def list_free_days(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    free_days = db.query(models.FreeDay).filter(
+        models.FreeDay.owner_id == current_user.id
+    ).order_by(models.FreeDay.date).all()
+    return [{
+        "id": fd.id,
+        "date": str(fd.date),
+        "day_type": fd.day_type,
+        "hours": fd.hours,
+        "notes": fd.notes,
+        "created_at": str(fd.created_at)
+    } for fd in free_days]
+
+
+@app.post("/free-days")
+def create_free_day(data: FreeDayCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    try:
+        free_date = date.fromisoformat(data.date)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Nieprawidłowa data (YYYY-MM-DD)")
+
+    valid_types = ["holiday", "deans_day", "rector_day"]
+    if data.day_type not in valid_types:
+        raise HTTPException(status_code=400, detail="Nieprawidłowy typ dnia")
+
+    # Check if free day already exists for this date
+    existing = db.query(models.FreeDay).filter(
+        models.FreeDay.owner_id == current_user.id,
+        models.FreeDay.date == free_date
+    ).first()
+    if existing:
+        raise HTTPException(status_code=400, detail="Dzień wolny dla tej daty już istnieje")
+
+    free_day = models.FreeDay(
+        owner_id=current_user.id,
+        date=free_date,
+        day_type=data.day_type,
+        hours=data.hours,
+        notes=data.notes
+    )
+    db.add(free_day)
+    db.commit()
+    db.refresh(free_day)
+
+    return {
+        "id": free_day.id,
+        "date": str(free_day.date),
+        "day_type": free_day.day_type,
+        "hours": free_day.hours,
+        "notes": free_day.notes,
+        "message": "Dodano dzień wolny"
+    }
+
+
+@app.patch("/free-days/{free_day_id}")
+def update_free_day(free_day_id: int, data: FreeDayUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    free_day = db.query(models.FreeDay).filter(
+        models.FreeDay.id == free_day_id,
+        models.FreeDay.owner_id == current_user.id
+    ).first()
+
+    if not free_day:
+        raise HTTPException(status_code=404, detail="Nie znaleziono dnia wolnego")
+
+    if data.date is not None:
+        try:
+            free_day.date = date.fromisoformat(data.date)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Nieprawidłowa data (YYYY-MM-DD)")
+
+    if data.day_type is not None:
+        valid_types = ["holiday", "deans_day", "rector_day"]
+        if data.day_type not in valid_types:
+            raise HTTPException(status_code=400, detail="Nieprawidłowy typ dnia")
+        free_day.day_type = data.day_type
+
+    if data.hours is not None:
+        free_day.hours = data.hours
+
+    if data.notes is not None:
+        free_day.notes = data.notes
+
+    db.commit()
+    db.refresh(free_day)
+
+    return {
+        "id": free_day.id,
+        "date": str(free_day.date),
+        "day_type": free_day.day_type,
+        "hours": free_day.hours,
+        "notes": free_day.notes,
+        "message": "Zaktualizowano dzień wolny"
+    }
+
+
+@app.delete("/free-days/{free_day_id}")
+def delete_free_day(free_day_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    free_day = db.query(models.FreeDay).filter(
+        models.FreeDay.id == free_day_id,
+        models.FreeDay.owner_id == current_user.id
+    ).first()
+
+    if not free_day:
+        raise HTTPException(status_code=404, detail="Nie znaleziono dnia wolnego")
+
+    db.delete(free_day)
+    db.commit()
+
+    return {"message": "Usunięto dzień wolny"}
+
+
+@app.post("/free-days/generate/{year}")
+def generate_holidays_for_year(year: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    import holidays as holidays_module
+    
+    if year < 2000 or year > 2100:
+        raise HTTPException(status_code=400, detail="Nieprawidłowy rok")
+    
+    added_count = holidays_module.generate_holidays_for_year(year, current_user.id, db)
+    
+    return {
+        "message": f"Wygenerowano {added_count} świąt dla roku {year}",
+        "added_count": added_count
+    }
 
 
 # === ADMIN ENDPOINTS ===

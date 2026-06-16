@@ -201,6 +201,28 @@ export default function EarningsPanel({
     });
   };
 
+  const deleteUnfinishedEntries = () => {
+    const unfinished = entries.filter((e) => !e.completed);
+    if (unfinished.length === 0) {
+      onToast("Brak niewykończonych wpisów");
+      return;
+    }
+    if (!window.confirm(`Czy na pewno chcesz usunąć ${unfinished.length} niewykończonych wpisów pracy?`)) {
+      return;
+    }
+    enqueueRequest(async () => {
+      try {
+        const deletePromises = unfinished.map((entry) => axios.delete(`${api}/work/${entry.id}`, { headers }));
+        await Promise.all(deletePromises);
+        setEntries((prev) => prev.filter((e) => e.completed));
+        await refreshSummary();
+        onToast(`🗑️ Usunięto ${unfinished.length} niewykończonych wpisów`);
+      } catch (err) {
+        onToast(err.response?.data?.detail || "Błąd usuwania");
+      }
+    });
+  };
+
   const startEdit = (entry) => {
     setEditingId(entry.id);
     setEditDate(entry.work_date);
@@ -351,12 +373,15 @@ export default function EarningsPanel({
       </div>
 
       {!showAdd ? (
-        <button type="button" className="add-task-btn" onClick={() => {
-          setShowAdd(true);
-          if (defaultHourlyRate && !hourlyRate) {
-            setHourlyRate(defaultHourlyRate);
-          }
-        }}>+ Dodaj pracę na ten dzień</button>
+        <div className="row">
+          <button type="button" className="add-task-btn" onClick={() => {
+            setShowAdd(true);
+            if (defaultHourlyRate && !hourlyRate) {
+              setHourlyRate(defaultHourlyRate);
+            }
+          }}>+ Dodaj pracę na ten dzień</button>
+          <button type="button" className="cancel-btn" onClick={deleteUnfinishedEntries}>🗑️ Usuń niewykończoną pracę</button>
+        </div>
       ) : (
         <div className="add-task">
           <h3>+ Nowy wpis pracy ({selectedStr})</h3>

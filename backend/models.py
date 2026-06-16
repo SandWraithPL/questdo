@@ -284,7 +284,24 @@ class RecurringEvent(Base):
     owner_id = Column(Integer, ForeignKey("users.id"), index=True)
     title = Column(String)
     category = Column(String, default="birthday")
-    month = Column(Integer)
-    day = Column(Integer)
+    # Legacy fields for backward compatibility
+    month = Column(Integer, nullable=True)
+    day = Column(Integer, nullable=True)
+    # New fields for arbitrary intervals
+    interval_type = Column(String, nullable=True)  # daily, weekly, monthly, yearly
+    interval_value = Column(Integer, nullable=True)  # e.g., 2 for "every 2 weeks"
+    start_date = Column(Date, nullable=True)
+    end_date = Column(Date, nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class FreeDay(Base):
+    __tablename__ = "free_days"
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
+    date = Column(Date, index=True)
+    day_type = Column(String, default="holiday")  # holiday, deans_day, rector_day
+    hours = Column(String, nullable=True)  # Optional: e.g., "08:00-12:00" for partial day
+    notes = Column(String, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     owner = relationship("User")
