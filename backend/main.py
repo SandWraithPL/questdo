@@ -1039,6 +1039,10 @@ class FamilyUpdate(BaseModel):
     name: Optional[str] = None
 
 
+class EmptyBody(BaseModel):
+    pass
+
+
 class RecurringEventCreate(BaseModel):
     title: str
     category: str = "birthday"
@@ -2404,7 +2408,7 @@ def delete_schedule(entry_id: int, current_user: models.User = Depends(get_curre
 
 
 @app.delete("/schedule/all")
-def delete_all_schedule(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_all_schedule(body: EmptyBody = EmptyBody(), current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     deleted = db.query(models.ScheduleEntry).filter(
         models.ScheduleEntry.owner_id == current_user.id
     ).delete()
@@ -3455,7 +3459,7 @@ def list_family_invitations(current_user: models.User = Depends(get_current_user
 
 
 @app.post("/family/invitations/{invitation_id}/accept")
-def accept_family_invitation(invitation_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def accept_family_invitation(invitation_id: int, body: EmptyBody = EmptyBody(), current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     invitation = db.query(models.FamilyInvitation).filter(
         models.FamilyInvitation.id == invitation_id,
         models.FamilyInvitation.invited_username == encrypt_field(current_user.username),
@@ -3500,7 +3504,7 @@ def accept_family_invitation(invitation_id: int, current_user: models.User = Dep
 
 
 @app.post("/family/invitations/{invitation_id}/decline")
-def decline_family_invitation(invitation_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def decline_family_invitation(invitation_id: int, body: EmptyBody = EmptyBody(), current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     invitation = db.query(models.FamilyInvitation).filter(
         models.FamilyInvitation.id == invitation_id,
         models.FamilyInvitation.invited_username == encrypt_field(current_user.username),

@@ -759,7 +759,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
       <div className="day-view">
         <h3>
           {selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-          {freeDayType === "holiday" && <span className="day-free-indicator"> 🎉 Święto</span>}
+          {freeDayType === "holiday" && <span className="day-free-indicator"> 🎉 {freeDays.find(fd => fd.date === selectedStr)?.notes || "Święto"}</span>}
           {freeDayType === "deans_day" && <span className="day-free-indicator"> 🎓 Dzień dziekański</span>}
           {freeDayType === "rector_day" && <span className="day-free-indicator"> 🏛️ Dzień rektorski</span>}
         </h3>
@@ -780,7 +780,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
                   {isEvent && <span className="badge event-type">{getEventCategoryLabel(task.event_category)}</span>}
                   {isVirtual && <span className="badge recurring">🔄 Cykliczne</span>}
                   {!isEvent && <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>}
-                  <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>
+                  {!isEvent && <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>}
                   {isEvent && task.recurring_pattern && <span className="badge recurring">{task.recurring_pattern === "yearly" ? "🔄 Co rok" : task.recurring_pattern === "monthly" ? "🔄 Co miesiąc" : "🔄 Co tydzień"}</span>}
                   {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
                 </div>
@@ -1198,9 +1198,6 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
                   {editForm.recurring_pattern && (
                     <DatePicker value={editForm.recurring_end_date || ""} onChange={(recurring_end_date) => setEditForm({ ...editForm, recurring_end_date })} label="Data końcowa cyklu (opcjonalne)" />
                   )}
-                  <select value={editForm.category || "Inne"} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
-                    {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}
-                  </select>
                   <DatePicker value={editForm.due_date || ""} onChange={(due_date) => setEditForm({ ...editForm, due_date })} />
                 </>
               )}
@@ -1725,11 +1722,13 @@ export default function App() {
       setWorkSummary(workSummaryRes.data || null);
       setFreeDays(freeDaysRes.data || []);
       setRecurringEvents(recurringRes.data || []);
-      
-      // Auto-generate holidays for current year
+
+      // Auto-generate holidays for current year and next year
       const currentYear = new Date().getFullYear();
+      const nextYear = currentYear + 1;
       try {
         await axios.post(`${API}/free-days/generate/${currentYear}`, {}, { headers: noCacheHeaders });
+        await axios.post(`${API}/free-days/generate/${nextYear}`, {}, { headers: noCacheHeaders });
       } catch (err) {
         // Ignore errors - holidays might already exist
         console.log("Holidays generation:", err.response?.status);
@@ -2245,6 +2244,7 @@ export default function App() {
           onToast={showToast}
           enqueueRequest={enqueueRequest}
           freeDays={freeDays}
+          setFreeDays={setFreeDays}
         />
       )}
 
