@@ -10,6 +10,7 @@ import EarningsPanel from "./EarningsPanel";
 import CategoriesPanel from "./CategoriesPanel";
 import FamilyPanel from "./FamilyPanel";
 import RecurringPanel from "./RecurringPanel";
+import FamilyInvitationsBanner from "./FamilyInvitationsBanner";
 import { useEditItem } from "./hooks/useEditItem";
 
 const API = "https://questdo-backend.onrender.com";
@@ -1540,6 +1541,7 @@ export default function App() {
   const [workSummary, setWorkSummary] = useState(null);
   const [familyId, setFamilyId] = useState(null);
   const [freeDays, setFreeDays] = useState([]);
+  const [familyInvitations, setFamilyInvitations] = useState([]);
   const [pwaHintDismissed, setPwaHintDismissed] = useState(readPwaHintDismissed);
   const apiQueue = useRef([]);
   const isProcessingQueue = useRef(false);
@@ -1716,6 +1718,27 @@ export default function App() {
   useEffect(() => { if (token) fetchData(); }, [token]);
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
   useEffect(() => { if (token) fetchData(); }, [familyId]);
+
+  const loadFamilyInvitations = async () => {
+    if (!token) return;
+    try {
+      const res = await axios.get(`${API}/family/invitations`, { headers });
+      setFamilyInvitations(res.data);
+    } catch (err) {
+      console.error("Błąd ładowania zaproszeń:", err);
+    }
+  };
+
+  useEffect(() => {
+    loadFamilyInvitations();
+  }, [token]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadFamilyInvitations();
+    }, 30000);
+    return () => clearInterval(interval);
+  }, [token]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -2124,6 +2147,12 @@ export default function App() {
       {mainTab === "tasks" && (
         <>
       <ChallengesBar challenges={challenges} />
+      <FamilyInvitationsBanner 
+        api={API} 
+        headers={headers} 
+        onToast={showToast} 
+        onFamilyChange={fetchData} 
+      />
       <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} freeDays={freeDays} />
       <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (

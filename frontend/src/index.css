@@ -630,6 +630,105 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .history-item { display: flex; flex-direction: column; gap: 2px; padding: 8px 0; border-bottom: 1px solid #2a2a3e; font-size: 0.8rem; }
 .history-item strong { color: #ff8906; font-size: 0.75rem; }
 .history-item span { color: #ddd; line-height: 1.35; }
+
+/* Family Invitations Banner */
+.family-invitations-banner {
+  background: #1a1a2e;
+  border-radius: 12px;
+  padding: 16px;
+  margin-bottom: 16px;
+  border: 1px solid #2a2a3e;
+}
+
+.invitations-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.invitations-title {
+  font-weight: bold;
+  color: #ff8906;
+  font-size: 0.95rem;
+}
+
+.invitations-count {
+  background: #ff8906;
+  color: #0f0e17;
+  padding: 2px 8px;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: bold;
+}
+
+.invitations-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.invitation-card-banner {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: #0f0e17;
+  border-radius: 8px;
+  border-left: 3px solid #ff8906;
+}
+
+.invitation-info-banner {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.invitation-family-banner {
+  font-weight: bold;
+  color: #fff;
+  font-size: 0.95rem;
+}
+
+.invitation-from-banner {
+  font-size: 0.85rem;
+  color: #aaa;
+}
+
+.invitation-actions-banner {
+  display: flex;
+  gap: 8px;
+}
+
+.invitation-actions-banner button {
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: none;
+  cursor: pointer;
+  font-size: 0.85rem;
+  font-weight: bold;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.accept-btn {
+  background: #4caf50;
+  color: #fff;
+}
+
+.accept-btn:hover {
+  background: #66bb6a;
+  transform: translateY(-1px);
+}
+
+.decline-btn {
+  background: #f44336;
+  color: #fff;
+}
+
+.decline-btn:hover {
+  background: #ef5350;
+  transform: translateY(-1px);
+}
 .logout-btn { width: 100%; padding: 10px; background: #e74c3c; color: white; border: none; border-radius: 8px; cursor: pointer; margin-top: 8px; font-weight: bold; }
 .delete-account-btn { width: 100%; margin-top: 8px; padding: 10px; background: transparent; border: 1px solid #e74c3c; color: #e74c3c; border-radius: 8px; cursor: pointer; font-size: 0.9rem; }
 .delete-account-form { margin-top: 8px; display: flex; flex-direction: column; gap: 6px; }
