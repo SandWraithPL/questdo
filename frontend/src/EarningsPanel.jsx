@@ -337,7 +337,6 @@ export default function EarningsPanel({
                       <span className="badge category">Netto {formatMoney(entry.net)}</span>
                       {entry.is_recurring && <span className="badge category">🔁 {WEEKDAYS_LONG[entry.day_of_week]}</span>}
                       {entry.end_date && <span className="badge timing-late">Do {entry.end_date}</span>}
-                      <span className="badge exp">+10 EXP</span>
                     </div>
                   </div>
                   <div className="task-actions">
@@ -366,20 +365,18 @@ export default function EarningsPanel({
             <TimePicker value={endTime} onChange={setEndTime} label="Do:" />
           </div>
 
-          <div className="rate-input-group" style={{ alignItems: "center" }}>
+          <div className="rate-input-group">
             <input 
               type="text" 
               placeholder="Stawka za godzinę (zł) *" 
               value={hourlyRate} 
               onChange={(e) => handleRateChange(e.target.value)} 
-              style={{ flex: 1 }}
             />
             <button 
               type="button" 
-              className="add-task-btn" 
+              className="save-default-btn" 
               onClick={saveAsDefaultRate} 
               disabled={isSavingDefault}
-              style={{ whiteSpace: "nowrap", minHeight: "44px" }}
             >
               {isSavingDefault ? "⏳" : "⭐ Zapisz jako domyślną"}
             </button>

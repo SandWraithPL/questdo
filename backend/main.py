@@ -222,6 +222,10 @@ def migrate_schema():
         models.FamilyInvitation.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę family_invitations")
 
+    if "recurring_events" not in insp.get_table_names():
+        models.RecurringEvent.__table__.create(bind=engine)
+        print("Migracja: utworzono tabelę recurring_events")
+
     db = next(get_db())
     rare_drop_count = db.query(models.RareDrop).count()
     if rare_drop_count == 0:
@@ -940,6 +944,20 @@ class FamilyInvite(BaseModel):
 
 class FamilyUpdate(BaseModel):
     name: Optional[str] = None
+
+
+class RecurringEventCreate(BaseModel):
+    title: str
+    category: str = "birthday"
+    month: int
+    day: int
+
+
+class RecurringEventUpdate(BaseModel):
+    title: Optional[str] = None
+    category: Optional[str] = None
+    month: Optional[int] = None
+    day: Optional[int] = None
 
 
 def validate_schedule_payload(data: ScheduleCreate | ScheduleUpdate, is_create: bool = False) -> None:
@@ -3227,12 +3245,14 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
     if not membership:
         raise HTTPException(status_code=403, detail="Nie masz uprawnień do zapraszania")
     
-    username = (data.username or "").strip()
+    username = (data.username or "").strip().lower()
     if not username:
         raise HTTPException(status_code=400, detail="Nazwa użytkownika jest wymagana")
     
-    # Check if user exists
-    target_user = db.query(models.User).filter(models.User.username == username).first()
+    # Check if user exists (case-insensitive)
+    target_user = db.query(models.User).filter(
+        db.func.lower(models.User.username) == username
+    ).first()
     if not target_user:
         raise HTTPException(status_code=404, detail="Użytkownik nie istnieje")
     
@@ -3244,10 +3264,10 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
     if existing_member:
         raise HTTPException(status_code=400, detail="Użytkownik jest już członkiem tej rodziny")
     
-    # Check if there's already a pending invitation
+    # Check if there's already a pending invitation (use actual username for encryption)
     existing_invitation = db.query(models.FamilyInvitation).filter(
         models.FamilyInvitation.family_id == family_id,
-        models.FamilyInvitation.invited_username == encrypt_field(username),
+        models.FamilyInvitation.invited_username == encrypt_field(target_user.username),
         models.FamilyInvitation.status == "pending"
     ).first()
     if existing_invitation:
@@ -3256,13 +3276,13 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
     invitation = models.FamilyInvitation(
         family_id=family_id,
         invited_by=current_user.id,
-        invited_username=encrypt_field(username),
+        invited_username=encrypt_field(target_user.username),
         status="pending"
     )
     db.add(invitation)
     db.commit()
     
-    return {"message": f"Wysłano zaproszenie do {username}"}
+    return {"message": f"Wysłano zaproszenie do {target_user.username}"}
 
 
 @app.get("/family/invitations")
@@ -3413,28 +3433,138 @@ def update_family(family_id: int, data: FamilyUpdate, current_user: models.User 
         models.FamilyMember.user_id == current_user.id,
         models.FamilyMember.role == "admin"
     ).first()
-    
+
     if not membership:
         raise HTTPException(status_code=403, detail="Nie masz uprawnień do edycji rodziny")
-    
+
     family = db.query(models.Family).filter(models.Family.id == family_id).first()
     if not family:
         raise HTTPException(status_code=404, detail="Nie znaleziono rodziny")
-    
+
     if data.name is not None:
         name = (data.name or "").strip()
         if not name:
             raise HTTPException(status_code=400, detail="Nazwa rodziny jest wymagana")
         family.name = encrypt_field(name)
-    
+
     db.commit()
     db.refresh(family)
-    
+
     return {
         "id": family.id,
         "name": decrypt_field(family.name),
         "message": "Zaktualizowano rodzinę"
     }
+
+
+# === RECURRING EVENTS ENDPOINTS ===
+@app.get("/recurring-events")
+def list_recurring_events(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    events = db.query(models.RecurringEvent).filter(
+        models.RecurringEvent.owner_id == current_user.id
+    ).all()
+    return [{
+        "id": e.id,
+        "title": e.title,
+        "category": e.category,
+        "month": e.month,
+        "day": e.day,
+        "created_at": str(e.created_at)
+    } for e in events]
+
+
+@app.post("/recurring-events")
+def create_recurring_event(data: RecurringEventCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if not data.title.strip():
+        raise HTTPException(status_code=400, detail="Nazwa wydarzenia jest wymagana")
+    if not (1 <= data.month <= 12):
+        raise HTTPException(status_code=400, detail="Nieprawidłowy miesiąc (1-12)")
+    if not (1 <= data.day <= 31):
+        raise HTTPException(status_code=400, detail="Nieprawidłowy dzień (1-31)")
+
+    valid_categories = ["birthday", "anniversary", "holiday", "reminder", "other"]
+    if data.category not in valid_categories:
+        raise HTTPException(status_code=400, detail="Nieprawidłowa kategoria")
+
+    event = models.RecurringEvent(
+        owner_id=current_user.id,
+        title=data.title,
+        category=data.category,
+        month=data.month,
+        day=data.day
+    )
+    db.add(event)
+    db.commit()
+    db.refresh(event)
+
+    return {
+        "id": event.id,
+        "title": event.title,
+        "category": event.category,
+        "month": event.month,
+        "day": event.day,
+        "created_at": str(event.created_at)
+    }
+
+
+@app.patch("/recurring-events/{event_id}")
+def update_recurring_event(event_id: int, data: RecurringEventUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    event = db.query(models.RecurringEvent).filter(
+        models.RecurringEvent.id == event_id,
+        models.RecurringEvent.owner_id == current_user.id
+    ).first()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="Nie znaleziono wydarzenia")
+
+    if data.title is not None:
+        if not data.title.strip():
+            raise HTTPException(status_code=400, detail="Nazwa wydarzenia jest wymagana")
+        event.title = data.title
+
+    if data.category is not None:
+        valid_categories = ["birthday", "anniversary", "holiday", "reminder", "other"]
+        if data.category not in valid_categories:
+            raise HTTPException(status_code=400, detail="Nieprawidłowa kategoria")
+        event.category = data.category
+
+    if data.month is not None:
+        if not (1 <= data.month <= 12):
+            raise HTTPException(status_code=400, detail="Nieprawidłowy miesiąc (1-12)")
+        event.month = data.month
+
+    if data.day is not None:
+        if not (1 <= data.day <= 31):
+            raise HTTPException(status_code=400, detail="Nieprawidłowy dzień (1-31)")
+        event.day = data.day
+
+    db.commit()
+    db.refresh(event)
+
+    return {
+        "id": event.id,
+        "title": event.title,
+        "category": event.category,
+        "month": event.month,
+        "day": event.day,
+        "created_at": str(event.created_at)
+    }
+
+
+@app.delete("/recurring-events/{event_id}")
+def delete_recurring_event(event_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    event = db.query(models.RecurringEvent).filter(
+        models.RecurringEvent.id == event_id,
+        models.RecurringEvent.owner_id == current_user.id
+    ).first()
+
+    if not event:
+        raise HTTPException(status_code=404, detail="Nie znaleziono wydarzenia")
+
+    db.delete(event)
+    db.commit()
+
+    return {"message": "Usunięto wydarzenie cykliczne"}
 
 
 # === ADMIN ENDPOINTS ===

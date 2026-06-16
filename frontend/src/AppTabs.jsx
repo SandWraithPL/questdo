@@ -1,5 +1,6 @@
 const TABS = [
   { id: "tasks", label: "Questy", icon: "⚔️" },
+  { id: "recurring", label: "Cykliczne", icon: "🔄" },
   { id: "schedule", label: "Plan", icon: "📚" },
   { id: "shopping", label: "Zakupy", icon: "🛒" },
   { id: "earnings", label: "Zarobki", icon: "💰" },

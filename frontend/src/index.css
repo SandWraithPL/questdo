@@ -415,11 +415,18 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .edit-actions { display: flex; gap: 8px; }
 .btn-save { flex: 1; padding: 8px; border: none; border-radius: 8px; background: #4caf50; color: #fff; font-weight: bold; cursor: pointer; }
 .btn-cancel-edit { flex: 1; padding: 8px; border: none; border-radius: 8px; background: #333; color: #fff; cursor: pointer; }
-.task-options-row { display: grid; grid-template-columns: minmax(120px, auto) 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
+.task-options-row { display: grid; grid-template-columns: minmax(140px, auto) 1fr; gap: 10px; align-items: center; margin-bottom: 10px; }
 .task-options-row select { margin-bottom: 0; }
-.important-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border: 1px solid #333; border-radius: 8px; background: #0f0e17; color: #fff; cursor: pointer; font-weight: bold; margin-bottom: 10px; }
+.important-toggle { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 0 12px; border: 1px solid #333; border-radius: 8px; background: #0f0e17; color: #fff; cursor: pointer; font-weight: bold; margin-bottom: 0; }
 .important-toggle input { width: 18px; height: 18px; margin: 0; accent-color: #ff8906; }
 .important-toggle span { color: #ff8f45; }
+
+.rate-input-group { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+.rate-input-group input { flex: 1; }
+.rate-input-group label { color: #aaa; font-size: 0.9rem; min-width: 160px; }
+.settings-rate-group { flex-wrap: wrap; }
+.settings-rate-group label { flex-shrink: 0; }
+.save-default-btn { min-height: 44px; padding: 0 16px; white-space: nowrap; flex-shrink: 0; }
 
 /* Toast */
 .toast-stack { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; }

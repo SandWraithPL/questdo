@@ -9,6 +9,7 @@ import SchedulePanel from "./SchedulePanel";
 import EarningsPanel from "./EarningsPanel";
 import CategoriesPanel from "./CategoriesPanel";
 import FamilyPanel from "./FamilyPanel";
+import RecurringPanel from "./RecurringPanel";
 import { useEditItem } from "./hooks/useEditItem";
 
 const API = "https://questdo-backend.onrender.com";
@@ -2115,13 +2116,9 @@ export default function App() {
                   <option value="">Wybierz kategorię wydarzenia</option>
                   {EVENT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
                 </select>
-                <select value={recurringPattern} onChange={(e) => setRecurringPattern(e.target.value)}>
-                  {RECURRING_PATTERNS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                </select>
-                {recurringPattern && <DatePicker value={recurringEndDate} onChange={setRecurringEndDate} label="Data końcowa cyklu (opcjonalne)" />}
               </>
             )}
-            <select value={category} onChange={(e) => setCategory(e.target.value)}>{CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}</select>
+            {taskType === "quest" && <select value={category} onChange={(e) => setCategory(e.target.value)}>{CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}</select>}
             <DatePicker value={taskDate} onChange={setTaskDate} label="Termin" />
           </div>
           <div className="task-options-row">
@@ -2142,6 +2139,16 @@ export default function App() {
         </div>
       )}
         </>
+      )}
+
+      {mainTab === "recurring" && (
+        <RecurringPanel
+          api={API}
+          headers={headers}
+          onToast={showToast}
+          selectedDate={selectedDate}
+          onDateSelect={handleDateSelect}
+        />
       )}
 
       {mainTab === "schedule" && (

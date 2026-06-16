@@ -189,7 +189,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
         setItems((prev) => prev.map((i) => (i.id === item.id ? res.data.item : i)));
         applyUserFromResponse(res.data, onUserUpdate);
         await loadSummary();
-        if (res.data.exp_gained > 0) onToast(`🛒 Kupione! +${res.data.exp_gained} EXP`);
+        onToast("🛒 Kupione!");
       } catch (err) {
         onToast(err.response?.data?.detail || "Błąd aktualizacji");
       }
@@ -520,7 +520,6 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
                       {item.quantity && <span className="badge category">{item.quantity}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
                       {item.price > 0 && <span className="badge category">💰 {formatMoney(item.price)}</span>}
-                      {item.bought && <span className="badge exp">+2 EXP</span>}
                     </div>
                   </div>
                   <div className="task-actions">

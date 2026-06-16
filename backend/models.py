@@ -276,3 +276,15 @@ class FamilyInvitation(Base):
     created_at = Column(DateTime, default=datetime.utcnow)
     responded_at = Column(DateTime, nullable=True)
     family = relationship("Family", back_populates="invitations")
+
+
+class RecurringEvent(Base):
+    __tablename__ = "recurring_events"
+    id = Column(Integer, primary_key=True, index=True)
+    owner_id = Column(Integer, ForeignKey("users.id"), index=True)
+    title = Column(String)
+    category = Column(String, default="birthday")
+    month = Column(Integer)
+    day = Column(Integer)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    owner = relationship("User")
