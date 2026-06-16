@@ -2408,7 +2408,7 @@ def delete_schedule(entry_id: int, current_user: models.User = Depends(get_curre
 
 
 @app.delete("/schedule/all")
-def delete_all_schedule(body: EmptyBody = EmptyBody(), current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def delete_all_schedule(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     deleted = db.query(models.ScheduleEntry).filter(
         models.ScheduleEntry.owner_id == current_user.id
     ).delete()
@@ -3415,10 +3415,13 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
     if existing_member:
         raise HTTPException(status_code=400, detail="Użytkownik jest już członkiem tej rodziny")
     
-    # Check if there's already a pending invitation (use actual username for encryption)
+    # Use lowercase username for encryption to ensure consistency
+    username_to_encrypt = target_user.username.lower()
+    
+    # Check if there's already a pending invitation
     existing_invitation = db.query(models.FamilyInvitation).filter(
         models.FamilyInvitation.family_id == family_id,
-        models.FamilyInvitation.invited_username == encrypt_field(target_user.username),
+        models.FamilyInvitation.invited_username == encrypt_field(username_to_encrypt),
         models.FamilyInvitation.status == "pending"
     ).first()
     if existing_invitation:
@@ -3427,7 +3430,7 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
     invitation = models.FamilyInvitation(
         family_id=family_id,
         invited_by=current_user.id,
-        invited_username=encrypt_field(target_user.username),
+        invited_username=encrypt_field(username_to_encrypt),
         status="pending"
     )
     db.add(invitation)
@@ -3439,7 +3442,7 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
 @app.get("/family/invitations")
 def list_family_invitations(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     invitations = db.query(models.FamilyInvitation).filter(
-        models.FamilyInvitation.invited_username == encrypt_field(current_user.username),
+        models.FamilyInvitation.invited_username == encrypt_field(current_user.username.lower()),
         models.FamilyInvitation.status == "pending"
     ).all()
     
@@ -3462,7 +3465,7 @@ def list_family_invitations(current_user: models.User = Depends(get_current_user
 def accept_family_invitation(invitation_id: int, body: EmptyBody = EmptyBody(), current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     invitation = db.query(models.FamilyInvitation).filter(
         models.FamilyInvitation.id == invitation_id,
-        models.FamilyInvitation.invited_username == encrypt_field(current_user.username),
+        models.FamilyInvitation.invited_username == encrypt_field(current_user.username.lower()),
         models.FamilyInvitation.status == "pending"
     ).first()
     
@@ -3507,7 +3510,7 @@ def accept_family_invitation(invitation_id: int, body: EmptyBody = EmptyBody(), 
 def decline_family_invitation(invitation_id: int, body: EmptyBody = EmptyBody(), current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     invitation = db.query(models.FamilyInvitation).filter(
         models.FamilyInvitation.id == invitation_id,
-        models.FamilyInvitation.invited_username == encrypt_field(current_user.username),
+        models.FamilyInvitation.invited_username == encrypt_field(current_user.username.lower()),
         models.FamilyInvitation.status == "pending"
     ).first()
     

@@ -296,7 +296,7 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
                 <div>
                   <p>Ten dzień jest oznaczony jako: <strong>{existingFreeDay.day_type === "holiday" ? "Święto" : existingFreeDay.day_type === "deans_day" ? "Dzień dziekański" : "Dzień rektorski"}</strong>
                   {existingFreeDay.notes && <span> — {existingFreeDay.notes}</span>}</p>
-                  <div className="row" style={{ marginTop: 12 }}>
+                  <div className="row" style={{ marginTop: 12, gap: "8px" }}>
                     <button type="button" className="danger-btn" onClick={handleDeleteFreeDay}>🗑️ Usuń oznaczenie</button>
                     <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
                   </div>
