@@ -46,7 +46,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .add-task button:hover:not(:disabled) { background: #ffa040; transform: translateY(-1px); }
 .add-task button:active:not(:disabled) { transform: translateY(0); }
 .add-task button:disabled { opacity: 0.65; cursor: wait; }
-.cancel-btn { background: #333 !important; color: #fff !important; }
+.cancel-btn { background: #333 !important; color: #fff !important; min-height: 44px; }
 .cancel-btn:hover:not(:disabled) { background: #444 !important; }
 
 .suggestions-dropdown {
@@ -795,7 +795,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .date-picker-icon { font-size: 1.1rem; }
 .date-picker-trigger span:nth-child(2) { flex: 1; }
 .date-picker-chevron { color: #888; font-size: 0.7rem; }
-.date-picker-popup { position: absolute !important; z-index: 1000 !important; top: calc(100% + 6px) !important; left: 0 !important; background: #1a1a2e !important; border: 1px solid #444 !important; border-radius: 12px !important; padding: 12px !important; box-shadow: 0 8px 24px rgba(0,0,0,0.45) !important; width: 280px !important; min-width: 280px !important; }
+.date-picker-popup { position: absolute !important; z-index: 9999 !important; top: calc(100% + 6px) !important; left: 0 !important; background: #1a1a2e !important; border: 1px solid #444 !important; border-radius: 12px !important; padding: 12px !important; box-shadow: 0 8px 24px rgba(0,0,0,0.45) !important; width: 280px !important; min-width: 280px !important; }
 .add-task-meta .date-picker-wrap { grid-column: 1 / -1; margin-bottom: 0; overflow: visible !important; }
 .dp-header { display: flex !important; align-items: center !important; justify-content: space-between !important; margin-bottom: 10px !important; gap: 6px !important; flex-wrap: nowrap !important; }
 .dp-nav { background: #0f0e17 !important; border: 1px solid #333 !important; color: #fff !important; width: 28px !important; height: 28px !important; min-width: 28px !important; border-radius: 6px !important; cursor: pointer !important; flex-shrink: 0 !important; font-size: 0.9rem !important; display: flex !important; align-items: center !important; justify-content: center !important; padding: 0 !important; }

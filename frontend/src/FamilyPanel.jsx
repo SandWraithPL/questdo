@@ -70,12 +70,16 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
       return;
     }
     try {
-      await axios.post(`${api}/families/${selectedFamily.id}/invite`, 
+      console.log("Inviting user:", inviteUsername, "to family:", selectedFamily.id);
+      const res = await axios.post(`${api}/families/${selectedFamily.id}/invite`,
         { username: inviteUsername }, { headers });
+      console.log("Invite response:", res.data);
       setInviteUsername("");
       setShowInvite(false);
       onToast("📧 Wysłano zaproszenie");
     } catch (err) {
+      console.error("Invite error:", err);
+      console.error("Error response:", err.response?.data);
       onToast(err.response?.data?.detail || "Błąd wysyłania zaproszenia");
     }
   };

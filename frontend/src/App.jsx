@@ -1725,6 +1725,15 @@ export default function App() {
       setWorkSummary(workSummaryRes.data || null);
       setFreeDays(freeDaysRes.data || []);
       setRecurringEvents(recurringRes.data || []);
+      
+      // Auto-generate holidays for current year
+      const currentYear = new Date().getFullYear();
+      try {
+        await axios.post(`${API}/free-days/generate/${currentYear}`, {}, { headers: noCacheHeaders });
+      } catch (err) {
+        // Ignore errors - holidays might already exist
+        console.log("Holidays generation:", err.response?.status);
+      }
     } catch (err) {
       console.error("Fetch error:", err);
       localStorage.removeItem("token");

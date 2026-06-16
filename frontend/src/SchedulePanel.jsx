@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import axios from "axios";
 import SharedCalendar, { weekdayIndex, WEEKDAYS_LONG } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
+import DatePicker from "./DatePicker";
 
 function matchScheduleToDate(entry, dateStr, freeDays = []) {
   const isFreeDay = freeDays.some(fd => fd.date === dateStr);
@@ -159,10 +160,12 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
     }
     enqueueRequest(async () => {
       try {
-        await axios.delete(`${api}/schedule/all`, { headers });
+        const res = await axios.delete(`${api}/schedule/all`, { headers });
+        console.log("Delete response:", res.data);
         setEntries([]);
         onToast("🗑️ Usunięto cały plan zajęć");
       } catch (err) {
+        console.error("Delete error:", err);
         onToast(err.response?.data?.detail || "Błąd usuwania planu");
       }
     });
@@ -262,7 +265,7 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
               ))}
             </select>
           ) : (
-            <input type="date" value={entryDate} onChange={(e) => setEntryDate(e.target.value)} />
+            <DatePicker value={entryDate} onChange={setEntryDate} label="Data" />
           )}
           <div className="row">
             <button type="button" className="add-task-btn" onClick={addEntry}>Dodaj do planu</button>

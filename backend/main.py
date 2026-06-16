@@ -377,6 +377,7 @@ def process_work_auto_completion():
             .all()
         )
         changed = False
+        completed_count = 0
         for entry in entries:
             if not work_matches_date(entry, today):
                 continue
@@ -388,8 +389,10 @@ def process_work_auto_completion():
                 continue
             entry.completed = True
             changed = True
+            completed_count += 1
         if changed:
             db.commit()
+            print(f"[work-auto] Auto-completed {completed_count} work entries at {now}")
     except Exception as exc:
         db.rollback()
         print(f"[work-auto] scheduler error: {exc}")
