@@ -11,6 +11,7 @@ import CategoriesPanel from "./CategoriesPanel";
 import FamilyPanel from "./FamilyPanel";
 import RecurringPanel from "./RecurringPanel";
 import FamilyInvitationsBanner from "./FamilyInvitationsBanner";
+import { getRecurringCategoriesForDate, toVirtualRecurringTasks } from "./recurringHelpers";
 import { useEditItem } from "./hooks/useEditItem";
 
 const API = "https://questdo-backend.onrender.com";
@@ -600,7 +601,7 @@ function readCalendarCollapsedPreference() {
   return true;
 }
 
-function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelete, freeDays = [] }) {
+function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onTaskToggle, onTaskDelete, freeDays = [] }) {
   const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
   const [view, setView] = useState("month");
   const [collapsed, setCollapsed] = useState(readCalendarCollapsedPreference);
@@ -612,16 +613,21 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
     return freeDay ? freeDay.day_type : null;
   };
 
-  const getTasksForDate = (dateStr) => tasks.filter((t) => t.due_date === dateStr);
+  const getTasksForDate = (dateStr) => {
+    const dayTasks = tasks.filter((t) => t.due_date === dateStr);
+    const virtual = toVirtualRecurringTasks(recurringEvents, dateStr, dayTasks);
+    return [...dayTasks, ...virtual];
+  };
   const taskStats = (dateStr) => {
-    const dayTasks = getTasksForDate(dateStr);
+    const dayTasks = tasks.filter((t) => t.due_date === dateStr);
     const quests = dayTasks.filter((t) => t.task_type !== "event");
     const events = dayTasks.filter((t) => t.task_type === "event");
+    const eventCategories = getRecurringCategoriesForDate(recurringEvents, dateStr, dayTasks);
     return { 
       total: quests.length, 
       done: quests.filter((t) => t.completed).length,
-      events: events,
-      eventCategories: events.map((e) => e.event_category).filter(Boolean),
+      events,
+      eventCategories,
     };
   };
 
@@ -760,6 +766,7 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
         {dayTasks.length === 0 && <p className="empty">Brak zadań na ten dzień</p>}
         {dayTasks.map(task => {
           const isEvent = task.task_type === "event";
+          const isVirtual = task.isRecurringVirtual;
           return (
             <div key={task.id} className={`day-task ${task.completed ? "completed" : ""} ${isEvent ? "event" : ""}`}>
               {!isEvent && (task.completed ? <div className="task-check checked locked">✓</div> : (
@@ -771,13 +778,14 @@ function Calendar({ tasks, selectedDate, onDateSelect, onTaskToggle, onTaskDelet
                 {task.description && <p>{task.description}</p>}
                 <div className="task-meta">
                   {isEvent && <span className="badge event-type">{getEventCategoryLabel(task.event_category)}</span>}
+                  {isVirtual && <span className="badge recurring">🔄 Cykliczne</span>}
                   {!isEvent && <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>}
                   <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>
                   {isEvent && task.recurring_pattern && <span className="badge recurring">{task.recurring_pattern === "yearly" ? "🔄 Co rok" : task.recurring_pattern === "monthly" ? "🔄 Co miesiąc" : "🔄 Co tydzień"}</span>}
                   {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
                 </div>
               </div>
-              <button type="button" className="icon-btn delete" onClick={() => onTaskDelete(task)}>🗑</button>
+              {!isVirtual && <button type="button" className="icon-btn delete" onClick={() => onTaskDelete(task)}>🗑</button>}
             </div>
           );
         })}
@@ -1058,7 +1066,7 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
-function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToast, onUncheck, loadingTaskIds, deletingTaskIds }) {
+function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, onDelete, onSave, onToast, onUncheck, loadingTaskIds, deletingTaskIds }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -1116,22 +1124,30 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToas
   const dateStr = toDateStr(selectedDate);
   const dateLabel = new Date(dateStr + "T12:00:00").toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
+  const baseDayTasks = useMemo(() => tasks.filter((t) => t.due_date === dateStr), [tasks, dateStr]);
+  const virtualRecurring = useMemo(
+    () => toVirtualRecurringTasks(recurringEvents, dateStr, baseDayTasks),
+    [recurringEvents, dateStr, baseDayTasks],
+  );
+  const allTasksForDay = useMemo(() => [...baseDayTasks, ...virtualRecurring], [baseDayTasks, virtualRecurring]);
+
   const dayTasks = useMemo(() => {
-    let list = tasks.filter((t) => t.due_date === dateStr);
+    let list = allTasksForDay;
     if (filter === "done") list = list.filter((t) => t.completed);
     if (filter === "active") list = list.filter((t) => !t.completed);
     if (typeFilter === "quest") list = list.filter((t) => t.task_type !== "event");
     if (typeFilter === "event") list = list.filter((t) => t.task_type === "event");
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter((t) => t.title.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q) || t.category.toLowerCase().includes(q));
+      list = list.filter((t) => t.title.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q) || (t.category || "").toLowerCase().includes(q));
     }
     return list;
-  }, [tasks, dateStr, filter, search, typeFilter]);
+  }, [allTasksForDay, filter, search, typeFilter]);
 
-  const allDay = tasks.filter((t) => t.due_date === dateStr);
-  const doneCount = allDay.filter((t) => t.completed).length;
-  const percent = allDay.length ? Math.round((doneCount / allDay.length) * 100) : 0;
+  const allDay = allTasksForDay;
+  const doneCount = baseDayTasks.filter((t) => t.completed).length;
+  const questCount = baseDayTasks.filter((t) => t.task_type !== "event").length;
+  const percent = questCount ? Math.round((doneCount / questCount) * 100) : 0;
 
   return (
     <div className="day-tasks-panel">
@@ -1143,16 +1159,17 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToas
         </div>
       </div>
       <input className="search-input" type="search" placeholder="🔍 Szukaj questa..." value={search} onChange={(e) => setSearch(e.target.value)} />
-      {allDay.length > 0 && (<div className="progress-wrap"><div className="progress-bar"><div className="progress-fill" style={{ width: `${percent}%` }} /></div><span>{percent}% ukończone ({doneCount}/{allDay.length})</span></div>)}
-      <div className="stats-counter"><span>Wszystkich: <strong>{allDay.length}</strong></span><span>Ukończonych: <strong>{doneCount}</strong></span><span>Pozostało: <strong>{allDay.length - doneCount}</strong></span></div>
+      {questCount > 0 && (<div className="progress-wrap"><div className="progress-bar"><div className="progress-fill" style={{ width: `${percent}%` }} /></div><span>{percent}% ukończone ({doneCount}/{questCount})</span></div>)}
+      <div className="stats-counter"><span>Wszystkich: <strong>{allDay.length}</strong></span><span>Ukończonych: <strong>{doneCount}</strong></span><span>Pozostało: <strong>{questCount - doneCount}</strong></span></div>
       {dayTasks.length === 0 && <div className="empty">{allDay.length ? "Brak questów pasujących do filtrów." : "Brak questów na ten dzień. Dodaj pierwszy! ⚔️"}</div>}
       {dayTasks.map((task) => {
         const checkState = getTaskCheckState(task);
         const isEvent = task.task_type === "event";
+        const isVirtual = task.isRecurringVirtual;
         const editing = editingId === task.id;
         return (
         <div key={task.id} className={`task-card ${isEvent ? "event" : task.difficulty} ${task.completed ? "done" : ""} ${checkState.showUncheckBadge ? "can-uncheck" : ""}`}>
-          {editing ? (
+          {editing && !isVirtual ? (
             <div className="edit-mode">
               <input value={editForm.title || ""} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} placeholder="Nazwa zadania" />
               <textarea value={editForm.description || ""} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} placeholder="Opis" rows="2" />
@@ -1211,27 +1228,30 @@ function DayTasksPanel({ selectedDate, tasks, onToggle, onDelete, onSave, onToas
                   {loadingTaskIds.has(task.id) ? "⏳" : (task.completed ? "✓" : "")}
                 </button>
               )}
-              {isEvent && <div className="task-check event-indicator">📅</div>}
+              {isEvent && <div className="task-check event-indicator">{getEventCategoryEmoji(task.event_category)}</div>}
               <div className="task-info">
                 <h4 className={task.completed ? "done" : ""}>{isEvent && <span className="event-mark">{getEventCategoryEmoji(task.event_category)} </span>}{task.important && <span className="important-mark">Ważne · </span>}{task.title}</h4>
                 {task.description && <p className={task.completed ? "done-desc" : ""}>{task.description}</p>}
                 <div className="task-meta">
                   {isEvent && <span className="badge event-type">{getEventCategoryLabel(task.event_category)}</span>}
+                  {isVirtual && <span className="badge recurring">🔄 Cykliczne</span>}
                   {!isEvent && <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>}
-                  <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>
-                  {!isEvent && <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>}
-                  {task.exp_awarded && task.exp_timing && (() => { const info = EXP_TIMING_LABELS[task.exp_timing]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
-                  {!task.exp_awarded && !isEvent && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = EXP_TIMING_LABELS[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
-                  {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
-                  {isEvent && task.recurring_pattern && <span className="badge recurring">{task.recurring_pattern === "yearly" ? "🔄 Co rok" : task.recurring_pattern === "monthly" ? "🔄 Co miesiąc" : "🔄 Co tydzień"}</span>}
+                  {!isVirtual && <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>}
+                  {!isEvent && !isVirtual && <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>}
+                  {task.exp_awarded && task.exp_timing && !isVirtual && (() => { const info = EXP_TIMING_LABELS[task.exp_timing]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
+                  {!task.exp_awarded && !isEvent && !isVirtual && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = EXP_TIMING_LABELS[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
+                  {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && !isVirtual && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
+                  {isEvent && task.recurring_pattern && !isVirtual && <span className="badge recurring">{task.recurring_pattern === "yearly" ? "🔄 Co rok" : task.recurring_pattern === "monthly" ? "🔄 Co miesiąc" : "🔄 Co tydzień"}</span>}
                   {checkState.showUncheckBadge && <span className="badge uncheck-badge">↩️ Można odznaczyć (24h)</span>}
                   {task.completed && checkState.disabled && <span className="badge locked-badge">🔒 Zablokowane</span>}
                 </div>
               </div>
+              {!isVirtual && (
               <div className="task-actions">
                 <button className="icon-btn" onClick={() => startEditItem(task)} disabled={loadingTaskIds.has(task.id)}>✏️</button>
                 <button className="task-delete" onClick={() => onDelete(task)} disabled={deletingTaskIds.has(task.id)}>{deletingTaskIds.has(task.id) ? "⏳" : "🗑"}</button>
               </div>
+              )}
             </>
           )}
         </div>
@@ -1541,6 +1561,7 @@ export default function App() {
   const [workSummary, setWorkSummary] = useState(null);
   const [familyId, setFamilyId] = useState(null);
   const [freeDays, setFreeDays] = useState([]);
+  const [recurringEvents, setRecurringEvents] = useState([]);
   const [familyInvitations, setFamilyInvitations] = useState([]);
   const [pwaHintDismissed, setPwaHintDismissed] = useState(readPwaHintDismissed);
   const apiQueue = useRef([]);
@@ -1663,7 +1684,7 @@ export default function App() {
         if (levelsRes.data) setCachedLevels(levelsRes.data);
       }
       
-      const [userRes, tasksRes, chRes, rareDropsRes, scheduleRes, shoppingRes, workRes, workSummaryRes, freeDaysRes] = await Promise.all([
+      const [userRes, tasksRes, chRes, rareDropsRes, scheduleRes, shoppingRes, workRes, workSummaryRes, freeDaysRes, recurringRes] = await Promise.all([
         axios.get(`${API}/me`, { headers: noCacheHeaders }),
         axios.get(`${API}/tasks`, { headers: noCacheHeaders }),
         axios.get(`${API}/challenges`, { headers: noCacheHeaders }),
@@ -1673,6 +1694,7 @@ export default function App() {
         axios.get(`${API}/work`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
         axios.get(`${API}/work/summary`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
         axios.get(`${API}/free-days`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
+        axios.get(`${API}/recurring-events`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
       ]);
       const achRes = await axios.get(`${API}/achievements`, { headers: noCacheHeaders });
       const historyRes = await axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] }));
@@ -1702,6 +1724,7 @@ export default function App() {
       setWorkEntries(workRes.data || []);
       setWorkSummary(workSummaryRes.data || null);
       setFreeDays(freeDaysRes.data || []);
+      setRecurringEvents(recurringRes.data || []);
     } catch (err) {
       console.error("Fetch error:", err);
       localStorage.removeItem("token");
@@ -2153,8 +2176,8 @@ export default function App() {
         onToast={showToast} 
         onFamilyChange={fetchData} 
       />
-      <Calendar tasks={tasks} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} freeDays={freeDays} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} />
+      <Calendar tasks={tasks} recurringEvents={recurringEvents} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} freeDays={freeDays} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} recurringEvents={recurringEvents} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">
@@ -2196,6 +2219,7 @@ export default function App() {
           api={API}
           headers={headers}
           onToast={showToast}
+          onRefresh={fetchData}
           selectedDate={selectedDate}
           onDateSelect={handleDateSelect}
         />

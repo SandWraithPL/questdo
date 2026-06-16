@@ -387,11 +387,6 @@ def process_work_auto_completion():
             if current_minutes < eh * 60 + em:
                 continue
             entry.completed = True
-            if not entry.exp_awarded:
-                user = db.query(models.User).filter(models.User.id == entry.owner_id).first()
-                if user:
-                    entry.exp_awarded = True
-                    lm.award_small_exp(user, lm.WORK_EXP)
             changed = True
         if changed:
             db.commit()
@@ -2485,7 +2480,6 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
             raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
     elif row.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
-    was_bought = row.bought
     if body.name is not None:
         row.name = encrypt_field(body.name.strip())
     if body.quantity is not None:
@@ -2506,8 +2500,6 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
         "title": title,
         "next_level_exp": next_exp,
         "next_level_title": next_title,
-        "exp_gained": exp_gained,
-        "level_ups": level_ups,
     }
 
 
@@ -2529,8 +2521,6 @@ def delete_shopping(item_id: int, current_user: models.User = Depends(get_curren
             raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
     elif row.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
-    if row.exp_awarded:
-        current_user.exp = max(0, current_user.exp - lm.SHOPPING_EXP)
     db.delete(row)
     db.commit()
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
@@ -2656,9 +2646,6 @@ def update_work(entry_id: int, body: WorkUpdate, current_user: models.User = Dep
     ).first()
     if not row:
         raise HTTPException(status_code=404, detail="Nie znaleziono wpisu pracy")
-    was_completed = row.completed
-    exp_gained = 0
-    level_ups = []
     if body.work_date is not None:
         row.work_date = parse_due_date(body.work_date)
     if body.start_time is not None:
@@ -2677,14 +2664,6 @@ def update_work(entry_id: int, body: WorkUpdate, current_user: models.User = Dep
         row.tax_percent = max(0.0, min(100.0, float(body.tax_percent)))
     if body.completed is not None:
         row.completed = bool(body.completed)
-        if row.completed and not was_completed and not row.exp_awarded:
-            row.exp_awarded = True
-            level_ups = lm.award_small_exp(current_user, lm.WORK_EXP)
-            exp_gained = lm.WORK_EXP
-        if not row.completed and was_completed and row.exp_awarded:
-            current_user.exp = max(0, current_user.exp - lm.WORK_EXP)
-            row.exp_awarded = False
-            exp_gained = -lm.WORK_EXP
     
     # Handle cyclic fields
     if body.is_recurring is not None:
@@ -3789,10 +3768,20 @@ def delete_recurring_event(event_id: int, current_user: models.User = Depends(ge
     if not event:
         raise HTTPException(status_code=404, detail="Nie znaleziono wydarzenia")
 
+    event_title = event.title
+    event_category = event.category
+    related_tasks = db.query(models.Task).filter(
+        models.Task.owner_id == current_user.id,
+        models.Task.task_type == "event",
+    ).all()
+    for task in related_tasks:
+        if decrypt_field(task.title) == event_title and task.event_category == event_category:
+            db.delete(task)
+
     db.delete(event)
     db.commit()
 
-    return {"message": "Usunięto wydarzenie cykliczne"}
+    return {"message": "Usunięto wydarzenie cykliczne i powiązane wpisy w kalendarzu"}
 
 
 # === FREE DAYS ENDPOINTS ===

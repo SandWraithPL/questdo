@@ -239,9 +239,8 @@ export default function EarningsPanel({
       try {
         const res = await axios.patch(`${api}/work/${entry.id}`, { completed: !entry.completed }, { headers });
         setEntries((prev) => prev.map((e) => (e.id === entry.id ? res.data.entry : e)));
-        applyUserFromResponse(res.data, onUserUpdate);
         await refreshSummary();
-        if (res.data.exp_gained > 0) onToast(`💰 Praca potwierdzona! +${res.data.exp_gained} EXP`);
+        onToast(entry.completed ? "🔄 Cofnięto potwierdzenie" : "✅ Praca potwierdzona");
       } catch (err) {
         onToast(err.response?.data?.detail || "Błąd aktualizacji");
       }
@@ -464,8 +463,9 @@ export default function EarningsPanel({
               className="save-default-btn" 
               onClick={saveAsDefaultRate} 
               disabled={isSavingDefault}
+              title="Zapisz jako domyślną stawkę"
             >
-              {isSavingDefault ? "⏳" : "⭐ Zapisz jako domyślną"}
+              {isSavingDefault ? "⏳" : "⭐ Domyślna"}
             </button>
           </div>
 

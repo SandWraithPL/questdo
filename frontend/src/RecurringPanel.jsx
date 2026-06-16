@@ -25,19 +25,13 @@ const INTERVAL_TYPE_LABELS = {
 };
 
 function getIntervalLabel(event) {
-  if (event.interval_type && event.start_date) {
-    const typeLabel = INTERVAL_TYPE_LABELS[event.interval_type] || event.interval_type;
-    const value = event.interval_value || 1;
-    if (value === 1) return typeLabel;
-    const unit = event.interval_type === "daily" ? "dni"
-      : event.interval_type === "weekly" ? "tygodnie"
-      : event.interval_type === "monthly" ? "miesiące" : "lata";
-    return `Co ${value} ${unit}`;
-  }
-  if (event.month && event.day) {
-    return `Co rok · ${event.day}.${String(event.month).padStart(2, "0")}`;
-  }
-  return "Cykliczne";
+  const typeLabel = INTERVAL_TYPE_LABELS[event.interval_type] || event.interval_type;
+  const value = event.interval_value || 1;
+  if (value === 1) return typeLabel;
+  const unit = event.interval_type === "daily" ? "dni"
+    : event.interval_type === "weekly" ? "tygodnie"
+    : event.interval_type === "monthly" ? "miesiące" : "lata";
+  return `Co ${value} ${unit}`;
 }
 
 function formatDisplayDate(dateStr) {
@@ -49,7 +43,7 @@ function formatDisplayDate(dateStr) {
   });
 }
 
-export default function RecurringPanel({ api, headers, onToast }) {
+export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
   const [recurringEvents, setRecurringEvents] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [title, setTitle] = useState("");
@@ -110,6 +104,7 @@ export default function RecurringPanel({ api, headers, onToast }) {
       setShowAdd(false);
       onToast("✅ Dodano wydarzenie cykliczne");
       loadRecurringEvents();
+      onRefresh?.();
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd dodawania");
     }
@@ -120,6 +115,7 @@ export default function RecurringPanel({ api, headers, onToast }) {
       await axios.delete(`${api}/recurring-events/${id}`, { headers });
       onToast("🗑️ Usunięto wydarzenie cykliczne");
       loadRecurringEvents();
+      onRefresh?.();
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd usuwania");
     }
@@ -155,14 +151,15 @@ export default function RecurringPanel({ api, headers, onToast }) {
       setEditingId(null);
       onToast("✅ Zaktualizowano wydarzenie");
       loadRecurringEvents();
+      onRefresh?.();
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd aktualizacji");
     }
   };
 
   const sortedEvents = [...recurringEvents].sort((a, b) => {
-    const aDate = a.start_date ? new Date(a.start_date) : new Date(2000, (a.month || 1) - 1, a.day || 1);
-    const bDate = b.start_date ? new Date(b.start_date) : new Date(2000, (b.month || 1) - 1, b.day || 1);
+    const aDate = a.start_date ? new Date(a.start_date) : new Date(0);
+    const bDate = b.start_date ? new Date(b.start_date) : new Date(0);
     return aDate - bDate;
   });
 

@@ -421,15 +421,24 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .important-toggle input { width: 18px; height: 18px; margin: 0; accent-color: #ff8906; }
 .important-toggle span { color: #ff8f45; }
 
-.rate-input-group { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+.rate-input-group {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: center;
+  margin-bottom: 10px;
+}
 .rate-input-group input { flex: 1; min-width: 0; min-height: 44px; margin-bottom: 0; }
-.rate-input-group label { color: #aaa; font-size: 0.9rem; min-width: 160px; margin-bottom: 0; }
-.settings-rate-group { flex-wrap: nowrap; align-items: center; }
-.settings-rate-group label { flex-shrink: 0; white-space: nowrap; }
-.settings-rate-group input { flex: 1; min-width: 0; }
+.rate-input-group label { color: #aaa; font-size: 0.9rem; margin-bottom: 0; white-space: nowrap; }
+.settings-rate-group {
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+}
+.settings-rate-group label { flex-shrink: 0; }
+.settings-rate-group input { min-width: 0; }
 .save-default-btn {
   min-height: 44px;
-  padding: 0 14px;
+  padding: 0 12px;
   border-radius: 8px;
   border: 1px solid #333;
   background: #1a1a2e;
@@ -438,10 +447,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   font-size: 0.85rem;
   cursor: pointer;
   white-space: nowrap;
-  flex-shrink: 1;
-  max-width: 48%;
-  overflow: hidden;
-  text-overflow: ellipsis;
   transition: background 0.2s, border-color 0.2s, color 0.2s;
 }
 .save-default-btn:hover:not(:disabled) { background: #2a2a3e; border-color: #ff8906; color: #ffa040; }
@@ -494,14 +499,14 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 
 /* Free days styling */
 .free-day-icon { font-size: 0.7rem; line-height: 1; }
-.calendar-day.free-day-holiday { background: #3d1f14; border-color: #e65100; }
+.calendar-day.free-day-holiday { background: #3d1414; border-color: #c62828; }
 .calendar-day.free-day-deans_day { background: #142a45; border-color: #42a5f5; }
 .calendar-day.free-day-rector_day { background: #2d1a45; border-color: #ab47bc; }
 .calendar-day.free-day.selected { background: #ff8906; color: #0f0e17; border-color: #ff8906; }
 .calendar-day.free-day-holiday.selected,
 .calendar-day.free-day-deans_day.selected,
 .calendar-day.free-day-rector_day.selected { background: #ff8906; color: #0f0e17; }
-.week-day-free-holiday { background: #3d1f14 !important; border-color: #e65100 !important; }
+.week-day-free-holiday { background: #3d1414 !important; border-color: #c62828 !important; }
 .week-day-free-deans_day { background: #142a45 !important; border-color: #42a5f5 !important; }
 .week-day-free-rector_day { background: #2d1a45 !important; border-color: #ab47bc !important; }
 .week-free-icon { font-size: 0.8rem; margin-left: 4px; }
@@ -945,29 +950,17 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .delete-user-btn { width: 100%; }
 
   /* Rate input group - mobile */
-  .rate-input-group {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
-  }
-
+  .rate-input-group,
   .settings-rate-group {
-    flex-direction: column;
-    align-items: stretch;
+    grid-template-columns: 1fr;
   }
 
   .settings-rate-group label {
     min-width: auto;
   }
   
-  .rate-input-group input {
-    width: 100%;
-    min-width: auto;
-  }
-
   .save-default-btn {
     width: 100%;
-    max-width: none;
   }
 
   .panel-actions-row {
@@ -977,7 +970,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .panel-actions-row .add-task-btn,
   .panel-actions-row .danger-btn--inline {
     width: 100%;
-    min-width: auto;
+    min-width: 0;
   }
 
   .import-export-buttons {
@@ -1185,16 +1178,20 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   margin-top: 0;
   flex: 1;
   min-width: 0;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  font-size: 0.88rem;
+  padding: 12px 14px;
 }
-.panel-actions-row { flex-wrap: wrap; }
+.panel-actions-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
 .panel-actions-row .add-task-btn,
 .panel-actions-row .danger-btn--inline {
   flex: 1;
   width: auto;
-  min-width: min(100%, 200px);
+  min-width: min(100%, 180px);
   margin-bottom: 0;
 }
 .panel-hint {
@@ -1412,24 +1409,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   display: flex;
   flex-direction: column;
   gap: 8px;
-}
-
-.rate-input-group {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.rate-input-group input {
-  flex: 1;
-  min-width: 120px;
-  padding: 10px;
-  border-radius: 8px;
-  border: 1px solid #333;
-  background: #0f0e17;
-  color: #fff;
-  font-size: 0.95rem;
 }
 
 .rate-dropdown {
