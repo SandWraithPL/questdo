@@ -1,4 +1,4 @@
-import { useMemo, useState, useEffect } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
 import axios from "axios";
 import SharedCalendar, { weekdayIndex, WEEKDAYS_LONG } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
@@ -23,6 +23,27 @@ function formatRate(value) {
 function parseRateInput(value) {
   if (!value) return "";
   return value.replace(",", ".");
+}
+
+function getWarsawDateStr() {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Warsaw" }).format(new Date());
+}
+
+function getWarsawMinutesNow() {
+  const parts = new Intl.DateTimeFormat("en-GB", {
+    timeZone: "Europe/Warsaw",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(new Date());
+  const hour = Number(parts.find((p) => p.type === "hour")?.value || 0);
+  const minute = Number(parts.find((p) => p.type === "minute")?.value || 0);
+  return hour * 60 + minute;
+}
+
+function parseTimeMinutes(timeStr) {
+  const [h, m] = timeStr.split(":").map(Number);
+  return h * 60 + m;
 }
 
 function matchWorkToDate(entry, dateStr, freeDays = []) {
@@ -81,6 +102,7 @@ export default function EarningsPanel({
   const [editDayOfWeek, setEditDayOfWeek] = useState(0);
   const [editEndDate, setEditEndDate] = useState("");
   const [isSavingDefault, setIsSavingDefault] = useState(false);
+  const autoCompletedIds = useRef(new Set());
 
   const selectedStr = selectedDate instanceof Date
     ? selectedDate.toISOString().slice(0, 10)
@@ -94,6 +116,37 @@ export default function EarningsPanel({
   useEffect(() => {
     loadDefaultHourlyRate();
   }, []);
+
+  useEffect(() => {
+    const checkAutoComplete = () => {
+      const todayStr = getWarsawDateStr();
+      const nowMinutes = getWarsawMinutesNow();
+      const dueEntries = entries.filter((entry) => {
+        if (entry.completed || autoCompletedIds.current.has(entry.id)) return false;
+        if (!matchWorkToDate(entry, todayStr, freeDays)) return false;
+        return nowMinutes >= parseTimeMinutes(entry.end_time);
+      });
+
+      dueEntries.forEach((entry) => {
+        autoCompletedIds.current.add(entry.id);
+        enqueueRequest(async () => {
+          try {
+            const res = await axios.patch(`${api}/work/${entry.id}`, { completed: true }, { headers });
+            setEntries((prev) => prev.map((e) => (e.id === entry.id ? res.data.entry : e)));
+            applyUserFromResponse(res.data, onUserUpdate);
+            await refreshSummary();
+            onToast("✅ Praca automatycznie zakończona");
+          } catch {
+            autoCompletedIds.current.delete(entry.id);
+          }
+        });
+      });
+    };
+
+    checkAutoComplete();
+    const interval = window.setInterval(checkAutoComplete, 30000);
+    return () => window.clearInterval(interval);
+  }, [entries, freeDays, api, headers, onToast, onUserUpdate]);
 
   const loadDefaultHourlyRate = async () => {
     try {
@@ -382,14 +435,14 @@ export default function EarningsPanel({
       </div>
 
       {!showAdd ? (
-        <div className="row">
+        <div className="row panel-actions-row">
           <button type="button" className="add-task-btn" onClick={() => {
             setShowAdd(true);
             if (defaultHourlyRate && !hourlyRate) {
               setHourlyRate(defaultHourlyRate);
             }
           }}>+ Dodaj pracę na ten dzień</button>
-          <button type="button" className="cancel-btn" onClick={deleteUnfinishedEntries}>🗑️ Usuń niewykończoną pracę</button>
+          <button type="button" className="danger-btn danger-btn--inline" onClick={deleteUnfinishedEntries}>🗑️ Usuń niewykończoną pracę</button>
         </div>
       ) : (
         <div className="add-task">

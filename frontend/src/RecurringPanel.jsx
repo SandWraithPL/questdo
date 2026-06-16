@@ -17,16 +17,43 @@ function getEventCategoryLabel(cat) {
   return EVENT_CATEGORIES.find((c) => c.value === cat)?.label || "Inne";
 }
 
-export default function RecurringPanel({ api, headers, onToast, selectedDate, onDateSelect }) {
+const INTERVAL_TYPE_LABELS = {
+  daily: "Codziennie",
+  weekly: "Co tydzień",
+  monthly: "Co miesiąc",
+  yearly: "Co rok",
+};
+
+function getIntervalLabel(event) {
+  if (event.interval_type && event.start_date) {
+    const typeLabel = INTERVAL_TYPE_LABELS[event.interval_type] || event.interval_type;
+    const value = event.interval_value || 1;
+    if (value === 1) return typeLabel;
+    const unit = event.interval_type === "daily" ? "dni"
+      : event.interval_type === "weekly" ? "tygodnie"
+      : event.interval_type === "monthly" ? "miesiące" : "lata";
+    return `Co ${value} ${unit}`;
+  }
+  if (event.month && event.day) {
+    return `Co rok · ${event.day}.${String(event.month).padStart(2, "0")}`;
+  }
+  return "Cykliczne";
+}
+
+function formatDisplayDate(dateStr) {
+  if (!dateStr) return "";
+  return new Date(`${dateStr}T12:00:00`).toLocaleDateString("pl-PL", {
+    day: "numeric",
+    month: "long",
+    year: "numeric",
+  });
+}
+
+export default function RecurringPanel({ api, headers, onToast }) {
   const [recurringEvents, setRecurringEvents] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [title, setTitle] = useState("");
   const [category, setCategory] = useState("birthday");
-  // Legacy fields
-  const [month, setMonth] = useState("");
-  const [day, setDay] = useState("");
-  // New interval fields
-  const [useInterval, setUseInterval] = useState(false);
   const [intervalType, setIntervalType] = useState("yearly");
   const [intervalValue, setIntervalValue] = useState(1);
   const [startDate, setStartDate] = useState("");
@@ -34,9 +61,6 @@ export default function RecurringPanel({ api, headers, onToast, selectedDate, on
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editCategory, setEditCategory] = useState("birthday");
-  const [editMonth, setEditMonth] = useState("");
-  const [editDay, setEditDay] = useState("");
-  const [editUseInterval, setEditUseInterval] = useState(false);
   const [editIntervalType, setEditIntervalType] = useState("yearly");
   const [editIntervalValue, setEditIntervalValue] = useState(1);
   const [editStartDate, setEditStartDate] = useState("");
@@ -55,46 +79,34 @@ export default function RecurringPanel({ api, headers, onToast, selectedDate, on
     loadRecurringEvents();
   }, []);
 
+  const resetForm = () => {
+    setTitle("");
+    setCategory("birthday");
+    setIntervalType("yearly");
+    setIntervalValue(1);
+    setStartDate("");
+    setEndDate("");
+  };
+
   const addRecurringEvent = async () => {
     if (!title.trim()) {
       onToast("Podaj nazwę wydarzenia");
       return;
     }
-    if (useInterval) {
-      if (!startDate) {
-        onToast("Podaj datę początkową");
-        return;
-      }
-    } else {
-      if (!month || !day) {
-        onToast("Wybierz datę (dzień i miesiąc)");
-        return;
-      }
+    if (!startDate) {
+      onToast("Podaj datę startową");
+      return;
     }
     try {
-      const payload = {
+      await axios.post(`${api}/recurring-events`, {
         title,
         category,
-      };
-      if (useInterval) {
-        payload.interval_type = intervalType;
-        payload.interval_value = intervalValue;
-        payload.start_date = startDate;
-        if (endDate) payload.end_date = endDate;
-      } else {
-        payload.month = parseInt(month);
-        payload.day = parseInt(day);
-      }
-      await axios.post(`${api}/recurring-events`, payload, { headers });
-      setTitle("");
-      setCategory("birthday");
-      setMonth("");
-      setDay("");
-      setUseInterval(false);
-      setIntervalType("yearly");
-      setIntervalValue(1);
-      setStartDate("");
-      setEndDate("");
+        interval_type: intervalType,
+        interval_value: intervalValue,
+        start_date: startDate,
+        end_date: endDate || null,
+      }, { headers });
+      resetForm();
       setShowAdd(false);
       onToast("✅ Dodano wydarzenie cykliczne");
       loadRecurringEvents();
@@ -117,52 +129,30 @@ export default function RecurringPanel({ api, headers, onToast, selectedDate, on
     setEditingId(event.id);
     setEditTitle(event.title);
     setEditCategory(event.category);
-    const isInterval = event.interval_type && event.start_date;
-    setEditUseInterval(isInterval);
-    if (isInterval) {
-      setEditIntervalType(event.interval_type);
-      setEditIntervalValue(event.interval_value || 1);
-      setEditStartDate(event.start_date);
-      setEditEndDate(event.end_date || "");
-    } else {
-      setEditMonth(String(event.month));
-      setEditDay(String(event.day));
-    }
+    setEditIntervalType(event.interval_type || "yearly");
+    setEditIntervalValue(event.interval_value || 1);
+    setEditStartDate(event.start_date || "");
+    setEditEndDate(event.end_date || "");
   };
 
   const saveEdit = async () => {
     if (!editTitle.trim()) return;
+    if (!editStartDate) {
+      onToast("Podaj datę startową");
+      return;
+    }
     try {
-      const payload = {
+      await axios.patch(`${api}/recurring-events/${editingId}`, {
         title: editTitle,
         category: editCategory,
-      };
-      if (editUseInterval) {
-        payload.interval_type = editIntervalType;
-        payload.interval_value = editIntervalValue;
-        payload.start_date = editStartDate;
-        if (editEndDate) payload.end_date = editEndDate;
-        payload.month = null;
-        payload.day = null;
-      } else {
-        payload.month = parseInt(editMonth);
-        payload.day = parseInt(editDay);
-        payload.interval_type = null;
-        payload.interval_value = null;
-        payload.start_date = null;
-        payload.end_date = null;
-      }
-      await axios.patch(`${api}/recurring-events/${editingId}`, payload, { headers });
+        interval_type: editIntervalType,
+        interval_value: editIntervalValue,
+        start_date: editStartDate,
+        end_date: editEndDate || null,
+        month: null,
+        day: null,
+      }, { headers });
       setEditingId(null);
-      setEditTitle("");
-      setEditCategory("birthday");
-      setEditMonth("");
-      setEditDay("");
-      setEditUseInterval(false);
-      setEditIntervalType("yearly");
-      setEditIntervalValue(1);
-      setEditStartDate("");
-      setEditEndDate("");
       onToast("✅ Zaktualizowano wydarzenie");
       loadRecurringEvents();
     } catch (err) {
@@ -170,51 +160,20 @@ export default function RecurringPanel({ api, headers, onToast, selectedDate, on
     }
   };
 
-  const monthNames = [
-    "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec",
-    "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień"
-  ];
-
-  const intervalTypeLabels = {
-    daily: "Codziennie",
-    weekly: "Co tydzień",
-    monthly: "Co miesiąc",
-    yearly: "Co rok",
-  };
-
-  const getIntervalLabel = (event) => {
-    if (event.interval_type && event.start_date) {
-      const typeLabel = intervalTypeLabels[event.interval_type] || event.interval_type;
-      const value = event.interval_value || 1;
-      if (value === 1) {
-        return typeLabel;
-      }
-      return `Co ${value} ${event.interval_type === "daily" ? "dni" : event.interval_type === "weekly" ? "tygodnie" : event.interval_type === "monthly" ? "miesiące" : "lata"}`;
-    }
-    return "Co rok";
-  };
-
   const sortedEvents = [...recurringEvents].sort((a, b) => {
-    // Sort by start_date for interval events, by month/day for legacy events
-    if (a.start_date && b.start_date) {
-      return new Date(a.start_date) - new Date(b.start_date);
-    }
-    if (a.month && b.month) {
-      if (a.month !== b.month) return a.month - b.month;
-      return a.day - b.day;
-    }
-    // Mixed: interval events first
-    if (a.start_date) return -1;
-    if (b.start_date) return 1;
-    return 0;
+    const aDate = a.start_date ? new Date(a.start_date) : new Date(2000, (a.month || 1) - 1, a.day || 1);
+    const bDate = b.start_date ? new Date(b.start_date) : new Date(2000, (b.month || 1) - 1, b.day || 1);
+    return aDate - bDate;
   });
 
   return (
     <div className="module-panel recurring-panel">
-      <h3>🔄 Wydarzenia Cykliczne</h3>
-      <p style={{ color: "#aaa", marginBottom: 16, fontSize: "0.9rem" }}>
-        Tutaj dodaj wydarzenia, które powtarzają się w regularnych odstępach (np. urodziny, rocznice, przypomnienia).
-      </p>
+      <div className="day-tasks-panel">
+        <div className="tasks-header">
+          <h3>🔄 Wydarzenia cykliczne</h3>
+        </div>
+        <p className="panel-hint">Dodaj wydarzenia powtarzające się w regularnych odstępach (urodziny, rocznice, przypomnienia).</p>
+      </div>
 
       {!showAdd ? (
         <button type="button" className="add-task-btn" onClick={() => setShowAdd(true)}>
@@ -229,128 +188,73 @@ export default function RecurringPanel({ api, headers, onToast, selectedDate, on
             onChange={(e) => setTitle(e.target.value)}
           />
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
-            {EVENT_CATEGORIES.map(c => (
+            {EVENT_CATEGORIES.map((c) => (
               <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
             ))}
           </select>
-          <label className="important-toggle">
-            <input type="checkbox" checked={useInterval} onChange={(e) => setUseInterval(e.target.checked)} />
-            <span>Dowolny interwał (nowy format)</span>
-          </label>
-          {!useInterval ? (
-            <div className="add-task-meta">
-              <select value={month} onChange={(e) => setMonth(e.target.value)}>
-                <option value="">Wybierz miesiąc</option>
-                {monthNames.map((name, idx) => (
-                  <option key={idx + 1} value={idx + 1}>{name}</option>
-                ))}
-              </select>
-              <select value={day} onChange={(e) => setDay(e.target.value)}>
-                <option value="">Wybierz dzień</option>
-                {Array.from({ length: 31 }, (_, i) => (
-                  <option key={i + 1} value={i + 1}>{i + 1}</option>
-                ))}
-              </select>
-            </div>
-          ) : (
-            <>
-              <div className="add-task-meta">
-                <select value={intervalType} onChange={(e) => setIntervalType(e.target.value)}>
-                  <option value="daily">Codziennie</option>
-                  <option value="weekly">Co tydzień</option>
-                  <option value="monthly">Co miesiąc</option>
-                  <option value="yearly">Co rok</option>
-                </select>
-                <input
-                  type="number"
-                  min="1"
-                  max="365"
-                  placeholder="Co X (np. 2)"
-                  value={intervalValue}
-                  onChange={(e) => setIntervalValue(parseInt(e.target.value) || 1)}
-                />
-              </div>
-              <DatePicker value={startDate} onChange={setStartDate} />
-              <input
-                type="date"
-                placeholder="Data zakończenia (opcjonalnie)"
-                value={endDate}
-                onChange={(e) => setEndDate(e.target.value)}
-              />
-            </>
-          )}
+          <div className="add-task-meta">
+            <select value={intervalType} onChange={(e) => setIntervalType(e.target.value)}>
+              <option value="daily">Codziennie</option>
+              <option value="weekly">Co tydzień</option>
+              <option value="monthly">Co miesiąc</option>
+              <option value="yearly">Co rok</option>
+            </select>
+            <input
+              type="number"
+              min="1"
+              max="365"
+              placeholder="Co ile (np. 2)"
+              value={intervalValue}
+              onChange={(e) => setIntervalValue(parseInt(e.target.value, 10) || 1)}
+            />
+          </div>
+          <DatePicker value={startDate} onChange={setStartDate} label="Data startowa" />
+          <DatePicker value={endDate} onChange={setEndDate} label="Data zakończenia (opcjonalnie)" />
           <div className="row">
             <button type="button" className="add-task-btn" onClick={addRecurringEvent}>
               Dodaj wydarzenie
             </button>
-            <button type="button" className="cancel-btn" onClick={() => setShowAdd(false)}>
+            <button type="button" className="cancel-btn" onClick={() => { setShowAdd(false); resetForm(); }}>
               Anuluj
             </button>
           </div>
         </div>
       )}
 
-      <div className="product-list">
+      <div className="day-tasks-panel">
         {sortedEvents.length === 0 && (
           <p className="empty">Brak wydarzeń cyklicznych. Dodaj pierwsze!</p>
         )}
         {sortedEvents.map((event) => {
           const editing = editingId === event.id;
-          const isInterval = event.interval_type && event.start_date;
           return (
-            <div key={event.id} className="task-card medium">
+            <div key={event.id} className="task-card medium event">
               {editing ? (
                 <div className="edit-mode">
                   <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Nazwa" />
                   <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)}>
-                    {EVENT_CATEGORIES.map(c => (
+                    {EVENT_CATEGORIES.map((c) => (
                       <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
                     ))}
                   </select>
-                  <label className="important-toggle">
-                    <input type="checkbox" checked={editUseInterval} onChange={(e) => setEditUseInterval(e.target.checked)} />
-                    <span>Dowolny interwał</span>
-                  </label>
-                  {!editUseInterval ? (
-                    <>
-                      <select value={editMonth} onChange={(e) => setEditMonth(e.target.value)}>
-                        {monthNames.map((name, idx) => (
-                          <option key={idx + 1} value={idx + 1}>{name}</option>
-                        ))}
-                      </select>
-                      <select value={editDay} onChange={(e) => setEditDay(e.target.value)}>
-                        {Array.from({ length: 31 }, (_, i) => (
-                          <option key={i + 1} value={i + 1}>{i + 1}</option>
-                        ))}
-                      </select>
-                    </>
-                  ) : (
-                    <>
-                      <select value={editIntervalType} onChange={(e) => setEditIntervalType(e.target.value)}>
-                        <option value="daily">Codziennie</option>
-                        <option value="weekly">Co tydzień</option>
-                        <option value="monthly">Co miesiąc</option>
-                        <option value="yearly">Co rok</option>
-                      </select>
-                      <input
-                        type="number"
-                        min="1"
-                        max="365"
-                        placeholder="Co X"
-                        value={editIntervalValue}
-                        onChange={(e) => setEditIntervalValue(parseInt(e.target.value) || 1)}
-                      />
-                      <DatePicker value={editStartDate} onChange={setEditStartDate} />
-                      <input
-                        type="date"
-                        placeholder="Data zakończenia"
-                        value={editEndDate}
-                        onChange={(e) => setEditEndDate(e.target.value)}
-                      />
-                    </>
-                  )}
+                  <select value={editIntervalType} onChange={(e) => setEditIntervalType(e.target.value)}>
+                    <option value="daily">Codziennie</option>
+                    <option value="weekly">Co tydzień</option>
+                    <option value="monthly">Co miesiąc</option>
+                    <option value="yearly">Co rok</option>
+                  </select>
+                  <input
+                    type="number"
+                    min="1"
+                    max="365"
+                    placeholder="Co ile"
+                    value={editIntervalValue}
+                    onChange={(e) => setEditIntervalValue(parseInt(e.target.value, 10) || 1)}
+                  />
+                  <DatePicker value={editStartDate} onChange={setEditStartDate} label="Data startowa" />
+                  <DatePicker value={editEndDate} onChange={setEditEndDate} label="Data zakończenia" />
                   <button type="button" className="save-mini" onClick={saveEdit}>✓</button>
-                  <button type="button" className="cancel-mini" onClick={() => { setEditingId(null); setEditTitle(""); setEditCategory("birthday"); setEditMonth(""); setEditDay(""); setEditUseInterval(false); setEditIntervalType("yearly"); setEditIntervalValue(1); setEditStartDate(""); setEditEndDate(""); }}>✗</button>
+                  <button type="button" className="cancel-mini" onClick={() => setEditingId(null)}>✗</button>
                 </div>
               ) : (
                 <>
@@ -358,18 +262,9 @@ export default function RecurringPanel({ api, headers, onToast, selectedDate, on
                     <h4>{getEventCategoryEmoji(event.category)} {event.title}</h4>
                     <div className="task-meta">
                       <span className="badge category">{getEventCategoryLabel(event.category)}</span>
-                      {isInterval ? (
-                        <>
-                          <span className="badge recurring">{getIntervalLabel(event)}</span>
-                          <span className="badge timing-ontime">Od {event.start_date}</span>
-                          {event.end_date && <span className="badge timing-late">Do {event.end_date}</span>}
-                        </>
-                      ) : (
-                        <>
-                          <span className="badge recurring">{event.day} {monthNames[event.month - 1]}</span>
-                          <span className="badge timing-ontime">Co rok</span>
-                        </>
-                      )}
+                      <span className="badge recurring">{getIntervalLabel(event)}</span>
+                      {event.start_date && <span className="badge timing-ontime">Od {formatDisplayDate(event.start_date)}</span>}
+                      {event.end_date && <span className="badge timing-late">Do {formatDisplayDate(event.end_date)}</span>}
                     </div>
                   </div>
                   <div className="task-actions">

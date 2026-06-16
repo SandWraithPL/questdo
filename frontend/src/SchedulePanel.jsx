@@ -149,6 +149,25 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
     }
   };
 
+  const handleDeleteAll = () => {
+    if (entries.length === 0) {
+      onToast("Plan zajęć jest pusty");
+      return;
+    }
+    if (!window.confirm(`Czy na pewno chcesz usunąć cały plan zajęć (${entries.length} wpisów)?`)) {
+      return;
+    }
+    enqueueRequest(async () => {
+      try {
+        await axios.delete(`${api}/schedule/all`, { headers });
+        setEntries([]);
+        onToast("🗑️ Usunięto cały plan zajęć");
+      } catch (err) {
+        onToast(err.response?.data?.detail || "Błąd usuwania planu");
+      }
+    });
+  };
+
   const selectedStr = selectedDate instanceof Date
     ? selectedDate.toISOString().slice(0, 10)
     : String(selectedDate).slice(0, 10);
@@ -184,6 +203,7 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
           <div className="import-export-buttons">
             <button type="button" className="icon-btn" onClick={handleExport} title="Eksportuj plan">📥</button>
             <button type="button" className="icon-btn" onClick={() => setShowImport(!showImport)} title="Importuj plan">📤</button>
+            <button type="button" className="danger-btn danger-btn--inline" onClick={handleDeleteAll} title="Usuń cały plan">🗑️ Usuń cały plan</button>
           </div>
         </div>
         {sortedDayEntries.length === 0 && <p className="empty">Brak zajęć w tym dniu.</p>}

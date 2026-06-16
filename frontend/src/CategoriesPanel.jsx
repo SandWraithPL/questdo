@@ -136,20 +136,21 @@ export default function CategoriesPanel({ api, headers, onToast }) {
   };
 
   return (
-    <div className="module-panel">
+    <div className="module-panel settings-panel">
       <div className="add-task">
         <h3>⚙️ Ustawienia kategorii i stawek</h3>
         <div className="rate-input-group settings-rate-group">
-          <label>Domyślna stawka godzinowa:</label>
-          <input 
-            type="text" 
-            placeholder="Stawka (zł/h)" 
-            value={defaultHourlyRate} 
-            onChange={(e) => setDefaultHourlyRate(e.target.value)} 
+          <label htmlFor="default-hourly-rate">Domyślna stawka godzinowa:</label>
+          <input
+            id="default-hourly-rate"
+            type="text"
+            placeholder="Stawka (zł/h)"
+            value={defaultHourlyRate}
+            onChange={(e) => setDefaultHourlyRate(e.target.value)}
           />
-          <button 
-            type="button" 
-            className="save-default-btn" 
+          <button
+            type="button"
+            className="save-default-btn"
             onClick={saveDefaultHourlyRate}
           >
             Zapisz
@@ -176,7 +177,10 @@ export default function CategoriesPanel({ api, headers, onToast }) {
         <button type="button" className="add-task-btn" onClick={addArticle}>+ Dodaj artykuł</button>
       </div>
 
-      <div className="product-list">
+      <div className="day-tasks-panel">
+        <div className="tasks-header">
+          <h3>📦 Artykuły domyślne</h3>
+        </div>
         {articles.length === 0 && (
           <p className="empty">Brak artykułów domyślnych. Dodaj pierwszy, aby móc go szybko wybierać przy dodawaniu do listy zakupów!</p>
         )}

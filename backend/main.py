@@ -357,6 +357,79 @@ def send_push_to_user(db: Session, user_id: int, body: str, url: str = "/") -> i
     return sent
 
 
+def work_matches_date(entry: models.WorkEntry, target_date: date) -> bool:
+    if entry.is_recurring:
+        if entry.end_date and target_date > entry.end_date:
+            return False
+        return entry.day_of_week == target_date.weekday()
+    return entry.work_date == target_date
+
+
+def process_work_auto_completion():
+    db = next(get_db())
+    try:
+        now = datetime.now(REMINDER_TZ)
+        today = now.date()
+        current_minutes = now.hour * 60 + now.minute
+        entries = (
+            db.query(models.WorkEntry)
+            .filter(models.WorkEntry.completed.is_(False))
+            .all()
+        )
+        changed = False
+        for entry in entries:
+            if not work_matches_date(entry, today):
+                continue
+            try:
+                eh, em = lm.parse_time_hm(entry.end_time)
+            except ValueError:
+                continue
+            if current_minutes < eh * 60 + em:
+                continue
+            entry.completed = True
+            if not entry.exp_awarded:
+                user = db.query(models.User).filter(models.User.id == entry.owner_id).first()
+                if user:
+                    entry.exp_awarded = True
+                    lm.award_small_exp(user, lm.WORK_EXP)
+            changed = True
+        if changed:
+            db.commit()
+    except Exception as exc:
+        db.rollback()
+        print(f"[work-auto] scheduler error: {exc}")
+    finally:
+        db.close()
+
+
+def recurring_event_occurs_on(event: models.RecurringEvent, target_date: date) -> bool:
+    if event.interval_type and event.start_date:
+        start = event.start_date
+        if target_date < start:
+            return False
+        if event.end_date and target_date > event.end_date:
+            return False
+        iv = event.interval_value or 1
+        if event.interval_type == "daily":
+            return (target_date - start).days % iv == 0
+        if event.interval_type == "weekly":
+            return (target_date - start).days % (iv * 7) == 0
+        if event.interval_type == "monthly":
+            if target_date.day != start.day:
+                return False
+            months = (target_date.year - start.year) * 12 + (target_date.month - start.month)
+            return months >= 0 and months % iv == 0
+        if event.interval_type == "yearly":
+            if target_date.month != start.month or target_date.day != start.day:
+                return False
+            years = target_date.year - start.year
+            return years >= 0 and years % iv == 0
+        return False
+    if event.month and event.day:
+        return target_date.month == event.month and target_date.day == event.day
+    return False
+
+
 def process_scheduled_reminders():
     if not _push_configured():
         return
@@ -408,6 +481,7 @@ def process_scheduled_reminders():
 def reminder_scheduler_loop():
     while True:
         try:
+            process_work_auto_completion()
             process_scheduled_reminders()
         except Exception as exc:
             print(f"[reminders] loop error: {exc}")
@@ -417,10 +491,9 @@ def reminder_scheduler_loop():
 @app.on_event("startup")
 def startup_event():
     create_tables()
-    if _push_configured():
-        threading.Thread(target=reminder_scheduler_loop, daemon=True).start()
-        print("[push] Web Push scheduler started (09:00 Europe/Warsaw)")
-    else:
+    threading.Thread(target=reminder_scheduler_loop, daemon=True).start()
+    print("[scheduler] Work auto-complete + push reminders started (Europe/Warsaw)")
+    if not _push_configured():
         print("[push] Web Push disabled — set VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY")
 
 app.add_middleware(
@@ -1318,11 +1391,12 @@ def get_me(current_user: models.User = Depends(get_current_user), db: Session = 
         db.commit()
     process_delayed_task_rewards(current_user, db)
     
-    # Generate recurring event instances for today and next 30 days
+    process_work_auto_completion()
     today = date.today()
     for days_ahead in range(31):
         target_date = today + timedelta(days=days_ahead)
         generate_recurring_event_instances(current_user, db, target_date)
+        generate_recurring_panel_instances(current_user, db, target_date)
     
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
@@ -1376,11 +1450,12 @@ def delete_account(
 def get_tasks(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     process_delayed_task_rewards(current_user, db)
     
-    # Generate recurring event instances for today and next 30 days
+    process_work_auto_completion()
     today = date.today()
     for days_ahead in range(31):
         target_date = today + timedelta(days=days_ahead)
         generate_recurring_event_instances(current_user, db, target_date)
+        generate_recurring_panel_instances(current_user, db, target_date)
     
     tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
     return [task_to_dict(t) for t in tasks]
@@ -1819,6 +1894,52 @@ def generate_recurring_event_instances(user: models.User, db: Session, target_da
     if created_count > 0:
         db.commit()
     
+    return created_count
+
+
+def generate_recurring_panel_instances(user: models.User, db: Session, target_date: date) -> int:
+    """Create task instances from RecurringEvent definitions for a given date."""
+    created_count = 0
+    events = db.query(models.RecurringEvent).filter(
+        models.RecurringEvent.owner_id == user.id
+    ).all()
+
+    for event in events:
+        if not recurring_event_occurs_on(event, target_date):
+            continue
+
+        day_tasks = db.query(models.Task).filter(
+            models.Task.owner_id == user.id,
+            models.Task.task_type == "event",
+            models.Task.due_date == target_date,
+        ).all()
+        existing = next(
+            (t for t in day_tasks if decrypt_field(t.title) == event.title),
+            None,
+        )
+
+        if existing:
+            continue
+
+        new_task = models.Task(
+            title=encrypt_field(event.title),
+            description=encrypt_field(""),
+            difficulty="easy",
+            category="Inne",
+            due_date=target_date,
+            important=False,
+            reminder_offset_days=None,
+            completed=False,
+            task_type="event",
+            event_category=event.category,
+            owner_id=user.id,
+        )
+        db.add(new_task)
+        created_count += 1
+
+    if created_count > 0:
+        db.commit()
+
     return created_count
 
 
@@ -2284,6 +2405,15 @@ def delete_schedule(entry_id: int, current_user: models.User = Depends(get_curre
     return {"message": "Usunięto wpis planu"}
 
 
+@app.delete("/schedule/all")
+def delete_all_schedule(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    deleted = db.query(models.ScheduleEntry).filter(
+        models.ScheduleEntry.owner_id == current_user.id
+    ).delete()
+    db.commit()
+    return {"message": f"Usunięto cały plan zajęć ({deleted} wpisów)", "deleted": deleted}
+
+
 @app.get("/shopping")
 def list_shopping(family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     if family_id is not None:
@@ -2428,6 +2558,7 @@ def clear_bought_shopping(current_user: models.User = Depends(get_current_user),
 
 @app.get("/work")
 def list_work(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    process_work_auto_completion()
     entries = db.query(models.WorkEntry).filter(
         models.WorkEntry.owner_id == current_user.id
     ).order_by(models.WorkEntry.work_date.desc(), models.WorkEntry.start_time).all()
@@ -3503,6 +3634,10 @@ def list_recurring_events(current_user: models.User = Depends(get_current_user),
         "category": e.category,
         "month": e.month,
         "day": e.day,
+        "interval_type": e.interval_type,
+        "interval_value": e.interval_value,
+        "start_date": str(e.start_date) if e.start_date else None,
+        "end_date": str(e.end_date) if e.end_date else None,
         "created_at": str(e.created_at)
     } for e in events]
 
@@ -3516,12 +3651,11 @@ def create_recurring_event(data: RecurringEventCreate, current_user: models.User
     if data.category not in valid_categories:
         raise HTTPException(status_code=400, detail="Nieprawidłowa kategoria")
 
-    # Validate either legacy fields (month/day) or new interval fields
     using_legacy = data.month is not None and data.day is not None
     using_interval = data.interval_type is not None and data.start_date is not None
 
-    if not using_legacy and not using_interval:
-        raise HTTPException(status_code=400, detail="Podaj miesiąc i dzień (stary format) lub typ interwału i datę początkową (nowy format)")
+    if not using_interval and not using_legacy:
+        raise HTTPException(status_code=400, detail="Podaj typ interwału i datę początkową")
 
     if using_legacy:
         if not (1 <= data.month <= 12):
