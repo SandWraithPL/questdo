@@ -1924,11 +1924,14 @@ export default function App() {
     }
   };
 
+  // Temporarily disable service worker to prevent caching issues
+  /*
   useEffect(() => {
     let cleanup;
     registerServiceWorkerForUpdates().then((fn) => { cleanup = fn; });
     return () => { cleanup?.(); };
   }, []);
+  */
 
   useEffect(() => { if (token) fetchData(); }, [token]);
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
