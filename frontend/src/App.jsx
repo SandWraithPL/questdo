@@ -1903,67 +1903,77 @@ export default function App() {
     try {
       const shoppingParams = familyId ? { family_id: familyId } : {};
       
-      // Poziomy z cache (optymalizacja)
-      let levelsRes;
-      const cachedLevels = getCachedLevels();
-      if (cachedLevels) {
-        levelsRes = { data: cachedLevels };
-      } else {
-        levelsRes = await axios.get(`${API}/game/levels`, { headers: noCacheHeaders }).catch(() => ({ data: null }));
-        if (levelsRes.data) setCachedLevels(levelsRes.data);
-      }
-      
-      const [userRes, tasksRes, chRes, rareDropsRes, scheduleRes, shoppingRes, workRes, workSummaryRes, freeDaysRes, recurringRes] = await Promise.all([
+      // 🔥 KROK 1 – ŁADUJ TYLKO TO, CO WIDAĆ OD RAZU
+      const [userRes, tasksRes, chRes] = await Promise.all([
         axios.get(`${API}/me`, { headers: noCacheHeaders }),
         axios.get(`${API}/tasks`, { headers: noCacheHeaders }),
         axios.get(`${API}/challenges`, { headers: noCacheHeaders }),
-        axios.get(`${API}/rare-drops/inventory`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
-        axios.get(`${API}/schedule`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
-        axios.get(`${API}/shopping`, { headers: noCacheHeaders, params: shoppingParams }).catch(() => ({ data: [] })),
-        axios.get(`${API}/work`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
-        axios.get(`${API}/work/summary`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
-        axios.get(`${API}/free-days`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
-        axios.get(`${API}/recurring-events`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
       ]);
-      const achRes = await axios.get(`${API}/achievements`, { headers: noCacheHeaders });
-      const historyRes = await axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] }));
-      
-      const newUnlocked = achRes.data.unlocked || [];
       
       setUser(userRes.data);
       
-      const sortedTasks = [...(tasksRes.data.data || [])].sort((a, b) => {
-        if (a.completed !== b.completed) {
-          return a.completed ? 1 : -1;
-        }
+      const tasksData = Array.isArray(tasksRes.data?.data) ? tasksRes.data.data : [];
+      const sortedTasks = [...tasksData].sort((a, b) => {
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
         return new Date(a.due_date) - new Date(b.due_date);
       });
       setTasks(sortedTasks);
-      
-      setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
-      if (levelsRes.data?.length) {
-        setLevelsMeta(levelsRes.data);
-        setLevelThresholds(levelsRes.data.map((l) => l.threshold));
-      }
       setChallenges(chRes.data);
-      if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
-      setHistory(historyRes.data || []);
-      setScheduleEntries(Array.isArray(scheduleRes.data) ? scheduleRes.data : []);
-      setShoppingItems(Array.isArray(shoppingRes.data) ? shoppingRes.data : []);
-      setWorkEntries(Array.isArray(workRes.data) ? workRes.data : []);
-      setWorkSummary(workSummaryRes.data || null);
-      setFreeDays(Array.isArray(freeDaysRes.data) ? freeDaysRes.data : []);
-      setRecurringEvents(Array.isArray(recurringRes.data) ? recurringRes.data : []);
+      
+      // 🔥 KROK 2 – RESZTA W TLE (nie blokuje interfejsu)
+      setTimeout(async () => {
+        try {
+          // Poziomy z cache (optymalizacja)
+          let levelsRes;
+          const cachedLevels = getCachedLevels();
+          if (cachedLevels) {
+            levelsRes = { data: cachedLevels };
+          } else {
+            levelsRes = await axios.get(`${API}/game/levels`, { headers: noCacheHeaders }).catch(() => ({ data: null }));
+            if (levelsRes.data) setCachedLevels(levelsRes.data);
+          }
+          
+          const [achRes, rareDropsRes, scheduleRes, shoppingRes, workRes, workSummaryRes, freeDaysRes, recurringRes, historyRes] = await Promise.all([
+            axios.get(`${API}/achievements`, { headers: noCacheHeaders }),
+            axios.get(`${API}/rare-drops/inventory`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
+            axios.get(`${API}/schedule`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
+            axios.get(`${API}/shopping`, { headers: noCacheHeaders, params: shoppingParams }).catch(() => ({ data: [] })),
+            axios.get(`${API}/work`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
+            axios.get(`${API}/work/summary`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
+            axios.get(`${API}/free-days`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
+            axios.get(`${API}/recurring-events`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
+            axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
+          ]);
+          
+          const newUnlocked = achRes.data.unlocked || [];
+          
+          setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
+          if (levelsRes.data?.length) {
+            setLevelsMeta(levelsRes.data);
+            setLevelThresholds(levelsRes.data.map((l) => l.threshold));
+          }
+          if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
+          setHistory(historyRes.data || []);
+          setScheduleEntries(Array.isArray(scheduleRes.data) ? scheduleRes.data : []);
+          setShoppingItems(Array.isArray(shoppingRes.data) ? shoppingRes.data : []);
+          setWorkEntries(Array.isArray(workRes.data) ? workRes.data : []);
+          setWorkSummary(workSummaryRes.data || null);
+          setFreeDays(Array.isArray(freeDaysRes.data) ? freeDaysRes.data : []);
+          setRecurringEvents(Array.isArray(recurringRes.data) ? recurringRes.data : []);
 
-      // Auto-generate holidays for years 2020-2030
-      try {
-        for (let year = 2020; year <= 2030; year++) {
-          await axios.post(`${API}/free-days/generate/${year}`, {}, { headers: noCacheHeaders });
+          // Auto-generate holidays for years 2020-2030
+          try {
+            for (let year = 2020; year <= 2030; year++) {
+              await axios.post(`${API}/free-days/generate/${year}`, {}, { headers: noCacheHeaders });
+            }
+          } catch (err) {
+            console.log("Holidays generation:", err.response?.status);
+          }
+        } catch (err) {
+          console.error("Background load error:", err);
         }
-      } catch (err) {
-        // Ignore errors - holidays might already exist
-        console.log("Holidays generation:", err.response?.status);
-      }
+      }, 100);
+      
     } catch (err) {
       console.error("Fetch error:", err);
       localStorage.removeItem("token");
