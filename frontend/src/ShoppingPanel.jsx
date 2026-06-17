@@ -56,7 +56,17 @@ function formatLocalDateTime(dateString) {
   });
 }
 
-export default function ShoppingPanel({ api, headers, items, setItems, onUserUpdate, onToast, enqueueRequest, familyId, onFamilyChange }) {
+export default function ShoppingPanel({ 
+  api, 
+  headers, 
+  items, 
+  setItems, 
+  onUserUpdate, 
+  onToast, 
+  enqueueRequest, 
+  familyId, 
+  onFamilyChange 
+}) {
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
   const [category, setCategory] = useState("other");
@@ -123,6 +133,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
   const loadShoppingItems = async () => {
     try {
       const params = familyId ? { family_id: familyId } : {};
+      console.log("[SHOPPING] Loading items with familyId:", familyId, "params:", params);
       const res = await axios.get(`${api}/shopping`, { headers, params });
       setItems(res.data);
       await loadSummary();
@@ -182,11 +193,11 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
           quantity: qty, 
           category, 
           price: parseFloat(editPrice) || 0,
-          family_id: familyId || undefined  // ← KLUCZOWE!
+          family_id: familyId || undefined
         };
-        console.log("[SHOPPING] Adding item with payload:", payload); // ← LOG
+        console.log("[SHOPPING] Adding item with payload:", payload);
         const res = await axios.post(`${api}/shopping`, payload, { headers });
-        console.log("[SHOPPING] Response:", res.data); // ← LOG
+        console.log("[SHOPPING] Response:", res.data);
         setItems((prev) => [res.data, ...prev]);
         setName("");
         setQty("");
@@ -197,7 +208,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
         await loadSummary();
         onToast("✅ Dodano do listy zakupów");
       } catch (err) {
-        console.error("[SHOPPING] Error:", err.response?.data); // ← LOG
+        console.error("[SHOPPING] Error:", err.response?.data);
         onToast(err.response?.data?.detail || "Błąd dodawania");
       }
     });
@@ -378,6 +389,15 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     }
   };
 
+  // Gdy użytkownik wybiera rodzinę z FamilyPanel, ustawiamy tryb na "family"
+  const handleFamilySelected = (fid) => {
+    console.log("[SHOPPING] Family selected:", fid);
+    onFamilyChange?.(fid);
+    setShowFamilyToggle(false);
+    setSelectedMode("family");
+    writeShoppingMode("family");
+  };
+
   return (
     <div className="module-panel shopping-panel">
       <div className="shopping-header">
@@ -414,10 +434,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
           api={api} 
           headers={headers} 
           onToast={onToast} 
-          onFamilyChange={(fid) => {
-            onFamilyChange?.(fid);
-            setShowFamilyToggle(false);
-          }}
+          onFamilyChange={handleFamilySelected}
         />
       )}
 
