@@ -241,7 +241,7 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
   return (
     <div className="module-panel recurring-panel">
       <div className="day-tasks-panel">
-        <div className="tasks-header">
+        <div className="tasks-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
           <h3>🔄 Wydarzenia cykliczne</h3>
           <button 
             type="button" 

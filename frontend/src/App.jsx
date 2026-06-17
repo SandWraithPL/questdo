@@ -1318,13 +1318,14 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
 
   return (
     <div className="day-tasks-panel">
-      <div className="tasks-header"><h3>Questy · {dateLabel}</h3>
-        <div className="filter-group">
-          {["all", "active", "done"].map(f => <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "all" ? "Wszystkie" : f === "active" ? "Aktywne" : "Ukończone"}</button>)}
-        </div>
-        <div className="filter-group">
-          {["all", "quest", "event"].map(f => <button key={f} className={`filter-btn ${typeFilter === f ? "active" : ""}`} onClick={() => setTypeFilter(f)}>{f === "all" ? "Wszystkie typy" : f === "quest" ? "⚔️ Questy" : "📅 Wydarzenia"}</button>)}
-        </div>
+      <div className="tasks-header"><h3>Questy · {dateLabel}</h3></div>
+      {/* RZĄD 1 – filtry stanu */}
+      <div className="filter-group">
+        {["all", "active", "done"].map(f => <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "all" ? "Wszystkie" : f === "active" ? "Aktywne" : "Ukończone"}</button>)}
+      </div>
+      {/* RZĄD 2 – filtry typów */}
+      <div className="filter-group" style={{ marginTop: '8px' }}>
+        {["all", "quest", "event"].map(f => <button key={f} className={`filter-btn ${typeFilter === f ? "active" : ""}`} onClick={() => setTypeFilter(f)}>{f === "all" ? "Wszystkie typy" : f === "quest" ? "⚔️ Questy" : "📅 Wydarzenia"}</button>)}
       </div>
       <input className="search-input" type="search" placeholder="🔍 Szukaj questa..." value={search} onChange={(e) => setSearch(e.target.value)} />
       {questCount > 0 && (<div className="progress-wrap"><div className="progress-bar"><div className="progress-fill" style={{ width: `${percent}%` }} /></div><span>{percent}% ukończone ({doneCount}/{questCount})</span></div>)}
