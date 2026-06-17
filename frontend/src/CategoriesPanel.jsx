@@ -19,7 +19,7 @@ function getCategory(cat) {
   return SHOPPING_CATEGORIES.find((c) => c.value === cat) || SHOPPING_CATEGORIES[8];
 }
 
-export default function CategoriesPanel({ api, headers, onToast }) {
+export default function CategoriesPanel({ api, headers, onToast, familyId }) {
   const [articles, setArticles] = useState([]);
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
@@ -31,10 +31,12 @@ export default function CategoriesPanel({ api, headers, onToast }) {
   const [editCat, setEditCat] = useState("other");
   const [editPrice, setEditPrice] = useState("");
   const [defaultHourlyRate, setDefaultHourlyRate] = useState("");
+  const [isFamilyMode, setIsFamilyMode] = useState(!!familyId);
 
   const loadArticles = async () => {
     try {
-      const res = await axios.get(`${api}/default-articles`, { headers });
+      const params = isFamilyMode && familyId ? { family_id: familyId } : {};
+      const res = await axios.get(`${api}/default-articles`, { headers, params });
       setArticles(res.data);
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd ładowania artykułów");
@@ -44,7 +46,7 @@ export default function CategoriesPanel({ api, headers, onToast }) {
   useEffect(() => {
     loadArticles();
     loadDefaultHourlyRate();
-  }, []);
+  }, [familyId, isFamilyMode]);
 
   const loadDefaultHourlyRate = async () => {
     try {
@@ -66,7 +68,8 @@ export default function CategoriesPanel({ api, headers, onToast }) {
         name,
         quantity: qty,
         category,
-        default_price: parseFloat(parseRateInput(price)) || 0
+        default_price: parseFloat(parseRateInput(price)) || 0,
+        family_id: isFamilyMode && familyId ? familyId : null
       }, { headers });
       setName("");
       setQty("");
@@ -157,6 +160,26 @@ export default function CategoriesPanel({ api, headers, onToast }) {
           </button>
         </div>
       </div>
+      {familyId && (
+        <div className="add-task">
+          <div className="family-toggle">
+            <button
+              type="button"
+              className={`family-toggle-btn ${!isFamilyMode ? "active" : ""}`}
+              onClick={() => setIsFamilyMode(false)}
+            >
+              👤 Indywidualne
+            </button>
+            <button
+              type="button"
+              className={`family-toggle-btn ${isFamilyMode ? "active" : ""}`}
+              onClick={() => setIsFamilyMode(true)}
+            >
+              👨‍👩‍👧‍👦 Rodzinne
+            </button>
+          </div>
+        </div>
+      )}
       <div className="add-task">
         <h3>➕ Dodaj artykuł domyślny</h3>
         <div className="form-row-inline">

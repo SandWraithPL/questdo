@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 
-export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
+export default function FamilyPanel({ api, headers, onToast, onFamilyChange, initialMode }) {
   const [families, setFamilies] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -9,12 +9,13 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
   const [familyName, setFamilyName] = useState("");
   const [inviteUsername, setInviteUsername] = useState("");
   const [selectedFamily, setSelectedFamily] = useState(null);
+  const [currentUserId, setCurrentUserId] = useState(null);
 
   const loadFamilies = async () => {
     try {
       const res = await axios.get(`${api}/families`, { headers });
       setFamilies(res.data);
-      if (res.data.length > 0 && !selectedFamily) {
+      if (res.data.length > 0 && !selectedFamily && initialMode === "family") {
         const firstFamily = res.data[0];
         setSelectedFamily(firstFamily);
         if (onFamilyChange) {
@@ -35,7 +36,17 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
     }
   };
 
+  const loadCurrentUserId = async () => {
+    try {
+      const res = await axios.get(`${api}/me`, { headers });
+      setCurrentUserId(res.data.id);
+    } catch (err) {
+      console.error("Błąd ładowania ID użytkownika:", err);
+    }
+  };
+
   useEffect(() => {
+    loadCurrentUserId();
     loadFamilies();
     loadInvitations();
   }, []);
@@ -131,23 +142,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
       }
       onToast("👋 Opuściłeś rodzinę");
     } catch (err) {
-      if (err.response?.status === 400 && err.response?.data?.detail?.includes("jedynym administratorem")) {
-        // If user is the only admin, delete the family instead
-        if (window.confirm("Jesteś jedynym administratorem. Czy chcesz usunąć rodzinę?")) {
-          try {
-            await axios.delete(`${api}/families/${familyId}`, { headers });
-            await loadFamilies();
-            if (selectedFamily?.id === familyId) {
-              setSelectedFamily(null);
-            }
-            onToast("🗑️ Rodzina została usunięta");
-          } catch (deleteErr) {
-            onToast(deleteErr.response?.data?.detail || "Błąd usuwania rodziny");
-          }
-        }
-      } else {
-        onToast(err.response?.data?.detail || "Błąd opuszczania rodziny");
-      }
+      onToast(err.response?.data?.detail || "Błąd opuszczania rodziny");
     }
   };
 
@@ -156,6 +151,17 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
     setSelectedFamily(family);
     console.log("[FAMILY] Calling onFamilyChange with family.id:", family.id);
     onFamilyChange(family.id);
+  };
+
+  const removeMember = async (memberId) => {
+    if (!selectedFamily) return;
+    try {
+      await axios.delete(`${api}/families/${selectedFamily.id}/members/${memberId}`, { headers });
+      await loadFamilies();
+      onToast("🗑️ Usunięto członka rodziny");
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd usuwania członka");
+    }
   };
 
   return (
@@ -252,6 +258,16 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
                     <span className="member-role">
                       {member.role === "admin" ? "👑" : "👤"}
                     </span>
+                    {selectedFamily.role === "admin" && member.id !== currentUserId && (
+                      <button 
+                        type="button" 
+                        className="icon-btn delete" 
+                        onClick={() => removeMember(member.id)}
+                        title="Usuń członka"
+                      >
+                        🗑️
+                      </button>
+                    )}
                   </div>
                 ))}
               </div>

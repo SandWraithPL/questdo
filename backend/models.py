@@ -238,6 +238,7 @@ class DefaultArticle(Base):
     __tablename__ = "default_articles"
     id = Column(Integer, primary_key=True, index=True)
     owner_id = Column(Integer, ForeignKey("users.id"), index=True)
+    family_id = Column(Integer, ForeignKey("families.id"), nullable=True, index=True)
     name = Column(String)
     quantity = Column(String, default="")
     category = Column(String, default="other")

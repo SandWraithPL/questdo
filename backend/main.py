@@ -208,6 +208,12 @@ def migrate_schema():
     if "default_articles" not in insp.get_table_names():
         models.DefaultArticle.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę default_articles")
+    elif "default_articles" in insp.get_table_names():
+        article_cols = {c["name"] for c in insp.get_columns("default_articles")}
+        if "family_id" not in article_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE default_articles ADD COLUMN family_id INTEGER REFERENCES families(id)"))
+            print("Migracja: dodano kolumnę default_articles.family_id")
 
     if "shopping_items" in insp.get_table_names():
         shopping_cols = {c["name"] for c in insp.get_columns("shopping_items")}
@@ -1453,6 +1459,7 @@ def get_me(current_user: models.User = Depends(get_current_user), db: Session = 
     
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
+        "id": current_user.id,
         "username": current_user.username,
         "exp": current_user.exp,
         "level": level,
@@ -3157,6 +3164,7 @@ class DefaultArticleCreate(BaseModel):
     quantity: Optional[str] = ""
     category: Optional[str] = "other"
     default_price: float = 0.0
+    family_id: Optional[int] = None
 
 
 class DefaultArticleUpdate(BaseModel):
@@ -3342,10 +3350,26 @@ def load_shopping_from_history(history_id: int, current_user: models.User = Depe
 
 
 @app.get("/default-articles")
-def get_default_articles(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    articles = db.query(models.DefaultArticle).filter(
-        models.DefaultArticle.owner_id == current_user.id
-    ).order_by(models.DefaultArticle.name).all()
+def get_default_articles(family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if family_id:
+        # Check if user is member of the family
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie jesteś członkiem tej rodziny")
+
+        # Get family articles
+        articles = db.query(models.DefaultArticle).filter(
+            models.DefaultArticle.family_id == family_id
+        ).order_by(models.DefaultArticle.name).all()
+    else:
+        # Get user's personal articles
+        articles = db.query(models.DefaultArticle).filter(
+            models.DefaultArticle.owner_id == current_user.id,
+            models.DefaultArticle.family_id.is_(None)
+        ).order_by(models.DefaultArticle.name).all()
 
     return [{
         "id": a.id,
@@ -3353,6 +3377,7 @@ def get_default_articles(current_user: models.User = Depends(get_current_user), 
         "quantity": a.quantity,
         "category": a.category,
         "default_price": a.default_price,
+        "family_id": a.family_id,
         "created_at": a.created_at.isoformat()
     } for a in articles]
 
@@ -3383,8 +3408,18 @@ def create_default_article(data: DefaultArticleCreate, current_user: models.User
     if not name:
         raise HTTPException(status_code=400, detail="Nazwa artykułu jest wymagana")
 
+    # If family_id is provided, check if user is member of the family
+    if data.family_id:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == data.family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie jesteś członkiem tej rodziny")
+
     article = models.DefaultArticle(
         owner_id=current_user.id,
+        family_id=data.family_id,
         name=name,
         quantity=data.quantity or "",
         category=validate_shopping_category(data.category or "other"),
@@ -3400,6 +3435,7 @@ def create_default_article(data: DefaultArticleCreate, current_user: models.User
         "quantity": article.quantity,
         "category": article.category,
         "default_price": article.default_price,
+        "family_id": article.family_id,
         "message": "Dodano artykuł domyślny"
     }
 
@@ -3407,12 +3443,26 @@ def create_default_article(data: DefaultArticleCreate, current_user: models.User
 @app.patch("/default-articles/{article_id}")
 def update_default_article(article_id: int, data: DefaultArticleUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     article = db.query(models.DefaultArticle).filter(
-        models.DefaultArticle.id == article_id,
-        models.DefaultArticle.owner_id == current_user.id
+        models.DefaultArticle.id == article_id
     ).first()
 
     if not article:
         raise HTTPException(status_code=404, detail="Nie znaleziono artykułu")
+
+    # Check permissions: owner or family member
+    has_permission = False
+    if article.owner_id == current_user.id:
+        has_permission = True
+    elif article.family_id:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == article.family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if membership:
+            has_permission = True
+
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Nie masz uprawnień do edycji tego artykułu")
 
     if data.name is not None:
         article.name = data.name.strip()
@@ -3432,6 +3482,7 @@ def update_default_article(article_id: int, data: DefaultArticleUpdate, current_
         "quantity": article.quantity,
         "category": article.category,
         "default_price": article.default_price,
+        "family_id": article.family_id,
         "message": "Zaktualizowano artykuł"
     }
 
@@ -3439,12 +3490,26 @@ def update_default_article(article_id: int, data: DefaultArticleUpdate, current_
 @app.delete("/default-articles/{article_id}")
 def delete_default_article(article_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     article = db.query(models.DefaultArticle).filter(
-        models.DefaultArticle.id == article_id,
-        models.DefaultArticle.owner_id == current_user.id
+        models.DefaultArticle.id == article_id
     ).first()
 
     if not article:
         raise HTTPException(status_code=404, detail="Nie znaleziono artykułu")
+
+    # Check permissions: owner or family member
+    has_permission = False
+    if article.owner_id == current_user.id:
+        has_permission = True
+    elif article.family_id:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == article.family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if membership:
+            has_permission = True
+
+    if not has_permission:
+        raise HTTPException(status_code=403, detail="Nie masz uprawnień do usunięcia tego artykułu")
 
     db.delete(article)
     db.commit()
@@ -3644,14 +3709,21 @@ def create_family(data: FamilyCreate, current_user: models.User = Depends(get_cu
     name = (data.name or "").strip()
     if not name:
         raise HTTPException(status_code=400, detail="Nazwa rodziny jest wymagana")
-    
+
     # Check if user is already in a family
     existing = db.query(models.FamilyMember).filter(
         models.FamilyMember.user_id == current_user.id
     ).first()
     if existing:
         raise HTTPException(status_code=400, detail="Jesteś już członkiem rodziny")
-    
+
+    # Check if family name already exists (case-insensitive)
+    all_families = db.query(models.Family).all()
+    for existing_family in all_families:
+        existing_name = decrypt_field(existing_family.name)
+        if existing_name.lower() == name.lower():
+            raise HTTPException(status_code=400, detail="Rodzina o tej nazwie już istnieje")
+
     family = models.Family(
         name=encrypt_field(name),
         created_by=current_user.id
@@ -3659,7 +3731,7 @@ def create_family(data: FamilyCreate, current_user: models.User = Depends(get_cu
     db.add(family)
     db.commit()
     db.refresh(family)
-    
+
     # Add creator as admin
     member = models.FamilyMember(
         family_id=family.id,
@@ -3668,7 +3740,7 @@ def create_family(data: FamilyCreate, current_user: models.User = Depends(get_cu
     )
     db.add(member)
     db.commit()
-    
+
     return {
         "id": family.id,
         "name": name,
@@ -3851,23 +3923,44 @@ def leave_family(family_id: int, current_user: models.User = Depends(get_current
         models.FamilyMember.family_id == family_id,
         models.FamilyMember.user_id == current_user.id
     ).first()
-    
+
     if not membership:
         raise HTTPException(status_code=404, detail="Nie jesteś członkiem tej rodziny")
-    
-    # Check if user is the only admin
+
+    # If user is admin, handle admin hierarchy
     if membership.role == "admin":
-        other_admins = db.query(models.FamilyMember).filter(
-            models.FamilyMember.family_id == family_id,
-            models.FamilyMember.role == "admin",
-            models.FamilyMember.user_id != current_user.id
-        ).count()
-        if other_admins == 0:
-            raise HTTPException(status_code=400, detail="Jesteś jedynym administratorem. Nie możesz opuścić rodziny.")
-    
+        # Find all members ordered by joined_at (oldest first)
+        all_members = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id
+        ).order_by(models.FamilyMember.joined_at.asc()).all()
+
+        # Filter out the leaving user
+        other_members = [m for m in all_members if m.user_id != current_user.id]
+
+        if len(other_members) == 0:
+            # User is the last member - delete the family
+            family = db.query(models.Family).filter(models.Family.id == family_id).first()
+            if family:
+                # Delete all family-related data
+                db.query(models.FamilyMember).filter(models.FamilyMember.family_id == family_id).delete()
+                db.query(models.FamilyInvitation).filter(models.FamilyInvitation.family_id == family_id).delete()
+                db.query(models.ShoppingItem).filter(models.ShoppingItem.family_id == family_id).delete()
+                db.query(models.ShoppingHistory).filter(models.ShoppingHistory.family_id == family_id).delete()
+                db.delete(family)
+                db.commit()
+                return {"message": "Jako ostatni członek usunąłeś rodzinę"}
+            else:
+                raise HTTPException(status_code=404, detail="Nie znaleziono rodziny")
+        else:
+            # Promote the oldest remaining member to admin
+            new_admin = other_members[0]
+            new_admin.role = "admin"
+            db.commit()
+
+    # Remove the user from the family
     db.delete(membership)
     db.commit()
-    
+
     return {"message": "Opuściłeś rodzinę"}
 
 
@@ -3898,6 +3991,37 @@ def list_family_members(family_id: int, current_user: models.User = Depends(get_
             })
     
     return result
+
+
+@app.delete("/families/{family_id}/members/{user_id}")
+def remove_family_member(family_id: int, user_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Check if current user is admin of the family
+    admin_membership = db.query(models.FamilyMember).filter(
+        models.FamilyMember.family_id == family_id,
+        models.FamilyMember.user_id == current_user.id,
+        models.FamilyMember.role == "admin"
+    ).first()
+
+    if not admin_membership:
+        raise HTTPException(status_code=403, detail="Nie masz uprawnień do usuwania członków")
+
+    # Cannot remove yourself
+    if user_id == current_user.id:
+        raise HTTPException(status_code=400, detail="Nie możesz usunąć siebie. Użyj funkcji opuszczania rodziny.")
+
+    # Check if target user is member of the family
+    target_membership = db.query(models.FamilyMember).filter(
+        models.FamilyMember.family_id == family_id,
+        models.FamilyMember.user_id == user_id
+    ).first()
+
+    if not target_membership:
+        raise HTTPException(status_code=404, detail="Użytkownik nie jest członkiem tej rodziny")
+
+    db.delete(target_membership)
+    db.commit()
+
+    return {"message": "Usunięto członka rodziny"}
 
 
 @app.patch("/families/{family_id}")

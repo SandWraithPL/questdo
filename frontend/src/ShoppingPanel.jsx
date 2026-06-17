@@ -152,9 +152,14 @@ export default function ShoppingPanel({
   }, [familyId]);
 
   useEffect(() => {
-    setSelectedMode(familyId ? "family" : "individual");
-    writeShoppingMode(familyId ? "family" : "individual");
-  }, [familyId]);
+    writeShoppingMode(selectedMode);
+  }, [selectedMode]);
+
+  useEffect(() => {
+    if (selectedMode === "family") {
+      setShowFamilyToggle(true);
+    }
+  }, []);
 
   useEffect(() => {
     loadDefaultCategory();
@@ -438,6 +443,7 @@ export default function ShoppingPanel({
           headers={headers} 
           onToast={onToast} 
           onFamilyChange={handleFamilySelected}
+          initialMode={selectedMode}
         />
       )}
 
