@@ -4,6 +4,22 @@ import FamilyPanel from "./FamilyPanel";
 import { applyUserFromResponse } from "./helpers";
 import { useEditItem } from "./hooks/useEditItem";
 
+const SHOPPING_MODE_KEY = "questdo-shopping-mode";
+
+function readShoppingMode() {
+  try {
+    const saved = localStorage.getItem(SHOPPING_MODE_KEY);
+    if (saved === "individual" || saved === "family") return saved;
+  } catch { /* ignore */ }
+  return "individual";
+}
+
+function writeShoppingMode(mode) {
+  try {
+    localStorage.setItem(SHOPPING_MODE_KEY, mode);
+  } catch { /* ignore */ }
+}
+
 // Funkcja formatująca pieniądze z przecinkiem i 2 miejscami po przecinku
 function formatMoney(value) {
   const num = Number(value || 0);
@@ -55,7 +71,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
   const [editPrice, setEditPrice] = useState("");
   const [summary, setSummary] = useState(null);
   const [showFamilyToggle, setShowFamilyToggle] = useState(false);
-  const [selectedMode, setSelectedMode] = useState("individual");
+  const [selectedMode, setSelectedMode] = useState(readShoppingMode);
   const [defaultCategory, setDefaultCategory] = useState("other");
 
   const saveItem = async (id, form) => {
@@ -125,6 +141,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
 
   useEffect(() => {
     setSelectedMode(familyId ? "family" : "individual");
+    writeShoppingMode(familyId ? "family" : "individual");
   }, [familyId]);
 
   useEffect(() => {
@@ -368,6 +385,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
             className={`family-toggle-btn ${selectedMode === "individual" ? "active" : ""}`}
             onClick={() => {
               setSelectedMode("individual");
+              writeShoppingMode("individual");
               onFamilyChange?.(null);
               setShowFamilyToggle(false);
             }}
@@ -379,6 +397,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
             className={`family-toggle-btn ${selectedMode === "family" ? "active" : ""}`}
             onClick={() => {
               setSelectedMode("family");
+              writeShoppingMode("family");
               setShowFamilyToggle(true);
             }}
           >
