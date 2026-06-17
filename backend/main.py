@@ -12,7 +12,7 @@ import models
 from database import get_db, engine
 from encryption import encrypt_field, decrypt_field
 import life_modules as lm
-from sqlalchemy import inspect, text
+from sqlalchemy import inspect, text, func
 import daily_quests as dq
 import game_content as gc
 import time
@@ -3669,7 +3669,7 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
     
     # Check if user exists (case-insensitive)
     target_user = db.query(models.User).filter(
-        db.func.lower(models.User.username) == username
+        func.lower(models.User.username) == username
     ).first()
     if not target_user:
         raise HTTPException(status_code=404, detail="Użytkownik nie istnieje")
