@@ -396,17 +396,22 @@ def process_work_auto_completion():
         changed = False
         completed_count = 0
         for entry in entries:
-            if entry.work_date != today:
+            # Auto-complete if work_date is in the past
+            if entry.work_date < today:
+                entry.completed = True
+                changed = True
+                completed_count += 1
                 continue
-            try:
-                eh, em = lm.parse_time_hm(entry.end_time)
-            except ValueError:
-                continue
-            if current_minutes < eh * 60 + em:
-                continue
-            entry.completed = True
-            changed = True
-            completed_count += 1
+            # Auto-complete if work_date is today and end_time has passed
+            if entry.work_date == today:
+                try:
+                    eh, em = lm.parse_time_hm(entry.end_time)
+                except ValueError:
+                    continue
+                if current_minutes >= eh * 60 + em:
+                    entry.completed = True
+                    changed = True
+                    completed_count += 1
         if changed:
             db.commit()
             print(f"[work-auto] Auto-completed {completed_count} work entries at {now}")
@@ -431,17 +436,22 @@ def process_schedule_auto_completion():
         changed = False
         completed_count = 0
         for entry in entries:
-            if entry.entry_date != today:
+            # Auto-complete if entry_date is in the past
+            if entry.entry_date < today:
+                entry.completed = True
+                changed = True
+                completed_count += 1
                 continue
-            try:
-                eh, em = lm.parse_time_hm(entry.end_time)
-            except ValueError:
-                continue
-            if current_minutes < eh * 60 + em:
-                continue
-            entry.completed = True
-            changed = True
-            completed_count += 1
+            # Auto-complete if entry_date is today and end_time has passed
+            if entry.entry_date == today:
+                try:
+                    eh, em = lm.parse_time_hm(entry.end_time)
+                except ValueError:
+                    continue
+                if current_minutes >= eh * 60 + em:
+                    entry.completed = True
+                    changed = True
+                    completed_count += 1
         if changed:
             db.commit()
             print(f"[schedule-auto] Auto-completed {completed_count} schedule entries at {now}")
