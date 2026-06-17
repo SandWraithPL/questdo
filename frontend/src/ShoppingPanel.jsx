@@ -67,6 +67,7 @@ export default function ShoppingPanel({
   familyId, 
   onFamilyChange 
 }) {
+  console.log("[SHOPPING] familyId prop received:", familyId);
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
   const [category, setCategory] = useState("other");
@@ -391,11 +392,13 @@ export default function ShoppingPanel({
 
   // Gdy użytkownik wybiera rodzinę z FamilyPanel, ustawiamy tryb na "family"
   const handleFamilySelected = (fid) => {
-    console.log("[SHOPPING] Family selected:", fid);
+    console.log("[SHOPPING] Family selected, fid:", fid);
+    console.log("[SHOPPING] Current familyId before:", familyId);
     onFamilyChange?.(fid);
     setShowFamilyToggle(false);
     setSelectedMode("family");
     writeShoppingMode("family");
+    console.log("[SHOPPING] Called onFamilyChange with:", fid);
   };
 
   return (

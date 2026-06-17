@@ -1731,6 +1731,7 @@ export default function App() {
   const [workEntries, setWorkEntries] = useState([]);
   const [workSummary, setWorkSummary] = useState(null);
   const [familyId, setFamilyId] = useState(null);
+  console.log("[APP] familyId:", familyId);
   const [freeDays, setFreeDays] = useState([]);
   const [recurringEvents, setRecurringEvents] = useState([]);
   const [familyInvitations, setFamilyInvitations] = useState([]);

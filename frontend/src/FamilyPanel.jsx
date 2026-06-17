@@ -148,7 +148,9 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
   };
 
   const selectFamily = (family) => {
+    console.log("[FAMILY] selectFamily called with family:", family);
     setSelectedFamily(family);
+    console.log("[FAMILY] Calling onFamilyChange with family.id:", family.id);
     onFamilyChange(family.id);
   };
 
