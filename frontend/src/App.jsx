@@ -1752,7 +1752,7 @@ export default function App() {
       
       switch (data.type) {
         case 'task_updated':
-          fetchData();
+          loadTasksOnly();
           break;
         case 'shopping_updated':
           if (typeof loadShoppingItems === 'function') {
@@ -1984,6 +1984,30 @@ export default function App() {
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
   useEffect(() => { if (token) fetchData(); }, [familyId]);
 
+  const loadTasksOnly = async () => {
+    if (!token) return;
+    try {
+      const [tasksRes, chRes, achRes, historyRes] = await Promise.all([
+        axios.get(`${API}/tasks`, { headers }),
+        axios.get(`${API}/challenges`, { headers }),
+        axios.get(`${API}/achievements`, { headers }),
+        axios.get(`${API}/history`, { headers }).catch(() => ({ data: [] })),
+      ]);
+
+      const tasksData = Array.isArray(tasksRes.data?.data) ? tasksRes.data.data : [];
+      const sortedTasks = [...tasksData].sort((a, b) => {
+        if (a.completed !== b.completed) return a.completed ? 1 : -1;
+        return new Date(a.due_date) - new Date(b.due_date);
+      });
+      setTasks(sortedTasks);
+      setChallenges(chRes.data);
+      setAchievements(achRes.data);
+      setHistory(historyRes.data || []);
+    } catch (err) {
+      console.error("loadTasksOnly error:", err);
+    }
+  };
+
   const loadFamilyInvitations = async () => {
     if (!token) return;
     try {
@@ -2000,8 +2024,10 @@ export default function App() {
 
   useEffect(() => {
     const interval = setInterval(() => {
-      loadFamilyInvitations();
-    }, 60000);
+      if (document.visibilityState === "visible") {
+        loadFamilyInvitations();
+      }
+    }, 120000);
     return () => clearInterval(interval);
   }, [token]);
 
@@ -2024,7 +2050,11 @@ export default function App() {
       }
     };
     
-    const interval = setInterval(pingBackend, 300000);
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        pingBackend();
+      }
+    }, 300000);
     
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
