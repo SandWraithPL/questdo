@@ -2553,8 +2553,9 @@ def delete_all_schedule(current_user: models.User = Depends(get_current_user), d
 
 @app.get("/shopping")
 def list_shopping(family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    print(f"[SHOPPING] GET /shopping with family_id: {family_id}")  # ← DODAJ
+    
     if family_id is not None:
-        # Check if user is member of the family
         membership = db.query(models.FamilyMember).filter(
             models.FamilyMember.family_id == family_id,
             models.FamilyMember.user_id == current_user.id
@@ -2565,11 +2566,14 @@ def list_shopping(family_id: Optional[int] = None, current_user: models.User = D
         items = db.query(models.ShoppingItem).filter(
             models.ShoppingItem.family_id == family_id
         ).order_by(models.ShoppingItem.bought, models.ShoppingItem.id.desc()).all()
+        print(f"[SHOPPING] Found {len(items)} family items")  # ← DODAJ
     else:
         items = db.query(models.ShoppingItem).filter(
             models.ShoppingItem.owner_id == current_user.id,
             models.ShoppingItem.family_id.is_(None)
         ).order_by(models.ShoppingItem.bought, models.ShoppingItem.id.desc()).all()
+        print(f"[SHOPPING] Found {len(items)} personal items")  # ← DODAJ
+    
     return [lm.shopping_to_dict(i) for i in items]
 
 
@@ -2580,8 +2584,9 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
         raise HTTPException(status_code=400, detail="Nazwa produktu jest wymagana")
     
     family_id = item.family_id
+    print(f"[SHOPPING] POST /shopping with family_id: {family_id}")  # ← DODAJ
+    
     if family_id is not None:
-        # Check if user is member of the family
         membership = db.query(models.FamilyMember).filter(
             models.FamilyMember.family_id == family_id,
             models.FamilyMember.user_id == current_user.id
@@ -2601,6 +2606,7 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
     db.add(row)
     db.commit()
     db.refresh(row)
+    print(f"[SHOPPING] Created item with family_id: {row.family_id}")  # ← DODAJ
     return lm.shopping_to_dict(row)
 
 

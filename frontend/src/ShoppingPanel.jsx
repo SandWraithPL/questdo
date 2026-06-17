@@ -182,9 +182,11 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
           quantity: qty, 
           category, 
           price: parseFloat(editPrice) || 0,
-          family_id: familyId || undefined
+          family_id: familyId || undefined  // ← KLUCZOWE!
         };
+        console.log("[SHOPPING] Adding item with payload:", payload); // ← LOG
         const res = await axios.post(`${api}/shopping`, payload, { headers });
+        console.log("[SHOPPING] Response:", res.data); // ← LOG
         setItems((prev) => [res.data, ...prev]);
         setName("");
         setQty("");
@@ -195,6 +197,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
         await loadSummary();
         onToast("✅ Dodano do listy zakupów");
       } catch (err) {
+        console.error("[SHOPPING] Error:", err.response?.data); // ← LOG
         onToast(err.response?.data?.detail || "Błąd dodawania");
       }
     });
