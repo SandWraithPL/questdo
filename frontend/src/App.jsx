@@ -1420,7 +1420,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
               <div className="task-actions">
                 <button className="icon-btn" onClick={() => startEditItem(task)} disabled={loadingTaskIds.has(task.id)}>✏️</button>
                 <button className="icon-btn" onClick={() => setCopyModal({ taskId: task.id, targetDate: toDateStr(new Date()) })} title="Kopiuj">📋</button>
-                <button className="task-delete" onClick={() => onDelete(task)} disabled={deletingTaskIds.has(task.id)}>{deletingTaskIds.has(task.id) ? "⏳" : "🗑"}</button>
+                <button className="icon-btn" onClick={() => onDelete(task)} disabled={deletingTaskIds.has(task.id)} title="Usuń">{deletingTaskIds.has(task.id) ? "⏳" : "🗑"}</button>
               </div>
               )}
             </>
