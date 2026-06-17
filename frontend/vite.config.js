@@ -6,6 +6,17 @@ export default defineConfig({
   plugins: [react()],
   base: '/',
   build: {
-    outDir: 'dist'
+    outDir: 'dist',
+    rollupOptions: {
+      output: {
+        // Zachowaj nazwę sw.js w root
+        assetFileNames: (assetInfo) => {
+          if (assetInfo.name === 'sw.js') {
+            return 'sw.js'
+          }
+          return 'assets/[name]-[hash][extname]'
+        }
+      }
+    }
   }
 })
