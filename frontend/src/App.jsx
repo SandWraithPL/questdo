@@ -729,7 +729,7 @@ function readCalendarCollapsedPreference() {
   return true;
 }
 
-function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onTaskToggle, onTaskDelete, freeDays = [], onFreeDayChange }) {
+function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onTaskToggle, onTaskDelete, freeDays = [], onFreeDayChange, headers }) {
   const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
   const [view, setView] = useState("month");
   const [collapsed, setCollapsed] = useState(readCalendarCollapsedPreference);
@@ -1293,6 +1293,9 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
       <div className="tasks-header"><h3>Questy · {dateLabel}</h3>
         <div className="filter-group">
           {["all", "active", "done"].map(f => <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "all" ? "Wszystkie" : f === "active" ? "Aktywne" : "Ukończone"}</button>)}
+        </div>
+        <div className="filter-group">
+          {["all", "quest", "event"].map(f => <button key={f} className={`filter-btn ${typeFilter === f ? "active" : ""}`} onClick={() => setTypeFilter(f)}>{f === "all" ? "Wszystkie typy" : f === "quest" ? "⚔️ Questy" : "📅 Wydarzenia"}</button>)}
         </div>
       </div>
       <input className="search-input" type="search" placeholder="🔍 Szukaj questa..." value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -2330,7 +2333,7 @@ export default function App() {
         onToast={showToast} 
         onFamilyChange={fetchData} 
       />
-      <Calendar tasks={tasks} recurringEvents={recurringEvents} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} freeDays={freeDays} onFreeDayChange={setFreeDays} />
+      <Calendar tasks={tasks} recurringEvents={recurringEvents} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} freeDays={freeDays} onFreeDayChange={setFreeDays} headers={headers} />
       <DayTasksPanel selectedDate={selectedDate} tasks={tasks} recurringEvents={recurringEvents} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />

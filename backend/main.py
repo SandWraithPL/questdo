@@ -3737,6 +3737,35 @@ def update_family(family_id: int, data: FamilyUpdate, current_user: models.User 
     }
 
 
+@app.delete("/families/{family_id}")
+def delete_family(family_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # Check if user is admin of the family
+    membership = db.query(models.FamilyMember).filter(
+        models.FamilyMember.family_id == family_id,
+        models.FamilyMember.user_id == current_user.id,
+        models.FamilyMember.role == "admin"
+    ).first()
+
+    if not membership:
+        raise HTTPException(status_code=403, detail="Nie masz uprawnień do usunięcia rodziny")
+
+    family = db.query(models.Family).filter(models.Family.id == family_id).first()
+    if not family:
+        raise HTTPException(status_code=404, detail="Nie znaleziono rodziny")
+
+    # Delete all family members
+    db.query(models.FamilyMember).filter(models.FamilyMember.family_id == family_id).delete()
+
+    # Delete all family invitations
+    db.query(models.FamilyInvitation).filter(models.FamilyInvitation.family_id == family_id).delete()
+
+    # Delete the family
+    db.delete(family)
+    db.commit()
+
+    return {"message": "Rodzina została usunięta"}
+
+
 # === RECURRING EVENTS ENDPOINTS ===
 @app.get("/recurring-events")
 def list_recurring_events(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
