@@ -3684,11 +3684,15 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
     
     # Use lowercase username for encryption to ensure consistency
     username_to_encrypt = target_user.username.lower()
+    encrypted_username = encrypt_field(username_to_encrypt)
+    
+    logger.info(f"[INVITE] Creating invitation for user: {target_user.username} (lowercased: {username_to_encrypt})")
+    logger.info(f"[INVITE] Encrypted username: {encrypted_username}")
     
     # Check if there's already a pending invitation
     existing_invitation = db.query(models.FamilyInvitation).filter(
         models.FamilyInvitation.family_id == family_id,
-        models.FamilyInvitation.invited_username == encrypt_field(username_to_encrypt),
+        models.FamilyInvitation.invited_username == encrypted_username,
         models.FamilyInvitation.status == "pending"
     ).first()
     if existing_invitation:
@@ -3697,21 +3701,31 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
     invitation = models.FamilyInvitation(
         family_id=family_id,
         invited_by=current_user.id,
-        invited_username=encrypt_field(username_to_encrypt),
+        invited_username=encrypted_username,
         status="pending"
     )
     db.add(invitation)
     db.commit()
+    
+    logger.info(f"[INVITE] Invitation created with ID: {invitation.id}")
     
     return {"message": f"Wysłano zaproszenie do {target_user.username}"}
 
 
 @app.get("/family/invitations")
 def list_family_invitations(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    username_to_check = current_user.username.lower()
+    encrypted_username = encrypt_field(username_to_check)
+    
+    logger.info(f"[INVITATIONS] Checking invitations for user: {current_user.username} (lowercased: {username_to_check})")
+    logger.info(f"[INVITATIONS] Encrypted username: {encrypted_username}")
+    
     invitations = db.query(models.FamilyInvitation).filter(
-        models.FamilyInvitation.invited_username == encrypt_field(current_user.username.lower()),
+        models.FamilyInvitation.invited_username == encrypted_username,
         models.FamilyInvitation.status == "pending"
     ).all()
+    
+    logger.info(f"[INVITATIONS] Found {len(invitations)} pending invitations")
     
     result = []
     for inv in invitations:

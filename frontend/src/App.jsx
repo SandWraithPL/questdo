@@ -2358,15 +2358,16 @@ export default function App() {
       <PlayerSummary user={user} progress={progress} />
       <AppTabs activeTab={mainTab} onTabChange={setMainTab} />
 
-      {mainTab === "tasks" && (
-        <>
-      <ChallengesBar challenges={challenges} />
       <FamilyInvitationsBanner 
         api={API} 
         headers={headers} 
         onToast={showToast} 
         onFamilyChange={fetchData} 
       />
+
+      {mainTab === "tasks" && (
+        <>
+      <ChallengesBar challenges={challenges} />
       <Calendar tasks={tasks} recurringEvents={recurringEvents} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} freeDays={freeDays} onFreeDayChange={setFreeDays} headers={headers} />
       <DayTasksPanel selectedDate={selectedDate} tasks={tasks} recurringEvents={recurringEvents} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} api={API} headers={headers} onRefresh={fetchData} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
