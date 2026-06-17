@@ -174,18 +174,6 @@ def migrate_schema():
         print("Migracja: utworzono tabelę work_entries")
     elif "work_entries" in insp.get_table_names():
         work_cols = {c["name"] for c in insp.get_columns("work_entries")}
-        if "is_recurring" not in work_cols:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE work_entries ADD COLUMN is_recurring BOOLEAN DEFAULT FALSE"))
-            print("Migracja: dodano kolumnę work_entries.is_recurring")
-        if "day_of_week" not in work_cols:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE work_entries ADD COLUMN day_of_week INTEGER"))
-            print("Migracja: dodano kolumnę work_entries.day_of_week")
-        if "end_date" not in work_cols:
-            with engine.begin() as conn:
-                conn.execute(text("ALTER TABLE work_entries ADD COLUMN end_date DATE"))
-            print("Migracja: dodano kolumnę work_entries.end_date")
     if "default_articles" not in insp.get_table_names():
         models.DefaultArticle.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę default_articles")
@@ -358,10 +346,6 @@ def send_push_to_user(db: Session, user_id: int, body: str, url: str = "/") -> i
 
 
 def work_matches_date(entry: models.WorkEntry, target_date: date) -> bool:
-    if entry.is_recurring:
-        if entry.end_date and target_date > entry.end_date:
-            return False
-        return entry.day_of_week == target_date.weekday()
     return entry.work_date == target_date
 
 
@@ -2608,25 +2592,62 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
     except ValueError:
         raise HTTPException(status_code=400, detail="Nieprawidłowy format godziny (HH:MM)")
     
-    # Validate cyclic fields
+    # Jeśli is_recurring = true, generuj 365 osobnych instancji
     if entry.is_recurring:
-        if entry.day_of_week is None or entry.day_of_week < 0 or entry.day_of_week > 6:
-            raise HTTPException(status_code=400, detail="Dzień tygodnia jest wymagany dla cyklicznych wpisów (0-6)")
-        if entry.end_date:
-            try:
-                end_date = date.fromisoformat(entry.end_date)
-                work_date = parse_due_date(entry.work_date)
-                if end_date < work_date:
-                    raise HTTPException(status_code=400, detail="Data zakończenia nie może być wcześniejsza niż data rozpoczęcia")
-            except ValueError:
-                raise HTTPException(status_code=400, detail="Nieprawidłowa data zakończenia (YYYY-MM-DD)")
-    else:
-        if entry.day_of_week is not None:
-            raise HTTPException(status_code=400, detail="Dzień tygodnia tylko dla cyklicznych wpisów")
-        if entry.end_date is not None:
-            raise HTTPException(status_code=400, detail="Data zakończenia tylko dla cyklicznych wpisów")
+        work_date = parse_due_date(entry.work_date)
+        today = date.today()
+        enc = lm.encrypt_work_fields(entry.hourly_rate, entry.notes)
+        
+        created_entries = []
+        for i in range(365):
+            current_date = work_date + timedelta(days=i)
+            # Sprawdź czy praca jest w przeszłości - jeśli tak, oznacz jako ukończoną
+            auto_complete = False
+            if current_date < today:
+                auto_complete = True
+            elif current_date == today:
+                now = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=2)))
+                now_time = f"{now.hour:02d}:{now.minute:02d}"
+                if entry.end_time <= now_time:
+                    auto_complete = True
+            
+            row = models.WorkEntry(
+                owner_id=current_user.id,
+                work_date=current_date,
+                start_time=entry.start_time,
+                end_time=entry.end_time,
+                hourly_rate=enc["hourly_rate"],
+                notes=enc["notes"],
+                tax_enabled=bool(entry.tax_enabled),
+                tax_percent=max(0.0, min(100.0, float(entry.tax_percent or 0))),
+                completed=auto_complete,
+            )
+            db.add(row)
+            created_entries.append(row)
+        
+        db.commit()
+        for row in created_entries:
+            db.refresh(row)
+        
+        # Zaktualizuj podsumowanie użytkownika dla auto-ukończonych wpisów
+        total_net = 0.0
+        for row in created_entries:
+            if row.completed:
+                hours = lm.hours_between(entry.start_time, entry.end_time)
+                gross = hours * entry.hourly_rate
+                tax = 0.0
+                if row.tax_enabled:
+                    tax = gross * (row.tax_percent / 100.0)
+                net = gross - tax
+                total_net += net
+        
+        if total_net > 0:
+            current_user.total_earned = (current_user.total_earned or 0) + total_net
+            db.commit()
+        
+        return {"created": len(created_entries), "entries": [lm.work_to_dict(row) for row in created_entries]}
     
-    # Sprawdź czy praca jest w przeszłości - jeśli tak, oznacz jako ukończoną
+    # Normalny wpis (niecykliczny)
     work_date = parse_due_date(entry.work_date)
     today = date.today()
     now = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=2)))  # Warsaw timezone
@@ -2650,9 +2671,6 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
         notes=enc["notes"],
         tax_enabled=bool(entry.tax_enabled),
         tax_percent=max(0.0, min(100.0, float(entry.tax_percent or 0))),
-        is_recurring=bool(entry.is_recurring),
-        day_of_week=entry.day_of_week if entry.is_recurring else None,
-        end_date=date.fromisoformat(entry.end_date) if entry.end_date and entry.is_recurring else None,
         completed=auto_complete,
     )
     db.add(row)
@@ -2705,22 +2723,6 @@ def update_work(entry_id: int, body: WorkUpdate, current_user: models.User = Dep
         row.tax_percent = max(0.0, min(100.0, float(body.tax_percent)))
     if body.completed is not None:
         row.completed = bool(body.completed)
-    
-    # Handle cyclic fields
-    if body.is_recurring is not None:
-        row.is_recurring = bool(body.is_recurring)
-    if body.day_of_week is not None:
-        if body.day_of_week < 0 or body.day_of_week > 6:
-            raise HTTPException(status_code=400, detail="Dzień tygodnia musi być w zakresie 0-6")
-        row.day_of_week = body.day_of_week
-    if body.end_date is not None:
-        try:
-            end_date = date.fromisoformat(body.end_date)
-            if end_date < row.work_date:
-                raise HTTPException(status_code=400, detail="Data zakończenia nie może być wcześniejsza niż data rozpoczęcia")
-            row.end_date = end_date
-        except ValueError:
-            raise HTTPException(status_code=400, detail="Nieprawidłowa data zakończenia (YYYY-MM-DD)")
     
     try:
         lm.hours_between(row.start_time, row.end_time)

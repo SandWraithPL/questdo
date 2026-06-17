@@ -46,8 +46,8 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .add-task button:hover:not(:disabled) { background: #ffa040; transform: translateY(-1px); }
 .add-task button:active:not(:disabled) { transform: translateY(0); }
 .add-task button:disabled { opacity: 0.65; cursor: wait; }
-.cancel-btn { background: #333 !important; color: #fff !important; min-height: 44px; }
-.cancel-btn:hover:not(:disabled) { background: #444 !important; }
+.cancel-btn { background: #333 !important; color: #fff !important; min-height: 44px; border: 1px solid #444 !important; transition: background 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s !important; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important; }
+.cancel-btn:hover:not(:disabled) { background: #444 !important; border-color: #555 !important; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4) !important; }
 
 .suggestions-dropdown {
   position: absolute;
@@ -400,8 +400,8 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .important-mark { color: #ff8f45; }
 .event-mark { color: #9b59b6; }
 .task-actions { display: flex; flex-direction: column; gap: 4px; }
-.icon-btn { background: transparent; border: none; cursor: pointer; font-size: 1.1rem; padding: 4px; border-radius: 6px; transition: background 0.2s, transform 0.15s; }
-.icon-btn:hover:not(:disabled) { background: #2a2a3e; transform: scale(1.08); }
+.icon-btn { background: #1a1a2e; border: 1px solid #333; cursor: pointer; font-size: 1.1rem; padding: 4px; border-radius: 6px; transition: background 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); }
+.icon-btn:hover:not(:disabled) { background: #2a2a3e; transform: scale(1.08); border-color: #444; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4); }
 .icon-btn:disabled { opacity: 0.65; cursor: wait; }
 .task-delete { background: transparent; border: none; color: #555; cursor: pointer; font-size: 1.2rem; padding: 4px; border-radius: 6px; transition: color 0.2s, background 0.2s, transform 0.15s; }
 .task-delete:hover:not(:disabled) { color: #f44336; background: rgba(244, 67, 54, 0.12); transform: scale(1.08); }
@@ -543,9 +543,9 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .day-task-info p { font-size: 0.85rem; color: #aaa; margin-top: 4px; }
 .day-task > button:last-child { background: transparent; border: none; color: #777; cursor: pointer; font-size: 1.1rem; }
 
-.add-task-btn { width: 100%; padding: 16px; background: #ff8906; color: #0f0e17; border: none; border-radius: 12px; font-weight: bold; font-size: 1rem; cursor: pointer; margin-bottom: 24px; transition: background 0.2s, transform 0.15s; }
-.add-task-btn:hover { background: #ffa040; transform: translateY(-1px); }
-.add-task-btn:active { transform: translateY(0); }
+.add-task-btn { width: 100%; padding: 16px; background: #ff8906; color: #0f0e17; border: 1px solid #e67a00; border-radius: 12px; font-weight: bold; font-size: 1rem; cursor: pointer; margin-bottom: 24px; transition: background 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s; box-shadow: 0 4px 6px rgba(255, 137, 6, 0.3); }
+.add-task-btn:hover { background: #ffa040; transform: translateY(-1px); border-color: #ff8906; box-shadow: 0 6px 10px rgba(255, 137, 6, 0.4); }
+.add-task-btn:active { transform: translateY(0); box-shadow: 0 2px 4px rgba(255, 137, 6, 0.3); }
 .profile-notifications-block { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #2a2a3e; }
 .profile-notifications-btn { width: 100%; padding: 10px 12px; background: #0f0e17; color: #ff8906; border: 1px solid #333; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.88rem; text-align: left; transition: border-color 0.2s, background 0.2s, color 0.2s; }
 .profile-notifications-btn:hover:not(:disabled) { border-color: #ff8906; color: #ffa040; }
@@ -1150,29 +1150,34 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 
 .save-mini, .cancel-mini {
   padding: 6px 10px;
-  border: none;
+  border: 1px solid;
   border-radius: 8px;
   cursor: pointer;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
-.save-mini { background: #4caf50; color: #0f0e17; }
-.cancel-mini { background: #333; color: #fff; }
+.save-mini { background: #4caf50; color: #0f0e17; border-color: #3d8b40; }
+.save-mini:hover { background: #5cb860; border-color: #4caf50; box-shadow: 0 4px 6px rgba(76, 175, 80, 0.3); }
+.cancel-mini { background: #333; color: #fff; border-color: #444; }
+.cancel-mini:hover { background: #444; border-color: #555; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4); }
 
 .danger-btn {
   min-height: 44px;
   width: 100%;
   margin-top: 12px;
   padding: 12px 16px;
-  border: none;
+  border: 1px solid #5a1a1a;
   border-radius: 8px;
   background: #3a1212;
   color: #f44336;
   font-weight: 600;
   font-size: 0.9rem;
   cursor: pointer;
-  transition: background 0.2s;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s;
+  box-shadow: 0 2px 4px rgba(244, 67, 54, 0.2);
 }
-.danger-btn:hover { background: #4a1818; }
+.danger-btn:hover { background: #4a1818; border-color: #6a1a1a; box-shadow: 0 4px 6px rgba(244, 67, 54, 0.3); }
 .danger-btn--inline {
   width: auto;
   margin-top: 0;

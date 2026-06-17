@@ -5,6 +5,133 @@ import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
 import { applyUserFromResponse } from "./helpers";
 
+// Komponent FreeDayManager - wspólny dla wszystkich kalendarzy
+function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onToast, enqueueRequest }) {
+  const [showFreeDayManager, setShowFreeDayManager] = useState(false);
+  const [freeDayType, setFreeDayType] = useState("holiday");
+  const [freeDayName, setFreeDayName] = useState("");
+
+  const selectedStr = selectedDate instanceof Date
+    ? selectedDate.toISOString().slice(0, 10)
+    : String(selectedDate).slice(0, 10);
+
+  const handleCreateFreeDay = () => {
+    if (enqueueRequest) {
+      enqueueRequest(async () => {
+        try {
+          const res = await axios.post(`${api}/free-days`, {
+            date: selectedStr,
+            day_type: freeDayType,
+            notes: freeDayName
+          }, { headers });
+          if (setFreeDays) {
+            setFreeDays(prev => [...prev, res.data]);
+          }
+          setFreeDayName("");
+          setShowFreeDayManager(false);
+          onToast("✅ Oznaczono dzień jako wolny");
+        } catch (err) {
+          onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
+        }
+      });
+    } else {
+      axios.post(`${api}/free-days`, {
+        date: selectedStr,
+        day_type: freeDayType,
+        notes: freeDayName
+      }, { headers }).then(res => {
+        if (setFreeDays) {
+          setFreeDays(prev => [...prev, res.data]);
+        }
+        setFreeDayName("");
+        setShowFreeDayManager(false);
+        onToast("✅ Oznaczono dzień jako wolny");
+      }).catch(err => {
+        onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
+      });
+    }
+  };
+
+  const handleDeleteFreeDay = () => {
+    const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
+    if (!existingFreeDay) return;
+
+    if (enqueueRequest) {
+      enqueueRequest(async () => {
+        try {
+          await axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers });
+          if (setFreeDays) {
+            setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
+          }
+          onToast("🗑️ Usunięto oznaczenie dnia wolnego");
+        } catch (err) {
+          onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
+        }
+      });
+    } else {
+      axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers }).then(() => {
+        if (setFreeDays) {
+          setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
+        }
+        onToast("🗑️ Usunięto oznaczenie dnia wolnego");
+      }).catch(err => {
+        onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
+      });
+    }
+  };
+
+  const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
+
+  return (
+    <>
+      <button
+        type="button"
+        className="icon-btn free-day-btn"
+        onClick={() => setShowFreeDayManager(!showFreeDayManager)}
+        title="Zarządzaj dniami wolnymi"
+        aria-label="Zarządzaj dniami wolnymi"
+      >
+        🎓
+      </button>
+      {showFreeDayManager && (
+        <div className="add-task free-day-manager">
+          <h3>🎓 Zarządzaj dniami wolnymi</h3>
+          {existingFreeDay ? (
+            <div>
+              <p>Ten dzień jest oznaczony jako: <strong>
+                {existingFreeDay.day_type === "holiday" ? "Święto" :
+                 existingFreeDay.day_type === "deans_day" ? "Dzień dziekański" : "Dzień rektorski"}
+              </strong>
+              {existingFreeDay.notes && <span> — {existingFreeDay.notes}</span>}</p>
+              <div className="row" style={{ marginTop: 12, gap: "8px" }}>
+                <button type="button" className="danger-btn" onClick={handleDeleteFreeDay}>🗑️ Usuń oznaczenie</button>
+                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <select value={freeDayType} onChange={(e) => setFreeDayType(e.target.value)}>
+                <option value="holiday">🎉 Święto</option>
+                <option value="deans_day">🎓 Dzień dziekański</option>
+                <option value="rector_day">🏛️ Dzień rektorski</option>
+              </select>
+              <input
+                placeholder="Nazwa święta (opcjonalne)"
+                value={freeDayName}
+                onChange={(e) => setFreeDayName(e.target.value)}
+              />
+              <div className="row" style={{ marginTop: 12 }}>
+                <button type="button" className="add-task-btn" onClick={handleCreateFreeDay}>Oznacz dzień</button>
+                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 // Funkcja formatująca pieniądze z przecinkiem i 2 miejscami po przecinku
 function formatMoney(value) {
   const num = Number(value || 0);
@@ -378,7 +505,18 @@ export default function EarningsPanel({
       <div className="day-tasks-panel">
         <div className="tasks-header">
           <h3>Praca — {new Date(`${selectedStr}T12:00:00`).toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" })}</h3>
-          <span className="earnings-day-total">{formatMoney(dayTotal)}</span>
+          <div className="import-export-buttons">
+            <FreeDayManager
+              freeDays={freeDays}
+              setFreeDays={setFreeDays}
+              selectedDate={selectedDate}
+              api={api}
+              headers={headers}
+              onToast={onToast}
+              enqueueRequest={enqueueRequest}
+            />
+            <span className="earnings-day-total">{formatMoney(dayTotal)}</span>
+          </div>
         </div>
         {dayEntries.length === 0 && <p className="empty">Brak wpisów pracy na ten dzień.</p>}
         {dayEntries.map((entry) => {

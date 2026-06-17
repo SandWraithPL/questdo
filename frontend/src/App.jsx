@@ -122,6 +122,134 @@ const EVENT_CATEGORIES = [
   { value: "reminder", emoji: "🔔", label: "Przypomnienie" },
 ];
 
+// Komponent FreeDayManager - wspólny dla wszystkich kalendarzy
+function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onToast, enqueueRequest }) {
+  const [showFreeDayManager, setShowFreeDayManager] = useState(false);
+  const [freeDayType, setFreeDayType] = useState("holiday");
+  const [freeDayName, setFreeDayName] = useState("");
+
+  const selectedStr = selectedDate instanceof Date
+    ? selectedDate.toISOString().slice(0, 10)
+    : String(selectedDate).slice(0, 10);
+
+  const handleCreateFreeDay = () => {
+    if (enqueueRequest) {
+      enqueueRequest(async () => {
+        try {
+          const res = await axios.post(`${api}/free-days`, {
+            date: selectedStr,
+            day_type: freeDayType,
+            notes: freeDayName
+          }, { headers });
+          if (setFreeDays) {
+            setFreeDays(prev => [...prev, res.data]);
+          }
+          setFreeDayName("");
+          setShowFreeDayManager(false);
+          onToast("✅ Oznaczono dzień jako wolny");
+        } catch (err) {
+          onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
+        }
+      });
+    } else {
+      // Fallback bez queue
+      axios.post(`${api}/free-days`, {
+        date: selectedStr,
+        day_type: freeDayType,
+        notes: freeDayName
+      }, { headers }).then(res => {
+        if (setFreeDays) {
+          setFreeDays(prev => [...prev, res.data]);
+        }
+        setFreeDayName("");
+        setShowFreeDayManager(false);
+        onToast("✅ Oznaczono dzień jako wolny");
+      }).catch(err => {
+        onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
+      });
+    }
+  };
+
+  const handleDeleteFreeDay = () => {
+    const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
+    if (!existingFreeDay) return;
+
+    if (enqueueRequest) {
+      enqueueRequest(async () => {
+        try {
+          await axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers });
+          if (setFreeDays) {
+            setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
+          }
+          onToast("🗑️ Usunięto oznaczenie dnia wolnego");
+        } catch (err) {
+          onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
+        }
+      });
+    } else {
+      axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers }).then(() => {
+        if (setFreeDays) {
+          setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
+        }
+        onToast("🗑️ Usunięto oznaczenie dnia wolnego");
+      }).catch(err => {
+        onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
+      });
+    }
+  };
+
+  const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
+
+  return (
+    <>
+      <button
+        type="button"
+        className="icon-btn free-day-btn"
+        onClick={() => setShowFreeDayManager(!showFreeDayManager)}
+        title="Zarządzaj dniami wolnymi"
+        aria-label="Zarządzaj dniami wolnymi"
+      >
+        🎓
+      </button>
+      {showFreeDayManager && (
+        <div className="add-task free-day-manager">
+          <h3>🎓 Zarządzaj dniami wolnymi</h3>
+          {existingFreeDay ? (
+            <div>
+              <p>Ten dzień jest oznaczony jako: <strong>
+                {existingFreeDay.day_type === "holiday" ? "Święto" :
+                 existingFreeDay.day_type === "deans_day" ? "Dzień dziekański" : "Dzień rektorski"}
+              </strong>
+              {existingFreeDay.notes && <span> — {existingFreeDay.notes}</span>}</p>
+              <div className="row" style={{ marginTop: 12, gap: "8px" }}>
+                <button type="button" className="danger-btn" onClick={handleDeleteFreeDay}>🗑️ Usuń oznaczenie</button>
+                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <select value={freeDayType} onChange={(e) => setFreeDayType(e.target.value)}>
+                <option value="holiday">🎉 Święto</option>
+                <option value="deans_day">🎓 Dzień dziekański</option>
+                <option value="rector_day">🏛️ Dzień rektorski</option>
+              </select>
+              <input
+                placeholder="Nazwa święta (opcjonalne)"
+                value={freeDayName}
+                onChange={(e) => setFreeDayName(e.target.value)}
+              />
+              <div className="row" style={{ marginTop: 12 }}>
+                <button type="button" className="add-task-btn" onClick={handleCreateFreeDay}>Oznacz dzień</button>
+                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 const RECURRING_PATTERNS = [
   { value: "", label: "Brak cyklu" },
   { value: "yearly", label: "Co rok" },
@@ -601,7 +729,7 @@ function readCalendarCollapsedPreference() {
   return true;
 }
 
-function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onTaskToggle, onTaskDelete, freeDays = [] }) {
+function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onTaskToggle, onTaskDelete, freeDays = [], onFreeDayChange }) {
   const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
   const [view, setView] = useState("month");
   const [collapsed, setCollapsed] = useState(readCalendarCollapsedPreference);
@@ -850,6 +978,17 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
           <button type="button" onClick={() => setView("day")} className={view === "day" ? "active" : ""}>Dzień</button>
         </div>
         {view === "month" && <button type="button" className="calendar-today" onClick={goToday}>Dzisiaj</button>}
+        {onFreeDayChange && (
+          <FreeDayManager
+            freeDays={freeDays}
+            setFreeDays={onFreeDayChange}
+            selectedDate={selectedDate}
+            api={API}
+            headers={headers}
+            onToast={() => {}}
+            enqueueRequest={null}
+          />
+        )}
       </div>
       <div className="calendar-grid">
         {view === "month" && (
@@ -1231,7 +1370,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
                   {isEvent && <span className="badge event-type">{getEventCategoryLabel(task.event_category)}</span>}
                   {isVirtual && <span className="badge recurring">🔄 Cykliczne</span>}
                   {!isEvent && <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>}
-                  {!isVirtual && <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>}
+                  {!isVirtual && !isEvent && <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>}
                   {!isEvent && !isVirtual && <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>}
                   {task.exp_awarded && task.exp_timing && !isVirtual && (() => { const info = EXP_TIMING_LABELS[task.exp_timing]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
                   {!task.exp_awarded && !isEvent && !isVirtual && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = EXP_TIMING_LABELS[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
@@ -2181,7 +2320,7 @@ export default function App() {
         onToast={showToast} 
         onFamilyChange={fetchData} 
       />
-      <Calendar tasks={tasks} recurringEvents={recurringEvents} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} freeDays={freeDays} />
+      <Calendar tasks={tasks} recurringEvents={recurringEvents} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} freeDays={freeDays} onFreeDayChange={setFreeDays} />
       <DayTasksPanel selectedDate={selectedDate} tasks={tasks} recurringEvents={recurringEvents} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />

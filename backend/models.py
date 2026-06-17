@@ -225,9 +225,6 @@ class WorkEntry(Base):
     completed = Column(Boolean, default=False)
     exp_awarded = Column(Boolean, default=False)
     created_at = Column(DateTime, default=datetime.utcnow)
-    is_recurring = Column(Boolean, default=False)
-    day_of_week = Column(Integer, nullable=True)
-    end_date = Column(Date, nullable=True)
     owner = relationship("User")
 
 
