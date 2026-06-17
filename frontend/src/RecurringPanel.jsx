@@ -112,8 +112,27 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
 
   const deleteRecurringEvent = async (id) => {
     try {
+      // First, get the recurring event details to find matching instances
+      const eventRes = await axios.get(`${api}/recurring-events`, { headers });
+      const eventToDelete = eventRes.data.find(e => e.id === id);
+      
+      if (eventToDelete) {
+        // Delete all task instances with matching title and category
+        const tasksRes = await axios.get(`${api}/tasks`, { headers });
+        const tasksToDelete = tasksRes.data.filter(task => 
+          task.task_type === "event" && 
+          task.title === eventToDelete.title && 
+          task.event_category === eventToDelete.category
+        );
+        
+        for (const task of tasksToDelete) {
+          await axios.delete(`${api}/tasks/${task.id}`, { headers });
+        }
+      }
+      
+      // Then delete the recurring event definition
       await axios.delete(`${api}/recurring-events/${id}`, { headers });
-      onToast("🗑️ Usunięto wydarzenie cykliczne");
+      onToast("🗑️ Usunięto wydarzenie cykliczne i wszystkie instancje");
       loadRecurringEvents();
       onRefresh?.();
     } catch (err) {

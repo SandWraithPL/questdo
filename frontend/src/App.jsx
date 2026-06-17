@@ -1332,12 +1332,6 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
                     <option value="">Wybierz kategorię wydarzenia</option>
                     {EVENT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
                   </select>
-                  <select value={editForm.recurring_pattern || ""} onChange={(e) => setEditForm({ ...editForm, recurring_pattern: e.target.value })}>
-                    {RECURRING_PATTERNS.map(p => <option key={p.value} value={p.value}>{p.label}</option>)}
-                  </select>
-                  {editForm.recurring_pattern && (
-                    <DatePicker value={editForm.recurring_end_date || ""} onChange={(recurring_end_date) => setEditForm({ ...editForm, recurring_end_date })} label="Data końcowa cyklu (opcjonalne)" />
-                  )}
                   <DatePicker value={editForm.due_date || ""} onChange={(due_date) => setEditForm({ ...editForm, due_date })} />
                 </>
               )}
