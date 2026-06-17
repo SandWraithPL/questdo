@@ -2665,15 +2665,34 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
     except ValueError:
         raise HTTPException(status_code=400, detail="Nieprawidłowy format godziny (HH:MM)")
     
-    # Jeśli is_recurring = true, generuj 365 osobnych instancji
+    # Jeśli is_recurring = true, generuj osobne instancje
     if entry.is_recurring:
         work_date = parse_due_date(entry.work_date)
         today = date.today()
         enc = lm.encrypt_work_fields(entry.hourly_rate, entry.notes)
         
+        # Określ datę końcową (jeśli istnieje)
+        end_date_obj = None
+        if entry.end_date:
+            try:
+                end_date_obj = parse_due_date(entry.end_date)
+            except:
+                raise HTTPException(status_code=400, detail="Nieprawidłowa data zakończenia")
+        
         created_entries = []
-        for i in range(365):
+        i = 0
+        while True:
             current_date = work_date + timedelta(days=i)
+            
+            # Sprawdź czy nie przekroczyliśmy daty zakończenia
+            if end_date_obj and current_date > end_date_obj:
+                break
+            
+            # Jeśli NIE MA daty zakończenia - generuj do 10 lat (3650 dni) do przodu
+            # To jest praktycznie "do końca życia aplikacji"
+            if not end_date_obj and i > 3650:
+                break
+            
             # Sprawdź czy praca jest w przeszłości - jeśli tak, oznacz jako ukończoną
             auto_complete = False
             if current_date < today:
@@ -2697,6 +2716,7 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
             )
             db.add(row)
             created_entries.append(row)
+            i += 1
         
         db.commit()
         for row in created_entries:
@@ -2719,6 +2739,55 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
             db.commit()
         
         return {"created": len(created_entries), "entries": [lm.work_to_dict(row) for row in created_entries]}
+    
+    # Normalny wpis (niecykliczny)
+    work_date = parse_due_date(entry.work_date)
+    today = date.today()
+    now = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=2)))  # Warsaw timezone
+    now_time = f"{now.hour:02d}:{now.minute:02d}"
+    
+    auto_complete = False
+    if work_date < today:
+        # Praca w przeszłości - automatycznie ukończona
+        auto_complete = True
+    elif work_date == today and entry.end_time <= now_time:
+        # Praca na dziś, ale już skończona według czasu
+        auto_complete = True
+    
+    enc = lm.encrypt_work_fields(entry.hourly_rate, entry.notes)
+    row = models.WorkEntry(
+        owner_id=current_user.id,
+        work_date=work_date,
+        start_time=entry.start_time,
+        end_time=entry.end_time,
+        hourly_rate=enc["hourly_rate"],
+        notes=enc["notes"],
+        tax_enabled=bool(entry.tax_enabled),
+        tax_percent=max(0.0, min(100.0, float(entry.tax_percent or 0))),
+        completed=auto_complete,
+    )
+    db.add(row)
+    db.commit()
+    db.refresh(row)
+    
+    # Jeśli auto-ukończono, zaktualizuj podsumowanie użytkownika
+    if auto_complete:
+        from sqlalchemy import func
+        # Oblicz netto dla tego wpisu
+        hours = lm.hours_between(entry.start_time, entry.end_time)
+        gross = hours * entry.hourly_rate
+        tax = 0.0
+        if row.tax_enabled:
+            tax = gross * (row.tax_percent / 100.0)
+        net = gross - tax
+        
+        # Dodaj do eksp i podsumowania
+        current_user.exp += 0  # Praca nie daje EXP
+        current_user.total_earned = (current_user.total_earned or 0) + net
+        
+        db.commit()
+    
+    return lm.work_to_dict(row)
     
     # Normalny wpis (niecykliczny)
     work_date = parse_due_date(entry.work_date)
