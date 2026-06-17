@@ -1,3 +1,4 @@
+import re
 from datetime import date, datetime
 from typing import Optional
 
@@ -51,11 +52,30 @@ def schedule_to_dict(entry: models.ScheduleEntry) -> dict:
     }
 
 
+def quantity_to_number(raw: Optional[str], decrypt: bool = True) -> float:
+    """Best-effort parse of a free-text quantity into a positive number.
+
+    Quantities are stored as encrypted free text (e.g. "2", "2,5", "3 szt").
+    Returns the leading numeric value, or 1.0 when nothing usable is found.
+    """
+    text = decrypt_field(raw) if decrypt else (raw or "")
+    text = (text or "").strip().replace(",", ".")
+    match = re.search(r"-?\d+(?:\.\d+)?", text)
+    if not match:
+        return 1.0
+    try:
+        value = float(match.group())
+    except ValueError:
+        return 1.0
+    return value if value > 0 else 1.0
+
+
 def shopping_to_dict(item: models.ShoppingItem) -> dict:
     return {
         "id": item.id,
         "name": decrypt_field(item.name),
         "quantity": decrypt_field(item.quantity),
+        "unit": getattr(item, "unit", "szt") or "szt",
         "category": item.category,
         "bought": item.bought,
         "exp_awarded": item.exp_awarded,

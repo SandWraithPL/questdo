@@ -40,6 +40,25 @@ function formatMoney(value) {
   return `${formatted} zł`;
 }
 
+const SHOPPING_UNITS = [
+  { value: "szt", label: "szt." },
+  { value: "kg", label: "kg" },
+  { value: "l", label: "l" },
+];
+
+function unitLabel(value) {
+  const found = SHOPPING_UNITS.find((u) => u.value === value);
+  return found ? found.label : (value || "szt");
+}
+
+// Wyciąga liczbę z pola ilości (np. "2", "2,5", "3 szt"); domyślnie 1
+function qtyToNumber(value) {
+  const match = String(value ?? "").replace(",", ".").match(/-?\d+(?:\.\d+)?/);
+  if (!match) return 1;
+  const num = parseFloat(match[0]);
+  return Number.isFinite(num) && num > 0 ? num : 1;
+}
+
 const SHOPPING_CATEGORIES = [
   { value: "veggies", emoji: "🥦", label: "Warzywa" },
   { value: "fruits", emoji: "🍎", label: "Owoce" },
@@ -83,6 +102,7 @@ export default function ShoppingPanel({
   console.log("[SHOPPING] familyId prop received:", familyId);
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
+  const [unit, setUnit] = useState("szt");
   const [category, setCategory] = useState("other");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -105,6 +125,7 @@ export default function ShoppingPanel({
         const res = await axios.patch(`${api}/shopping/${id}`, {
           name: form.name,
           quantity: form.qty,
+          unit: form.unit || "szt",
           category: form.cat,
           price: parseFloat(form.price) || 0,
         }, { headers });
@@ -224,6 +245,7 @@ export default function ShoppingPanel({
         const payload = { 
           name, 
           quantity: qty, 
+          unit, 
           category, 
           price: parseFloat(editPrice) || 0,
           family_id: familyId || undefined
@@ -234,6 +256,7 @@ export default function ShoppingPanel({
         setItems((prev) => [res.data, ...prev]);
         setName("");
         setQty("");
+        setUnit("szt");
         setCategory(defaultCategory);
         setEditPrice("");
         setShowSuggestions(false);
@@ -279,6 +302,7 @@ export default function ShoppingPanel({
     startEdit(item, {
       name: item.name,
       qty: item.quantity || "",
+      unit: item.unit || "szt",
       cat: item.category || "other",
       price: item.price ? String(item.price) : "",
     });
@@ -407,7 +431,7 @@ export default function ShoppingPanel({
       const payload = {
         items_json: itemsJson,
         total_items: boughtItems.length,
-        total_spent: boughtItems.reduce((sum, i) => sum + ((parseFloat(i.quantity) || 0) * (i.price || 0)), 0),
+        total_spent: boughtItems.reduce((sum, i) => sum + (qtyToNumber(i.quantity) * (i.price || 0)), 0),
         notes: "",
         is_template: false
       };
@@ -526,6 +550,11 @@ export default function ShoppingPanel({
             )}
           </div>
           <input className="input-small" placeholder="Ilość" value={qty} onChange={(e) => setQty(e.target.value)} />
+          <select className="input-small" value={unit} onChange={(e) => setUnit(e.target.value)}>
+            {SHOPPING_UNITS.map((u) => (
+              <option key={u.value} value={u.value}>{u.label}</option>
+            ))}
+          </select>
           <input className="input-small" placeholder="Cena jedn. (zł)" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} type="number" step="0.01" min="0" />
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
             {SHOPPING_CATEGORIES.map((c) => (
@@ -584,6 +613,11 @@ export default function ShoppingPanel({
                 <div className="edit-mode">
                   <input value={editForm.name || ""} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nazwa" />
                   <input className="input-small" value={editForm.qty || ""} onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })} placeholder="Ilość" />
+                  <select className="input-small" value={editForm.unit || "szt"} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}>
+                    {SHOPPING_UNITS.map((u) => (
+                      <option key={u.value} value={u.value}>{u.label}</option>
+                    ))}
+                  </select>
                   <input className="input-small" value={editForm.price || ""} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} placeholder="Cena jedn. (zł)" type="number" step="0.01" min="0" />
                   <select value={editForm.cat || "other"} onChange={(e) => setEditForm({ ...editForm, cat: e.target.value })}>
                     {SHOPPING_CATEGORIES.map((c) => (
@@ -598,11 +632,11 @@ export default function ShoppingPanel({
                   <div className="task-info">
                     <h4 className={item.bought ? "done" : ""}>{item.name}</h4>
                     <div className="task-meta">
-                      {item.quantity && <span className="badge category">{item.quantity}</span>}
+                      {item.quantity && <span className="badge category">{item.quantity} {unitLabel(item.unit)}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
                       {item.price > 0 && (
                         <span className="badge category">
-                          💰 {item.quantity ? `${item.quantity} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
+                          💰 {item.quantity ? `${item.quantity} ${unitLabel(item.unit)} × ${formatMoney(item.price)} = ${formatMoney(qtyToNumber(item.quantity) * item.price)}` : formatMoney(item.price)}
                         </span>
                       )}
                     </div>
@@ -700,11 +734,11 @@ export default function ShoppingPanel({
                   <div className="task-info">
                     <h4 className="done">{item.name}</h4>
                     <div className="task-meta">
-                      {item.quantity && <span className="badge category">{item.quantity}</span>}
+                      {item.quantity && <span className="badge category">{item.quantity} {unitLabel(item.unit)}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
                       {item.price > 0 && (
                         <span className="badge category">
-                          💰 {item.quantity ? `${item.quantity} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
+                          💰 {item.quantity ? `${item.quantity} ${unitLabel(item.unit)} × ${formatMoney(item.price)} = ${formatMoney(qtyToNumber(item.quantity) * item.price)}` : formatMoney(item.price)}
                         </span>
                       )}
                     </div>
