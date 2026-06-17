@@ -563,7 +563,16 @@ def startup_event():
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "https://questdo-app.azurewebsites.net",
+        "http://questdo-app.azurewebsites.net",  # ← DODAJ (na wypadek)
+        "https://questdo-frontend.azurewebsites.net",
+        "http://questdo-frontend.azurewebsites.net",
+        "https://questdo-backend.azurewebsites.net",
+        "https://questdo-backend-https.azurewebsites.net",
+        "http://localhost:5173",  # dla dev
+        "http://localhost:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

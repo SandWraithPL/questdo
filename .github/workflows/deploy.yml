@@ -1,4 +1,4 @@
-name: Build and Deploy Frontend to Azure
+name: Build and Deploy Frontend and Backend to Azure
 
 on:
   push:
@@ -28,6 +28,19 @@ jobs:
         username: ${{ secrets.ACR_USERNAME }}
         password: ${{ secrets.ACR_PASSWORD }}
 
+    # === BUILD AND DEPLOY BACKEND ===
+    - name: Build and push backend image
+      run: |
+        docker build ./backend -t questdoregistry.azurecr.io/questdo-backend:latest
+        docker push questdoregistry.azurecr.io/questdo-backend:latest
+
+    - name: Deploy Backend to Azure Web App
+      uses: azure/webapps-deploy@v3
+      with:
+        app-name: questdo-backend-https
+        images: questdoregistry.azurecr.io/questdo-backend:latest
+
+    # === BUILD AND DEPLOY FRONTEND ===
     - name: Build and push frontend image
       run: |
         docker build ./frontend -t questdoregistry.azurecr.io/questdo-frontend:latest
