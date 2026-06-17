@@ -90,6 +90,7 @@ export default function SharedCalendar({
   defaultCollapsed = true,
   freeDays = [],
   recurringEvents = [],
+  freeDayManager,
 }) {
   const [cursor, setCursor] = useState(() => (selectedDate instanceof Date ? selectedDate : new Date()));
   const [view, setView] = useState("month");
@@ -328,6 +329,7 @@ export default function SharedCalendar({
               <button type="button" onClick={() => setView("day")} className={view === "day" ? "active" : ""}>Dzień</button>
             </div>
             {view === "month" && <button type="button" className="calendar-today" onClick={goToday}>Dzisiaj</button>}
+            {freeDayManager}
           </div>
           <div className="calendar-grid">
             {view === "month" && (

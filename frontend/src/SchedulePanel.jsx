@@ -383,18 +383,18 @@ export default function SchedulePanel({
         collapsedStorageKey="questdo-schedule-calendar-collapsed"
         defaultCollapsed={false}
         freeDays={freeDays}
+        freeDayManager={setFreeDays && (
+          <FreeDayManager
+            freeDays={freeDays}
+            setFreeDays={setFreeDays}
+            selectedDate={selectedDate}
+            api={api}
+            headers={headers}
+            onToast={onToast}
+            enqueueRequest={enqueueRequest}
+          />
+        )}
       />
-      {setFreeDays && (
-        <FreeDayManager
-          freeDays={freeDays}
-          setFreeDays={setFreeDays}
-          selectedDate={selectedDate}
-          api={api}
-          headers={headers}
-          onToast={onToast}
-          enqueueRequest={enqueueRequest}
-        />
-      )}
 
       <div className="day-tasks-panel">
         <div className="tasks-header">

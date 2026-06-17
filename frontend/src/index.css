@@ -343,7 +343,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .tasks-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .tasks-header h3 { font-size: 1.1rem; }
 .filter-group { display: flex; gap: 8px; }
-.filter-btn { padding: 6px 12px; border-radius: 20px; border: 1px solid #444; background: transparent; color: #aaa; cursor: pointer; font-size: 0.85rem; }
+.filter-btn { flex: 1; min-width: 100px; padding: 6px 12px; border-radius: 20px; border: 1px solid #444; background: transparent; color: #aaa; cursor: pointer; font-size: 0.85rem; text-align: center; }
 .filter-btn.active { background: #ff8906; color: #0f0e17; border-color: #ff8906; }
 
 /* Przycisk 🎓 – mały, z odstępami */

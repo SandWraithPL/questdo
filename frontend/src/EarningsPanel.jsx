@@ -519,18 +519,18 @@ export default function EarningsPanel({
         defaultCollapsed={false}
         freeDays={freeDays}
         recurringEvents={recurringEvents}
+        freeDayManager={setFreeDays && (
+          <FreeDayManager
+            freeDays={freeDays}
+            setFreeDays={setFreeDays}
+            selectedDate={selectedDate}
+            api={api}
+            headers={headers}
+            onToast={onToast}
+            enqueueRequest={enqueueRequest}
+          />
+        )}
       />
-      {setFreeDays && (
-        <FreeDayManager
-          freeDays={freeDays}
-          setFreeDays={setFreeDays}
-          selectedDate={selectedDate}
-          api={api}
-          headers={headers}
-          onToast={onToast}
-          enqueueRequest={enqueueRequest}
-        />
-      )}
 
       {/* Lista wpisów */}
       <div className="day-tasks-panel">
