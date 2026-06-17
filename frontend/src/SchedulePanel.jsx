@@ -4,6 +4,15 @@ import SharedCalendar, { weekdayIndex, WEEKDAYS_LONG } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
 
+function toDateStr(d) {
+  if (!d) return new Date().toISOString().slice(0, 10);
+  if (typeof d === "string") return d.slice(0, 10);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 // Komponent FreeDayManager - zarządzanie dniami wolnymi
 function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onToast, enqueueRequest }) {
   const [showFreeDayManager, setShowFreeDayManager] = useState(false);
@@ -161,6 +170,7 @@ export default function SchedulePanel({
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
   const [manualEntryDate, setManualEntryDate] = useState("");
+  const [copyModal, setCopyModal] = useState(null); // { entryId, targetDate }
 
   const selectedStr = selectedDate instanceof Date
     ? selectedDate.toISOString().slice(0, 10)
@@ -324,6 +334,32 @@ export default function SchedulePanel({
     });
   };
 
+  const copySchedule = async (entryId, targetDate) => {
+    const original = entries.find(e => e.id === entryId);
+    if (!original) return;
+    
+    enqueueRequest(async () => {
+      try {
+        await axios.post(`${api}/schedule`, {
+          title: original.title,
+          location: original.location || "",
+          lecturer: original.lecturer || "",
+          start_time: original.start_time,
+          end_time: original.end_time,
+          entry_date: targetDate,
+          is_recurring: false,
+        }, { headers });
+        
+        const res = await axios.get(`${api}/schedule`, { headers });
+        setEntries(res.data);
+        setCopyModal(null);
+        onToast("📋 Skopiowano zajęcia");
+      } catch (err) {
+        onToast(err.response?.data?.detail || "Błąd kopiowania");
+      }
+    });
+  };
+
   return (
     <div className="module-panel schedule-panel">
       <SharedCalendar
@@ -381,7 +417,10 @@ export default function SchedulePanel({
                 {entry.lecturer && <span className="badge category">👤 {entry.lecturer}</span>}
               </div>
             </div>
-            <button type="button" className="icon-btn delete" onClick={() => deleteEntry(entry)}>🗑️</button>
+            <div className="task-actions">
+              <button type="button" className="icon-btn" onClick={() => setCopyModal({ entryId: entry.id, targetDate: toDateStr(new Date()) })} title="Kopiuj">📋</button>
+              <button type="button" className="icon-btn delete" onClick={() => deleteEntry(entry)}>🗑️</button>
+            </div>
           </div>
         ))}
       </div>
@@ -398,6 +437,16 @@ export default function SchedulePanel({
           <div className="row">
             <button type="button" className="add-task-btn" onClick={handleImport}>Importuj</button>
             <button type="button" className="cancel-btn" onClick={() => setShowImport(false)}>Anuluj</button>
+          </div>
+        </div>
+      )}
+      {copyModal && (
+        <div className="add-task">
+          <h3>📋 Kopiuj zajęcia</h3>
+          <DatePicker value={copyModal.targetDate} onChange={(date) => setCopyModal({ ...copyModal, targetDate: date })} label="Data docelowa" />
+          <div className="row">
+            <button type="button" className="add-task-btn" onClick={() => copySchedule(copyModal.entryId, copyModal.targetDate)}>Kopiuj</button>
+            <button type="button" className="cancel-btn" onClick={() => setCopyModal(null)}>Anuluj</button>
           </div>
         </div>
       )}

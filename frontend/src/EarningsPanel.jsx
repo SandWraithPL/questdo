@@ -213,6 +213,7 @@ export default function EarningsPanel({
   const [editEndDate, setEditEndDate] = useState("");
   const [isSavingDefault, setIsSavingDefault] = useState(false);
   const [workDate, setWorkDate] = useState("");
+  const [copyModal, setCopyModal] = useState(null); // { entryId, targetDate }
   const autoCompletedIds = useRef(new Set());
 
   const selectedStr = selectedDate instanceof Date
@@ -394,6 +395,36 @@ export default function EarningsPanel({
     });
   };
 
+  const copyWork = async (entryId, targetDate) => {
+    const original = entries.find(e => e.id === entryId);
+    if (!original) return;
+    
+    enqueueRequest(async () => {
+      try {
+        const payload = {
+          work_date: targetDate,
+          start_time: original.start_time,
+          end_time: original.end_time,
+          hourly_rate: original.hourly_rate,
+          notes: original.notes || "",
+          tax_enabled: original.tax_enabled || false,
+          tax_percent: original.tax_percent || 0,
+          is_recurring: false,
+        };
+        
+        await axios.post(`${api}/work`, payload, { headers });
+        await refreshSummary();
+        
+        const res = await axios.get(`${api}/work`, { headers });
+        setEntries(res.data);
+        setCopyModal(null);
+        onToast("📋 Skopiowano pracę");
+      } catch (err) {
+        onToast(err.response?.data?.detail || "Błąd kopiowania");
+      }
+    });
+  };
+
   const startEdit = (entry) => {
     if (entry.completed) {
       onToast("Nie można edytować ukończonej pracy");
@@ -508,6 +539,16 @@ export default function EarningsPanel({
           <span className="earnings-day-total">{formatMoney(dayTotal)}</span>
         </div>
         {dayEntries.length === 0 && <p className="empty">Brak wpisów pracy na ten dzień.</p>}
+        {copyModal && (
+          <div className="add-task">
+            <h3>📋 Kopiuj pracę</h3>
+            <DatePicker value={copyModal.targetDate} onChange={(date) => setCopyModal({ ...copyModal, targetDate: date })} label="Data docelowa" />
+            <div className="row">
+              <button type="button" className="add-task-btn" onClick={() => copyWork(copyModal.entryId, copyModal.targetDate)}>Kopiuj</button>
+              <button type="button" className="cancel-btn" onClick={() => setCopyModal(null)}>Anuluj</button>
+            </div>
+          </div>
+        )}
         {dayEntries.map((entry) => {
           const editing = editingId === entry.id;
           return (
@@ -553,6 +594,7 @@ export default function EarningsPanel({
                   </div>
                   <div className="task-actions">
                     <button type="button" className="icon-btn" onClick={() => startEdit(entry)} title="Edytuj">✏️</button>
+                    <button type="button" className="icon-btn" onClick={() => setCopyModal({ entryId: entry.id, targetDate: getWarsawDateStr() })} title="Kopiuj">📋</button>
                     <button type="button" className="icon-btn delete" onClick={() => deleteEntry(entry)}>🗑️</button>
                   </div>
                 </>

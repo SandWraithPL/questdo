@@ -1205,10 +1205,11 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
-function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, onDelete, onSave, onToast, onUncheck, loadingTaskIds, deletingTaskIds }) {
+function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, onDelete, onSave, onToast, onUncheck, loadingTaskIds, deletingTaskIds, api, headers, onRefresh }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
+  const [copyModal, setCopyModal] = useState(null); // { taskId, targetDate }
 
   const saveItem = async (id, form) => {
     if (!form.title?.trim()) { onToast("Tytuł jest wymagany"); return; }
@@ -1260,6 +1261,33 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
     });
   };
 
+  const copyTask = async (taskId, targetDate) => {
+    const original = tasks.find(t => t.id === taskId);
+    if (!original) return;
+    
+    try {
+      await axios.post(`${api}/tasks`, {
+        title: original.title,
+        description: original.description || "",
+        difficulty: original.difficulty || "easy",
+        category: original.category || "Inne",
+        due_date: targetDate,
+        important: original.important || false,
+        reminder_offset_days: original.reminder_offset_days || null,
+        task_type: original.task_type || "quest",
+        event_category: original.event_category || null,
+        recurring_pattern: original.recurring_pattern || null,
+        recurring_end_date: original.recurring_end_date || null,
+      }, { headers });
+      
+      if (onRefresh) await onRefresh();
+      setCopyModal(null);
+      onToast("📋 Skopiowano quest");
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd kopiowania");
+    }
+  };
+
   const dateStr = toDateStr(selectedDate);
   const dateLabel = new Date(dateStr + "T12:00:00").toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
@@ -1302,6 +1330,16 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
       {questCount > 0 && (<div className="progress-wrap"><div className="progress-bar"><div className="progress-fill" style={{ width: `${percent}%` }} /></div><span>{percent}% ukończone ({doneCount}/{questCount})</span></div>)}
       <div className="stats-counter"><span>Wszystkich: <strong>{allDay.length}</strong></span><span>Ukończonych: <strong>{doneCount}</strong></span><span>Pozostało: <strong>{questCount - doneCount}</strong></span></div>
       {dayTasks.length === 0 && <div className="empty">{allDay.length ? "Brak questów pasujących do filtrów." : "Brak questów na ten dzień. Dodaj pierwszy! ⚔️"}</div>}
+      {copyModal && (
+        <div className="add-task">
+          <h3>📋 Kopiuj quest</h3>
+          <DatePicker value={copyModal.targetDate} onChange={(date) => setCopyModal({ ...copyModal, targetDate: date })} label="Data docelowa" />
+          <div className="row">
+            <button type="button" className="add-task-btn" onClick={() => copyTask(copyModal.taskId, copyModal.targetDate)}>Kopiuj</button>
+            <button type="button" className="cancel-btn" onClick={() => setCopyModal(null)}>Anuluj</button>
+          </div>
+        </div>
+      )}
       {dayTasks.map((task) => {
         const checkState = getTaskCheckState(task);
         const isEvent = task.task_type === "event";
@@ -1380,6 +1418,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
               {!isVirtual && (
               <div className="task-actions">
                 <button className="icon-btn" onClick={() => startEditItem(task)} disabled={loadingTaskIds.has(task.id)}>✏️</button>
+                <button className="icon-btn" onClick={() => setCopyModal({ taskId: task.id, targetDate: toDateStr(new Date()) })} title="Kopiuj">📋</button>
                 <button className="task-delete" onClick={() => onDelete(task)} disabled={deletingTaskIds.has(task.id)}>{deletingTaskIds.has(task.id) ? "⏳" : "🗑"}</button>
               </div>
               )}
@@ -2328,7 +2367,7 @@ export default function App() {
         onFamilyChange={fetchData} 
       />
       <Calendar tasks={tasks} recurringEvents={recurringEvents} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} freeDays={freeDays} onFreeDayChange={setFreeDays} headers={headers} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} recurringEvents={recurringEvents} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} recurringEvents={recurringEvents} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} api={API} headers={headers} onRefresh={fetchData} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">
