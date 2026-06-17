@@ -59,6 +59,15 @@ export default function SchedulePanel({
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
+  const [manualEntryDate, setManualEntryDate] = useState("");
+
+  const selectedStr = selectedDate instanceof Date
+    ? selectedDate.toISOString().slice(0, 10)
+    : String(selectedDate).slice(0, 10);
+
+  useEffect(() => {
+    setManualEntryDate(selectedStr);
+  }, [selectedStr]);
 
   const dayEntries = useMemo(
     () => entries.filter((e) => matchScheduleToDate(e, selectedDate instanceof Date ? selectedDate.toISOString().slice(0, 10) : String(selectedDate).slice(0, 10), freeDays)),
@@ -76,6 +85,10 @@ export default function SchedulePanel({
       onToast("Podaj datę rozpoczęcia dla zajęć cyklicznych");
       return;
     }
+    if (!isRecurring && !manualEntryDate) {
+      onToast("Podaj datę zajęć");
+      return;
+    }
     enqueueRequest(async () => {
       try {
         const payload = {
@@ -86,7 +99,7 @@ export default function SchedulePanel({
           end_time: endTime,
           is_recurring: isRecurring,
           day_of_week: isRecurring ? dayOfWeek : null,
-          entry_date: isRecurring ? null : entryDate,
+          entry_date: isRecurring ? null : manualEntryDate,
           start_date: isRecurring ? startDate : null,
           end_date: isRecurring && endDate ? endDate : null,
         };
@@ -97,6 +110,7 @@ export default function SchedulePanel({
         setLecturer("");
         setStartDate("");
         setEndDate("");
+        setManualEntryDate(selectedStr);
         setShowAdd(false);
         onToast("✅ Dodano zajęcia do planu");
       } catch (err) {
@@ -208,10 +222,6 @@ export default function SchedulePanel({
     });
   };
 
-  const selectedStr = selectedDate instanceof Date
-    ? selectedDate.toISOString().slice(0, 10)
-    : String(selectedDate).slice(0, 10);
-
   return (
     <div className="module-panel schedule-panel">
       <SharedCalendar
@@ -306,7 +316,7 @@ export default function SchedulePanel({
               <DatePicker value={endDate} onChange={setEndDate} label="Data zakończenia (opcjonalnie)" />
             </>
           ) : (
-            <DatePicker value={entryDate} onChange={setEntryDate} label="Data" />
+            <DatePicker value={manualEntryDate} onChange={setManualEntryDate} label="Data" />
           )}
           <div className="row">
             <button type="button" className="add-task-btn" onClick={addEntry}>Dodaj do planu</button>

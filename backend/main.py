@@ -1027,6 +1027,8 @@ class ScheduleCreate(BaseModel):
     is_recurring: bool = True
     start_time: str
     end_time: str
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
 
 
 class ScheduleUpdate(BaseModel):
@@ -1038,6 +1040,8 @@ class ScheduleUpdate(BaseModel):
     is_recurring: Optional[bool] = None
     start_time: Optional[str] = None
     end_time: Optional[str] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
 
 
 class ShoppingCreate(BaseModel):
@@ -2404,6 +2408,14 @@ def create_schedule(entry: ScheduleCreate, current_user: models.User = Depends(g
     entry_date = parse_due_date(entry.entry_date) if entry.entry_date else None
     if entry.is_recurring and entry.day_of_week is not None and not 0 <= entry.day_of_week <= 6:
         raise HTTPException(status_code=400, detail="Dzień tygodnia musi być 0-6")
+    
+    # Auto-complete for past dates
+    auto_complete = False
+    if not entry.is_recurring and entry_date:
+        today = date.today()
+        if entry_date < today:
+            auto_complete = True
+    
     row = models.ScheduleEntry(
         owner_id=current_user.id,
         title=enc["title"],
@@ -2414,6 +2426,9 @@ def create_schedule(entry: ScheduleCreate, current_user: models.User = Depends(g
         is_recurring=entry.is_recurring,
         start_time=entry.start_time,
         end_time=entry.end_time,
+        start_date=parse_due_date(entry.start_date) if entry.start_date else None,
+        end_date=parse_due_date(entry.end_date) if entry.end_date else None,
+        completed=auto_complete,
     )
     db.add(row)
     db.commit()
@@ -2446,6 +2461,10 @@ def update_schedule(entry_id: int, body: ScheduleUpdate, current_user: models.Us
         row.start_time = body.start_time
     if body.end_time is not None:
         row.end_time = body.end_time
+    if body.start_date is not None:
+        row.start_date = parse_due_date(body.start_date)
+    if body.end_date is not None:
+        row.end_date = parse_due_date(body.end_date)
     db.commit()
     db.refresh(row)
     return lm.schedule_to_dict(row)

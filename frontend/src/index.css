@@ -788,7 +788,8 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .delete-user-btn { padding: 8px 12px; background: #e74c3c; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
 .delete-user-btn:hover { background: #c0392b; }
 
-.date-picker-wrap { position: relative; width: 100%; margin-bottom: 10px; overflow: visible !important; z-index: 999; }
+.date-picker-wrap { position: relative; width: 100%; margin-bottom: 10px; overflow: visible !important; z-index: 1; }
+.date-picker-wrap.open { z-index: 1000; }
 .date-picker-label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 6px; }
 .date-picker-trigger { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; font-size: 0.9rem; cursor: pointer; text-align: left; }
 .date-picker-trigger:hover { border-color: #ff8906; }

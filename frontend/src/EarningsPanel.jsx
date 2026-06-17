@@ -103,6 +103,7 @@ export default function EarningsPanel({
   const [editStartDate, setEditStartDate] = useState("");
   const [editEndDate, setEditEndDate] = useState("");
   const [isSavingDefault, setIsSavingDefault] = useState(false);
+  const [workDate, setWorkDate] = useState("");
   const autoCompletedIds = useRef(new Set());
 
   const selectedStr = selectedDate instanceof Date
@@ -116,7 +117,8 @@ export default function EarningsPanel({
 
   useEffect(() => {
     loadDefaultHourlyRate();
-  }, []);
+    setWorkDate(selectedStr);
+  }, [selectedStr]);
 
   useEffect(() => {
     const checkAutoComplete = () => {
@@ -210,10 +212,14 @@ export default function EarningsPanel({
       onToast("Podaj datę rozpoczęcia dla pracy cyklicznej");
       return;
     }
+    if (!isRecurring && !workDate) {
+      onToast("Podaj datę pracy");
+      return;
+    }
     enqueueRequest(async () => {
       try {
         const payload = {
-          work_date: selectedStr,
+          work_date: isRecurring ? selectedStr : workDate,
           start_time: startTime,
           end_time: endTime,
           hourly_rate: rate,
@@ -235,6 +241,7 @@ export default function EarningsPanel({
         setDayOfWeek(0);
         setStartDate("");
         setEndDate("");
+        setWorkDate(selectedStr);
         onToast("✅ Dodano wpis pracy");
       } catch (err) {
         onToast(err.response?.data?.detail || "Błąd dodawania");
@@ -497,7 +504,7 @@ export default function EarningsPanel({
               <DatePicker value={endDate} onChange={setEndDate} label="Data zakończenia (opcjonalnie)" />
             </>
           ) : (
-            <DatePicker value={selectedStr} onChange={() => {}} label="Data" />
+            <DatePicker value={workDate} onChange={setWorkDate} label="Data" />
           )}
           
           <div className="row">

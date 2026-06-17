@@ -103,6 +103,10 @@ def work_to_dict(entry: models.WorkEntry) -> dict:
 
 
 def schedule_matches_date(entry: models.ScheduleEntry, target: date) -> bool:
+    if entry.start_date and target < entry.start_date:
+        return False
+    if entry.end_date and target > entry.end_date:
+        return False
     if entry.is_recurring:
         return entry.day_of_week == (target.weekday())
     return entry.entry_date == target
