@@ -201,6 +201,38 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   font-weight: bold;
 }
 
+.accept-btn {
+  background: #4caf50;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.accept-btn:hover {
+  background: #66bb6a;
+  transform: translateY(-1px);
+}
+
+.decline-btn {
+  background: #f44336;
+  color: #fff;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+  transition: background 0.2s, transform 0.15s;
+}
+
+.decline-btn:hover {
+  background: #ef5350;
+  transform: translateY(-1px);
+}
+
 .no-family {
   text-align: center;
   padding: 20px;

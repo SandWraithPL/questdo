@@ -146,16 +146,28 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
       {/* Oczekujące zaproszenia */}
       {invitations.length > 0 && (
         <div className="invitations-section">
-          <h4>Oczekujące zaproszenia ({invitations.length})</h4>
+          <h4>📨 Oczekujące zaproszenia ({invitations.length})</h4>
           {invitations.map((inv) => (
             <div key={inv.id} className="invitation-card">
               <div className="invitation-info">
-                <span className="invitation-family">{inv.family_name}</span>
-                <span className="invitation-from">od: {inv.invited_by}</span>
+                <span className="invitation-family">👨‍👩‍👧‍👦 {inv.family_name}</span>
+                <span className="invitation-from">📩 od: {inv.invited_by}</span>
               </div>
               <div className="invitation-actions">
-                <button type="button" className="icon-btn" onClick={() => acceptInvitation(inv.id)} title="Akceptuj">✅</button>
-                <button type="button" className="icon-btn delete" onClick={() => declineInvitation(inv.id)} title="Odrzuć">❌</button>
+                <button 
+                  type="button" 
+                  className="accept-btn" 
+                  onClick={() => acceptInvitation(inv.id)}
+                >
+                  ✅ Akceptuj
+                </button>
+                <button 
+                  type="button" 
+                  className="decline-btn" 
+                  onClick={() => declineInvitation(inv.id)}
+                >
+                  ❌ Odrzuć
+                </button>
               </div>
             </div>
           ))}
