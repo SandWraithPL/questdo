@@ -2879,6 +2879,16 @@ def clear_bought_shopping(family_id: Optional[int] = None, current_user: models.
     for row in bought:
         db.delete(row)
     db.commit()
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "shopping_updated",
+            "data": {"action": "cleared_bought"}
+        }))
+    except:
+        pass
+    
     return {"message": f"Usunięto {len(bought)} kupionych produktów"}
 
 
@@ -3161,6 +3171,16 @@ def update_work(entry_id: int, body: WorkUpdate, current_user: models.User = Dep
         raise HTTPException(status_code=400, detail="Nieprawidłowy format godziny (HH:MM)")
     db.commit()
     db.refresh(row)
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "work_updated",
+            "data": lm.work_to_dict(row)
+        }))
+    except:
+        pass
+    
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
         "entry": lm.work_to_dict(row),
@@ -3199,6 +3219,16 @@ def delete_work(entry_id: int, current_user: models.User = Depends(get_current_u
     
     db.delete(row)
     db.commit()
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "work_updated",
+            "data": {"id": entry_id, "deleted": True}
+        }))
+    except:
+        pass
+    
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
         "message": "Usunięto wpis pracy",
@@ -3445,6 +3475,15 @@ def create_shopping_history(data: ShoppingHistoryCreate, family_id: Optional[int
     db.add(history)
     db.commit()
     db.refresh(history)
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "shopping_history_updated",
+            "data": {"id": history.id, "total_items": history.total_items}
+        }))
+    except:
+        pass
     
     return {
         "id": history.id,

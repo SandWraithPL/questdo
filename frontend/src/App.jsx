@@ -1755,14 +1755,27 @@ export default function App() {
           fetchData();
           break;
         case 'shopping_updated':
-          loadShoppingItems();
-          if (familyId) loadSummary();
+          if (typeof loadShoppingItems === 'function') {
+            loadShoppingItems();
+          }
+          if (familyId && typeof loadSummary === 'function') {
+            loadSummary();
+          }
+          break;
+        case 'shopping_history_updated':
+          if (typeof loadHistory === 'function') {
+            loadHistory();
+          }
           break;
         case 'schedule_updated':
-          loadSchedule();
+          if (typeof loadSchedule === 'function') {
+            loadSchedule();
+          }
           break;
         case 'work_updated':
-          loadWork();
+          if (typeof loadWork === 'function') {
+            loadWork();
+          }
           break;
         default:
           break
