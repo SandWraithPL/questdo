@@ -147,7 +147,8 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
     
     const interval = setInterval(() => {
       loadShoppingItems();
-    }, 10000);
+      loadSummary();
+    }, 5000);
 
     return () => clearInterval(interval);
   }, [familyId]);
@@ -222,7 +223,8 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
   const clearBought = () => {
     enqueueRequest(async () => {
       try {
-        await axios.delete(`${api}/shopping/bought/clear`, { headers });
+        const params = familyId ? { family_id: familyId } : {};
+        await axios.delete(`${api}/shopping/bought/clear`, { headers, params });
         setItems((prev) => prev.filter((i) => !i.bought));
         await loadSummary();
         onToast("🗑️ Usunięto kupione produkty");
@@ -320,7 +322,8 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
             await axios.patch(`${api}/shopping/${item.id}`, { bought: true }, { headers });
           }
         }
-        const res = await axios.get(`${api}/shopping`, { headers });
+        const params = familyId ? { family_id: familyId } : {};
+        const res = await axios.get(`${api}/shopping`, { headers, params });
         setItems(res.data);
         onToast("✅ Zaznaczono wszystkie produkty");
       } catch (err) {
@@ -346,7 +349,7 @@ export default function ShoppingPanel({ api, headers, items, setItems, onUserUpd
       };
       const params = familyId ? { family_id: familyId } : {};
       await axios.post(`${api}/shopping/history`, payload, { headers, params });
-      await axios.delete(`${api}/shopping/bought/clear`, { headers });
+      await axios.delete(`${api}/shopping/bought/clear`, { headers, params });
       setItems((prev) => prev.filter((i) => !i.bought));
       await loadSummary();
       onToast("💾 Lista zapisana w historii");

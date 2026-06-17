@@ -2677,11 +2677,25 @@ def delete_shopping(item_id: int, current_user: models.User = Depends(get_curren
 
 
 @app.delete("/shopping/bought/clear")
-def clear_bought_shopping(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    bought = db.query(models.ShoppingItem).filter(
-        models.ShoppingItem.owner_id == current_user.id,
-        models.ShoppingItem.bought == True,
-    ).all()
+def clear_bought_shopping(family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if family_id is not None:
+        # Check if user is member of the family
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail="Nie jesteś członkiem tej rodziny")
+        
+        bought = db.query(models.ShoppingItem).filter(
+            models.ShoppingItem.family_id == family_id,
+            models.ShoppingItem.bought == True,
+        ).all()
+    else:
+        bought = db.query(models.ShoppingItem).filter(
+            models.ShoppingItem.owner_id == current_user.id,
+            models.ShoppingItem.bought == True,
+        ).all()
     for row in bought:
         db.delete(row)
     db.commit()
