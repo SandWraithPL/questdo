@@ -2418,7 +2418,7 @@ export default function App() {
   const handleDateSelect = (dateStr) => setSelectedDate(new Date(`${dateStr}T12:00:00`));
 
   if (!token) return <Auth onLogin={handleLogin} />;
-  if (!user) return <div className="app"><LoadingSpinner label="Ładowanie questów…" /></div>;
+  if (!user) return <div className="app"><LoadingSpinner label="Ładowanie aplikacji…" /></div>;
 
   const { progress } = getGamificationFromExp(user.exp, levelsMeta, levelThresholds);
 
