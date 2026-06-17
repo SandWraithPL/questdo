@@ -163,7 +163,10 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
     }
     enqueueRequest(async () => {
       try {
-        const res = await axios.delete(`${api}/schedule/all`, { headers });
+        const res = await axios.delete(`${api}/schedule/all`, { 
+          headers,
+          data: {} 
+        });
         console.log("Delete response:", res.data);
         setEntries([]);
         onToast("🗑️ Usunięto cały plan zajęć");

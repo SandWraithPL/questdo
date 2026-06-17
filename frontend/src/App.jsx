@@ -1154,8 +1154,6 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
       <div className="tasks-header"><h3>Questy · {dateLabel}</h3>
         <div className="filter-group">
           {["all", "active", "done"].map(f => <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "all" ? "Wszystkie" : f === "active" ? "Aktywne" : "Ukończone"}</button>)}
-          <div className="filter-divider" />
-          {["all", "quest", "event"].map(f => <button key={f} className={`filter-btn ${typeFilter === f ? "active" : ""}`} onClick={() => setTypeFilter(f)}>{f === "all" ? "Wszystkie typy" : f === "quest" ? "⚔️ Questy" : "📅 Wydarzenia"}</button>)}
         </div>
       </div>
       <input className="search-input" type="search" placeholder="🔍 Szukaj questa..." value={search} onChange={(e) => setSearch(e.target.value)} />
@@ -1723,12 +1721,11 @@ export default function App() {
       setFreeDays(freeDaysRes.data || []);
       setRecurringEvents(recurringRes.data || []);
 
-      // Auto-generate holidays for current year and next year
-      const currentYear = new Date().getFullYear();
-      const nextYear = currentYear + 1;
+      // Auto-generate holidays for years 2020-2030
       try {
-        await axios.post(`${API}/free-days/generate/${currentYear}`, {}, { headers: noCacheHeaders });
-        await axios.post(`${API}/free-days/generate/${nextYear}`, {}, { headers: noCacheHeaders });
+        for (let year = 2020; year <= 2030; year++) {
+          await axios.post(`${API}/free-days/generate/${year}`, {}, { headers: noCacheHeaders });
+        }
       } catch (err) {
         // Ignore errors - holidays might already exist
         console.log("Holidays generation:", err.response?.status);

@@ -72,7 +72,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
     try {
       console.log("Inviting user:", inviteUsername, "to family:", selectedFamily.id);
       const res = await axios.post(`${api}/families/${selectedFamily.id}/invite`,
-        { username: inviteUsername }, { headers });
+        { username: inviteUsername.toLowerCase().trim() }, { headers });
       console.log("Invite response:", res.data);
       setInviteUsername("");
       setShowInvite(false);

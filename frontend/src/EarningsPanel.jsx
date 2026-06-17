@@ -284,6 +284,10 @@ export default function EarningsPanel({
   };
 
   const startEdit = (entry) => {
+    if (entry.completed) {
+      onToast("Nie można edytować ukończonej pracy");
+      return;
+    }
     setEditingId(entry.id);
     setEditDate(entry.work_date);
     setEditStartTime(entry.start_time);
@@ -381,9 +385,6 @@ export default function EarningsPanel({
           const editing = editingId === entry.id;
           return (
             <div key={entry.id} className={`task-card ${entry.completed ? "done" : "medium"}`}>
-              <button type="button" className={`task-check ${entry.completed ? "checked" : ""}`} onClick={() => toggleCompleted(entry)}>
-                {entry.completed ? "✓" : ""}
-              </button>
               {editing ? (
                 <div className="edit-mode">
                   <DatePicker value={editDate} onChange={setEditDate} />
@@ -441,7 +442,7 @@ export default function EarningsPanel({
               setHourlyRate(defaultHourlyRate);
             }
           }}>+ Dodaj pracę na ten dzień</button>
-          <button type="button" className="danger-btn danger-btn--inline" onClick={deleteUnfinishedEntries}>🗑️ Usuń niewykończoną pracę</button>
+          <button type="button" className="danger-btn danger-btn--inline" onClick={deleteUnfinishedEntries}>🗑️ Usuń nieukończoną pracę</button>
         </div>
       ) : (
         <div className="add-task">
@@ -484,15 +485,14 @@ export default function EarningsPanel({
             <span>Cykliczne (co tydzień)</span>
           </label>
           {isRecurring ? (
-            <>
-              <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))}>
-                {WEEKDAYS_LONG.map((day, idx) => (
-                  <option key={day} value={idx}>{day}</option>
-                ))}
-              </select>
-              <input type="date" placeholder="Data zakończenia (opcjonalnie)" value={endDate} onChange={(e) => setEndDate(e.target.value)} />
-            </>
-          ) : null}
+            <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))}>
+              {WEEKDAYS_LONG.map((day, idx) => (
+                <option key={day} value={idx}>{day}</option>
+              ))}
+            </select>
+          ) : (
+            <DatePicker value={selectedStr} onChange={() => {}} label="Data" />
+          )}
           
           <div className="row">
             <button type="button" className="add-task-btn" onClick={addEntry}>Zapisz wpis</button>

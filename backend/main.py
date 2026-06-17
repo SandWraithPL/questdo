@@ -1735,12 +1735,13 @@ def update_task(task_id: int, task_update: TaskUpdate,
                 task.exp_timing = exp_timing
                 level_ups.extend(record_level_ups(current_user, old_exp, db))
 
+                # Seria (streak) zwiększa się TYLKO za questy (nie wydarzenia)
                 today = date.today()
                 if current_user.last_streak_date != today:
                     if current_user.last_streak_date == today - timedelta(days=1):
                         current_user.streak += 1
-                    else:
-                        # Przerwa więcej niż jednego dnia - zaczynamy od nowa
+                    elif current_user.last_streak_date is None or current_user.last_streak_date < today - timedelta(days=1):
+                        # Przerwa więcej niż jednego dnia - reset do 0, potem +1
                         current_user.streak = 1
                     current_user.last_streak_date = today
 
@@ -2625,10 +2626,24 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
         if entry.end_date is not None:
             raise HTTPException(status_code=400, detail="Data zakończenia tylko dla cyklicznych wpisów")
     
+    # Sprawdź czy praca jest w przeszłości - jeśli tak, oznacz jako ukończoną
+    work_date = parse_due_date(entry.work_date)
+    today = date.today()
+    now = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=2)))  # Warsaw timezone
+    now_time = f"{now.hour:02d}:{now.minute:02d}"
+    
+    auto_complete = False
+    if work_date < today:
+        # Praca w przeszłości - automatycznie ukończona
+        auto_complete = True
+    elif work_date == today and entry.end_time <= now_time:
+        # Praca na dziś, ale już skończona według czasu
+        auto_complete = True
+    
     enc = lm.encrypt_work_fields(entry.hourly_rate, entry.notes)
     row = models.WorkEntry(
         owner_id=current_user.id,
-        work_date=parse_due_date(entry.work_date),
+        work_date=work_date,
         start_time=entry.start_time,
         end_time=entry.end_time,
         hourly_rate=enc["hourly_rate"],
@@ -2638,10 +2653,29 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
         is_recurring=bool(entry.is_recurring),
         day_of_week=entry.day_of_week if entry.is_recurring else None,
         end_date=date.fromisoformat(entry.end_date) if entry.end_date and entry.is_recurring else None,
+        completed=auto_complete,
     )
     db.add(row)
     db.commit()
     db.refresh(row)
+    
+    # Jeśli auto-ukończono, zaktualizuj podsumowanie użytkownika
+    if auto_complete:
+        from sqlalchemy import func
+        # Oblicz netto dla tego wpisu
+        hours = lm.hours_between(entry.start_time, entry.end_time)
+        gross = hours * entry.hourly_rate
+        tax = 0.0
+        if row.tax_enabled:
+            tax = gross * (row.tax_percent / 100.0)
+        net = gross - tax
+        
+        # Dodaj do eksp i podsumowania
+        current_user.exp += 0  # Praca nie daje EXP
+        current_user.total_earned = (current_user.total_earned or 0) + net
+        
+        db.commit()
+    
     return lm.work_to_dict(row)
 
 
@@ -2713,6 +2747,23 @@ def delete_work(entry_id: int, current_user: models.User = Depends(get_current_u
     ).first()
     if not row:
         raise HTTPException(status_code=404, detail="Nie znaleziono wpisu pracy")
+    
+    # Jeśli praca jest ukończona, odejmij jej netto od podsumowania
+    if row.completed:
+        # Oblicz netto dla tego wpisu
+        try:
+            hours = lm.hours_between(row.start_time, row.end_time)
+            gross = hours * float(decrypt_field(row.hourly_rate))
+            tax = 0.0
+            if row.tax_enabled:
+                tax = gross * (row.tax_percent / 100.0)
+            net = gross - tax
+            
+            # Odejmij od total_earned
+            current_user.total_earned = max(0, (current_user.total_earned or 0) - net)
+        except Exception as e:
+            print(f"[delete_work] Error calculating net: {e}")
+    
     db.delete(row)
     db.commit()
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
