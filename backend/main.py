@@ -4249,6 +4249,14 @@ def reset_all_progress(current_user: models.User = Depends(get_current_admin_use
     }
 
 
+@app.get("/health")
+async def health_check():
+    return {"status": "ok", "database": "connected"}
+
+@app.get("/api/health")
+async def api_health_check():
+    return {"status": "ok", "database": "connected"}
+
 if __name__ == "__main__":
     import os
     import uvicorn
