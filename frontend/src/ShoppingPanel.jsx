@@ -156,16 +156,24 @@ export default function ShoppingPanel({
     }
   };
 
+  // Initial load when component mounts
+  useEffect(() => {
+    if (selectedMode === "family" && familyId) {
+      loadShoppingItems();
+    } else if (selectedMode === "individual") {
+      loadShoppingItems();
+    }
+  }, []);
+
   useEffect(() => {
     loadSummary();
   }, [familyId]);
 
   useEffect(() => {
-    loadShoppingItems();
-  }, [familyId]);
-
-  useEffect(() => {
+    // Load shopping items when familyId or selectedMode changes
     if (selectedMode === "family" && familyId) {
+      loadShoppingItems();
+    } else if (selectedMode === "individual") {
       loadShoppingItems();
     }
   }, [familyId, selectedMode]);

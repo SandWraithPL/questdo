@@ -51,6 +51,17 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     loadInvitations();
   }, []);
 
+  // Ensure selectedFamily is set when families are loaded (fixes F5 refresh issue)
+  useEffect(() => {
+    if (families.length > 0 && !selectedFamily) {
+      const firstFamily = families[0];
+      setSelectedFamily(firstFamily);
+      if (onFamilyChange) {
+        onFamilyChange(firstFamily.id);
+      }
+    }
+  }, [families, selectedFamily, onFamilyChange]);
+
   // Poll for new invitations every 30 seconds
   useEffect(() => {
     const interval = setInterval(() => {
@@ -258,7 +269,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
                     <span className="member-role">
                       {member.role === "admin" ? "👑" : "👤"}
                     </span>
-                    {selectedFamily.role === "admin" && member.id !== currentUserId && (
+                    {selectedFamily.role === "admin" && currentUserId && member.id !== currentUserId && (
                       <button 
                         type="button" 
                         className="icon-btn delete" 
