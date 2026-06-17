@@ -2388,6 +2388,7 @@ export default function App() {
           enqueueRequest={enqueueRequest}
           freeDays={freeDays}
           setFreeDays={setFreeDays}
+          recurringEvents={recurringEvents}
         />
       )}
 
@@ -2420,6 +2421,7 @@ export default function App() {
           enqueueRequest={enqueueRequest}
           freeDays={freeDays}
           setFreeDays={setFreeDays}
+          recurringEvents={recurringEvents}
         />
       )}
 

@@ -4,6 +4,61 @@ import { useState } from "react";
 const WEEKDAYS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
 const WEEKDAYS_LONG = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"];
 
+const EVENT_CATEGORIES = [
+  { value: "birthday", emoji: "🎂", label: "Urodziny" },
+  { value: "anniversary", emoji: "💍", label: "Rocznica" },
+  { value: "holiday", emoji: "🎉", label: "Święto" },
+  { value: "reminder", emoji: "🔔", label: "Przypomnienie" },
+];
+
+function getEventCategoryEmoji(cat) {
+  return EVENT_CATEGORIES.find((c) => c.value === cat)?.emoji || "📅";
+}
+
+function recurringEventOccursOn(event, dateStr) {
+  if (!event.interval_type || !event.start_date) return false;
+  
+  const targetDate = new Date(`${dateStr}T12:00:00`);
+  const start = new Date(`${event.start_date}T12:00:00`);
+  
+  if (targetDate < start) return false;
+  if (event.end_date) {
+    const endDate = new Date(`${event.end_date}T12:00:00`);
+    if (targetDate > endDate) return false;
+  }
+  
+  const iv = event.interval_value || 1;
+  if (event.interval_type === "daily") {
+    const diffDays = Math.floor((targetDate - start) / (1000 * 60 * 60 * 24));
+    return diffDays % iv === 0;
+  }
+  if (event.interval_type === "weekly") {
+    const diffDays = Math.floor((targetDate - start) / (1000 * 60 * 60 * 24));
+    return diffDays % (iv * 7) === 0;
+  }
+  if (event.interval_type === "monthly") {
+    if (targetDate.getDate() !== start.getDate()) return false;
+    const months = (targetDate.getFullYear() - start.getFullYear()) * 12 + (targetDate.getMonth() - start.getMonth());
+    return months >= 0 && months % iv === 0;
+  }
+  if (event.interval_type === "yearly") {
+    if (targetDate.getMonth() !== start.getMonth() || targetDate.getDate() !== start.getDate()) return false;
+    const years = targetDate.getFullYear() - start.getFullYear();
+    return years >= 0 && years % iv === 0;
+  }
+  return false;
+}
+
+function getRecurringCategoriesForDate(recurringEvents, dateStr) {
+  const categories = [];
+  for (const event of recurringEvents) {
+    if (recurringEventOccursOn(event, dateStr)) {
+      categories.push(event.category);
+    }
+  }
+  return categories;
+}
+
 function toDateStr(d) {
   if (!d) return new Date().toISOString().slice(0, 10);
   if (typeof d === "string") return d.slice(0, 10);
@@ -34,6 +89,7 @@ export default function SharedCalendar({
   collapsedStorageKey = "questdo-shared-calendar-collapsed",
   defaultCollapsed = true,
   freeDays = [],
+  recurringEvents = [],
 }) {
   const [cursor, setCursor] = useState(() => (selectedDate instanceof Date ? selectedDate : new Date()));
   const [view, setView] = useState("month");
@@ -111,12 +167,21 @@ export default function SharedCalendar({
       const isSelected = selectedStr === dateStr;
       const isToday = toDateStr(new Date()) === dateStr;
       const freeDayType = getFreeDayType(dateStr);
+      const recurringCategories = getRecurringCategoriesForDate(recurringEvents, dateStr);
       days.push(
         <button key={dateStr} type="button" className={`calendar-day ${isSelected ? "selected" : ""} ${isToday ? "today" : ""} ${freeDayType ? `free-day free-day-${freeDayType}` : ""}`} onClick={() => selectDay(dateStr)}>
           <span className="day-number">{day}</span>
           {freeDayType === "holiday" && <span className="free-day-icon">🎉</span>}
           {freeDayType === "deans_day" && <span className="free-day-icon">🎓</span>}
           {freeDayType === "rector_day" && <span className="free-day-icon">🏛️</span>}
+          {recurringCategories.length > 0 && (
+            <div className="day-event-icons">
+              {recurringCategories.slice(0, 3).map((cat, idx) => (
+                <span key={idx} className="event-icon">{getEventCategoryEmoji(cat)}</span>
+              ))}
+              {recurringCategories.length > 3 && <span className="event-icon-more">+</span>}
+            </div>
+          )}
           {stats.total > 0 && <span className={`day-badge ${stats.done === stats.total ? "done" : ""}`}>{stats.done}/{stats.total}</span>}
         </button>
       );
@@ -138,6 +203,7 @@ export default function SharedCalendar({
       const isToday = dateStr === toDateStr(new Date());
       const isSelected = selectedStr === dateStr;
       const freeDayType = getFreeDayType(dateStr);
+      const recurringCategories = getRecurringCategoriesForDate(recurringEvents, dateStr);
       days.push(
         <button key={dateStr} type="button" className={`week-day ${isSelected ? "week-day-selected" : ""} ${freeDayType ? `week-day-free week-day-free-${freeDayType}` : ""}`} onClick={() => selectDay(dateStr)}>
           <div className={`week-day-header ${isToday ? "today" : ""}`}>
@@ -146,7 +212,17 @@ export default function SharedCalendar({
             {freeDayType === "holiday" && <span className="week-free-icon">🎉</span>}
             {freeDayType === "deans_day" && <span className="week-free-icon">🎓</span>}
             {freeDayType === "rector_day" && <span className="week-free-icon">🏛️</span>}
-            <em>{stats.total ? `${stats.done}/${stats.total}` : "0"}</em>
+            <div className="week-day-stats">
+              {recurringCategories.length > 0 && (
+                <div className="week-event-icons">
+                  {recurringCategories.slice(0, 2).map((cat, idx) => (
+                    <span key={idx} className="event-icon">{getEventCategoryEmoji(cat)}</span>
+                  ))}
+                  {recurringCategories.length > 2 && <span className="event-icon-more">+</span>}
+                </div>
+              )}
+              <em>{stats.total ? `${stats.done}/${stats.total}` : "0"}</em>
+            </div>
           </div>
           <div className="week-day-tasks">
             {dayItems.length === 0 && <span className="week-empty">{emptyLabel}</span>}
@@ -167,6 +243,7 @@ export default function SharedCalendar({
   const renderDayView = () => {
     const dayItems = getItemsForDate(selectedStr);
     const freeDayType = getFreeDayType(selectedStr);
+    const recurringCategories = getRecurringCategoriesForDate(recurringEvents, selectedStr);
     return (
       <div className="day-view">
         <h3>
@@ -174,6 +251,13 @@ export default function SharedCalendar({
           {freeDayType === "holiday" && <span className="day-free-indicator"> 🎉 Święto</span>}
           {freeDayType === "deans_day" && <span className="day-free-indicator"> 🎓 Dzień dziekański</span>}
           {freeDayType === "rector_day" && <span className="day-free-indicator"> 🏛️ Dzień rektorski</span>}
+          {recurringCategories.length > 0 && (
+            <span className="day-free-indicator">
+              {recurringCategories.map((cat, idx) => (
+                <span key={idx}>{getEventCategoryEmoji(cat)}</span>
+              ))}
+            </span>
+          )}
         </h3>
         {dayItems.length === 0 && <p className="empty">{emptyLabel}</p>}
         {dayItems.map((item) => (

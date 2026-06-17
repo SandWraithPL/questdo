@@ -5,6 +5,133 @@ import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
 import { applyUserFromResponse } from "./helpers";
 
+// Komponent FreeDayManager - zarządzanie dniami wolnymi
+function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onToast, enqueueRequest }) {
+  const [showFreeDayManager, setShowFreeDayManager] = useState(false);
+  const [freeDayType, setFreeDayType] = useState("holiday");
+  const [freeDayName, setFreeDayName] = useState("");
+
+  const selectedStr = selectedDate instanceof Date
+    ? selectedDate.toISOString().slice(0, 10)
+    : String(selectedDate).slice(0, 10);
+
+  const handleCreateFreeDay = () => {
+    if (enqueueRequest) {
+      enqueueRequest(async () => {
+        try {
+          const res = await axios.post(`${api}/free-days`, {
+            date: selectedStr,
+            day_type: freeDayType,
+            notes: freeDayName
+          }, { headers });
+          if (setFreeDays) {
+            setFreeDays(prev => [...prev, res.data]);
+          }
+          setFreeDayName("");
+          setShowFreeDayManager(false);
+          onToast("✅ Oznaczono dzień jako wolny");
+        } catch (err) {
+          onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
+        }
+      });
+    } else {
+      axios.post(`${api}/free-days`, {
+        date: selectedStr,
+        day_type: freeDayType,
+        notes: freeDayName
+      }, { headers }).then(res => {
+        if (setFreeDays) {
+          setFreeDays(prev => [...prev, res.data]);
+        }
+        setFreeDayName("");
+        setShowFreeDayManager(false);
+        onToast("✅ Oznaczono dzień jako wolny");
+      }).catch(err => {
+        onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
+      });
+    }
+  };
+
+  const handleDeleteFreeDay = () => {
+    const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
+    if (!existingFreeDay) return;
+
+    if (enqueueRequest) {
+      enqueueRequest(async () => {
+        try {
+          await axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers });
+          if (setFreeDays) {
+            setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
+          }
+          onToast("🗑️ Usunięto oznaczenie dnia wolnego");
+        } catch (err) {
+          onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
+        }
+      });
+    } else {
+      axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers }).then(() => {
+        if (setFreeDays) {
+          setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
+        }
+        onToast("🗑️ Usunięto oznaczenie dnia wolnego");
+      }).catch(err => {
+        onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
+      });
+    }
+  };
+
+  const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
+
+  return (
+    <>
+      <button
+        type="button"
+        className="icon-btn free-day-btn"
+        onClick={() => setShowFreeDayManager(!showFreeDayManager)}
+        title="Zarządzaj dniami wolnymi"
+        aria-label="Zarządzaj dniami wolnymi"
+      >
+        🎓
+      </button>
+      {showFreeDayManager && (
+        <div className="add-task free-day-manager">
+          <h3>🎓 Zarządzaj dniami wolnymi</h3>
+          {existingFreeDay ? (
+            <div>
+              <p>Ten dzień jest oznaczony jako: <strong>
+                {existingFreeDay.day_type === "holiday" ? "Święto" :
+                 existingFreeDay.day_type === "deans_day" ? "Dzień dziekański" : "Dzień rektorski"}
+              </strong>
+              {existingFreeDay.notes && <span> — {existingFreeDay.notes}</span>}</p>
+              <div className="row" style={{ marginTop: 12, gap: "8px" }}>
+                <button type="button" className="danger-btn" onClick={handleDeleteFreeDay}>🗑️ Usuń oznaczenie</button>
+                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <select value={freeDayType} onChange={(e) => setFreeDayType(e.target.value)}>
+                <option value="holiday">🎉 Święto</option>
+                <option value="deans_day">🎓 Dzień dziekański</option>
+                <option value="rector_day">🏛️ Dzień rektorski</option>
+              </select>
+              <input
+                placeholder="Nazwa święta (opcjonalne)"
+                value={freeDayName}
+                onChange={(e) => setFreeDayName(e.target.value)}
+              />
+              <div className="row" style={{ marginTop: 12 }}>
+                <button type="button" className="add-task-btn" onClick={handleCreateFreeDay}>Oznacz dzień</button>
+                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+    </>
+  );
+}
+
 // Funkcja formatująca pieniądze z przecinkiem i 2 miejscami po przecinku
 function formatMoney(value) {
   const num = Number(value || 0);
@@ -46,25 +173,6 @@ function parseTimeMinutes(timeStr) {
   return h * 60 + m;
 }
 
-function matchWorkToDate(entry, dateStr, freeDays = []) {
-  const targetDate = new Date(dateStr);
-  const isFreeDay = freeDays.some(fd => fd.date === dateStr);
-  
-  if (entry.is_recurring) {
-    if (isFreeDay) return false;
-    if (entry.end_date) {
-      const endDate = new Date(entry.end_date);
-      if (targetDate > endDate) return false;
-    }
-    if (entry.start_date) {
-      const startDate = new Date(entry.start_date);
-      if (targetDate < startDate) return false;
-    }
-    return entry.day_of_week === weekdayIndex(dateStr);
-  }
-  return entry.work_date === dateStr;
-}
-
 export default function EarningsPanel({
   api,
   headers,
@@ -79,6 +187,7 @@ export default function EarningsPanel({
   enqueueRequest,
   freeDays = [],
   setFreeDays,
+  recurringEvents = [],
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [startTime, setStartTime] = useState("08:00");
@@ -111,8 +220,8 @@ export default function EarningsPanel({
     : String(selectedDate).slice(0, 10);
 
   const dayEntries = useMemo(
-    () => entries.filter((e) => matchWorkToDate(e, selectedStr, freeDays)).sort((a, b) => a.start_time.localeCompare(b.start_time)),
-    [entries, selectedStr, freeDays],
+    () => entries.filter((e) => e.work_date === selectedStr).sort((a, b) => a.start_time.localeCompare(b.start_time)),
+    [entries, selectedStr],
   );
 
   useEffect(() => {
@@ -126,7 +235,7 @@ export default function EarningsPanel({
       const nowMinutes = getWarsawMinutesNow();
       const dueEntries = entries.filter((entry) => {
         if (entry.completed || autoCompletedIds.current.has(entry.id)) return false;
-        if (!matchWorkToDate(entry, todayStr, freeDays)) return false;
+        if (entry.work_date !== todayStr) return false;
         return nowMinutes >= parseTimeMinutes(entry.end_time);
       });
 
@@ -149,7 +258,7 @@ export default function EarningsPanel({
     checkAutoComplete();
     const interval = window.setInterval(checkAutoComplete, 30000);
     return () => window.clearInterval(interval);
-  }, [entries, freeDays, api, headers, onToast, onUserUpdate]);
+  }, [entries, api, headers, onToast, onUserUpdate]);
 
   const loadDefaultHourlyRate = async () => {
     try {
@@ -359,7 +468,7 @@ export default function EarningsPanel({
         items={entries}
         selectedDate={selectedDate}
         onDateSelect={onDateSelect}
-        matchItemToDate={(item, dateStr) => matchWorkToDate(item, dateStr, freeDays)}
+        matchItemToDate={(item, dateStr) => item.work_date === dateStr}
         getItemLabel={(item) => `${item.start_time}–${item.end_time} · ${formatMoney(item.net)}`}
         isItemCompleted={(item) => item.completed}
         renderItemMeta={(item) => (
@@ -371,7 +480,6 @@ export default function EarningsPanel({
             {item.completed && <span className="badge exp">Potwierdzone</span>}
           </div>
         )}
-        onItemToggle={() => {}}
         onItemDelete={deleteEntry}
         sectionTitle="💰 Kalendarz zarobków"
         emptyLabel="Brak pracy"
@@ -379,7 +487,19 @@ export default function EarningsPanel({
         collapsedStorageKey="questdo-earnings-calendar-collapsed"
         defaultCollapsed={false}
         freeDays={freeDays}
+        recurringEvents={recurringEvents}
       />
+      {setFreeDays && (
+        <FreeDayManager
+          freeDays={freeDays}
+          setFreeDays={setFreeDays}
+          selectedDate={selectedDate}
+          api={api}
+          headers={headers}
+          onToast={onToast}
+          enqueueRequest={enqueueRequest}
+        />
+      )}
 
       {/* Lista wpisów */}
       <div className="day-tasks-panel">

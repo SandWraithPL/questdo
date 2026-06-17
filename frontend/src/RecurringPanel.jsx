@@ -140,6 +140,45 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
     }
   };
 
+  const deleteAllRecurringEvents = async () => {
+    const count = recurringEvents.length;
+    if (count === 0) {
+      onToast("Brak wydarzeń do usunięcia");
+      return;
+    }
+    if (!window.confirm(`Czy na pewno chcesz usunąć WSZYSTKIE ${count} wydarzeń cyklicznych i wszystkie ich instancje?`)) {
+      return;
+    }
+    
+    try {
+      // Get all tasks of type event
+      const tasksRes = await axios.get(`${api}/tasks`, { headers });
+      const allEvents = tasksRes.data.filter(task => task.task_type === "event");
+      
+      // For each recurring event, delete its instances
+      for (const event of recurringEvents) {
+        const tasksToDelete = allEvents.filter(task => 
+          task.title === event.title && 
+          task.event_category === event.category
+        );
+        for (const task of tasksToDelete) {
+          await axios.delete(`${api}/tasks/${task.id}`, { headers });
+        }
+      }
+      
+      // Delete all recurring event definitions
+      for (const event of recurringEvents) {
+        await axios.delete(`${api}/recurring-events/${event.id}`, { headers });
+      }
+      
+      onToast(`🗑️ Usunięto wszystkie ${count} wydarzeń cyklicznych`);
+      loadRecurringEvents();
+      onRefresh?.();
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd usuwania");
+    }
+  };
+
   const startEdit = (event) => {
     setEditingId(event.id);
     setEditTitle(event.title);
@@ -157,6 +196,23 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
       return;
     }
     try {
+      // Find the old event to get its original title and category
+      const oldEvent = recurringEvents.find(e => e.id === editingId);
+      
+      // Delete all old instances with matching title and category
+      if (oldEvent) {
+        const tasksRes = await axios.get(`${api}/tasks`, { headers });
+        const tasksToDelete = tasksRes.data.filter(task => 
+          task.task_type === "event" && 
+          task.title === oldEvent.title && 
+          task.event_category === oldEvent.category
+        );
+        for (const task of tasksToDelete) {
+          await axios.delete(`${api}/tasks/${task.id}`, { headers });
+        }
+      }
+      
+      // Update the recurring event definition
       await axios.patch(`${api}/recurring-events/${editingId}`, {
         title: editTitle,
         category: editCategory,
@@ -187,6 +243,13 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
       <div className="day-tasks-panel">
         <div className="tasks-header">
           <h3>🔄 Wydarzenia cykliczne</h3>
+          <button 
+            type="button" 
+            className="danger-btn danger-btn--inline" 
+            onClick={deleteAllRecurringEvents}
+          >
+            🗑️ Usuń wszystkie
+          </button>
         </div>
         <p className="panel-hint">Dodaj wydarzenia powtarzające się w regularnych odstępach (urodziny, rocznice, przypomnienia).</p>
       </div>

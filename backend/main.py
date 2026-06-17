@@ -371,10 +371,6 @@ def send_push_to_user(db: Session, user_id: int, body: str, url: str = "/") -> i
     return sent
 
 
-def work_matches_date(entry: models.WorkEntry, target_date: date) -> bool:
-    return entry.work_date == target_date
-
-
 def process_work_auto_completion():
     db = next(get_db())
     try:
@@ -389,7 +385,7 @@ def process_work_auto_completion():
         changed = False
         completed_count = 0
         for entry in entries:
-            if not work_matches_date(entry, today):
+            if entry.work_date != today:
                 continue
             try:
                 eh, em = lm.parse_time_hm(entry.end_time)
@@ -410,16 +406,6 @@ def process_work_auto_completion():
         db.close()
 
 
-def schedule_matches_date(entry: models.ScheduleEntry, target_date: date) -> bool:
-    if entry.is_recurring:
-        if entry.start_date and target_date < entry.start_date:
-            return False
-        if entry.end_date and target_date > entry.end_date:
-            return False
-        return entry.day_of_week == target_date.weekday()
-    return entry.entry_date == target_date
-
-
 def process_schedule_auto_completion():
     db = next(get_db())
     try:
@@ -434,7 +420,7 @@ def process_schedule_auto_completion():
         changed = False
         completed_count = 0
         for entry in entries:
-            if not schedule_matches_date(entry, today):
+            if entry.entry_date != today:
                 continue
             try:
                 eh, em = lm.parse_time_hm(entry.end_time)
@@ -2405,29 +2391,96 @@ def list_schedule(current_user: models.User = Depends(get_current_user), db: Ses
 def create_schedule(entry: ScheduleCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     validate_schedule_payload(entry, is_create=True)
     enc = lm.encrypt_schedule_fields(entry.title, entry.location, entry.lecturer)
-    entry_date = parse_due_date(entry.entry_date) if entry.entry_date else None
     if entry.is_recurring and entry.day_of_week is not None and not 0 <= entry.day_of_week <= 6:
         raise HTTPException(status_code=400, detail="Dzień tygodnia musi być 0-6")
     
-    # Auto-complete for past dates
-    auto_complete = False
-    if not entry.is_recurring and entry_date:
+    # Jeśli is_recurring = true, generuj osobne instancje
+    if entry.is_recurring:
+        if not entry.start_date:
+            raise HTTPException(status_code=400, detail="Data rozpoczęcia jest wymagana dla zajęć cyklicznych")
+        
+        start_date = parse_due_date(entry.start_date)
         today = date.today()
-        if entry_date < today:
-            auto_complete = True
+        
+        # Określ datę końcową (jeśli istnieje)
+        end_date_obj = None
+        if entry.end_date:
+            try:
+                end_date_obj = parse_due_date(entry.end_date)
+            except:
+                raise HTTPException(status_code=400, detail="Nieprawidłowa data zakończenia")
+        
+        created_entries = []
+        i = 0
+        while True:
+            current_date = start_date + timedelta(days=i * 7)  # co tydzień
+            
+            # Sprawdź czy nie przekroczyliśmy daty zakończenia
+            if end_date_obj and current_date > end_date_obj:
+                break
+            
+            # Jeśli NIE MA daty zakończenia - generuj do 10 lat (520 tygodni) do przodu
+            if not end_date_obj and i > 520:
+                break
+            
+            # Sprawdź czy zajęcia są w przeszłości - jeśli tak, oznacz jako ukończone
+            auto_complete = False
+            if current_date < today:
+                auto_complete = True
+            elif current_date == today:
+                now = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=2)))
+                now_time = f"{now.hour:02d}:{now.minute:02d}"
+                if entry.end_time <= now_time:
+                    auto_complete = True
+            
+            row = models.ScheduleEntry(
+                owner_id=current_user.id,
+                title=enc["title"],
+                location=enc["location"],
+                lecturer=enc["lecturer"],
+                entry_date=current_date,
+                is_recurring=False,  # to już konkretna instancja
+                start_time=entry.start_time,
+                end_time=entry.end_time,
+                day_of_week=None,
+                completed=auto_complete,
+                start_date=None,
+                end_date=None,
+            )
+            db.add(row)
+            created_entries.append(row)
+            i += 1
+        
+        db.commit()
+        for row in created_entries:
+            db.refresh(row)
+        
+        return [lm.schedule_to_dict(row) for row in created_entries]
+    
+    # Normalny wpis (niecykliczny)
+    entry_date = parse_due_date(entry.entry_date) if entry.entry_date else None
+    today = date.today()
+    now = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=2)))
+    now_time = f"{now.hour:02d}:{now.minute:02d}"
+    
+    auto_complete = False
+    if entry_date and entry_date < today:
+        auto_complete = True
+    elif entry_date and entry_date == today and entry.end_time <= now_time:
+        auto_complete = True
     
     row = models.ScheduleEntry(
         owner_id=current_user.id,
         title=enc["title"],
         location=enc["location"],
         lecturer=enc["lecturer"],
-        day_of_week=entry.day_of_week if entry.is_recurring else None,
-        entry_date=None if entry.is_recurring else entry_date,
-        is_recurring=entry.is_recurring,
+        day_of_week=None,
+        entry_date=entry_date,
+        is_recurring=False,
         start_time=entry.start_time,
         end_time=entry.end_time,
-        start_date=parse_due_date(entry.start_date) if entry.start_date else None,
-        end_date=parse_due_date(entry.end_date) if entry.end_date else None,
+        start_date=None,
+        end_date=None,
         completed=auto_complete,
     )
     db.add(row)
