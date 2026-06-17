@@ -257,7 +257,7 @@ export default function EarningsPanel({
     };
 
     checkAutoComplete();
-    const interval = window.setInterval(checkAutoComplete, 30000);
+    const interval = window.setInterval(checkAutoComplete, 60000);
     return () => window.clearInterval(interval);
   }, [entries, api, headers, onToast, onUserUpdate]);
 

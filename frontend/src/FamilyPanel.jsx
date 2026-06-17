@@ -51,11 +51,11 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     }
   }, [families, selectedFamily, onFamilyChange]);
 
-  // Poll for new invitations every 30 seconds
+  // Poll for new invitations every 60 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       loadInvitations();
-    }, 30000);
+    }, 60000);
     return () => clearInterval(interval);
   }, []);
 

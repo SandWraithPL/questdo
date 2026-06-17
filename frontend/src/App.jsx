@@ -13,6 +13,7 @@ import RecurringPanel from "./RecurringPanel";
 import FamilyInvitationsBanner from "./FamilyInvitationsBanner";
 import { getRecurringCategoriesForDate, toVirtualRecurringTasks } from "./recurringHelpers";
 import { useEditItem } from "./hooks/useEditItem";
+import { useWebSocket } from "./hooks/useWebSocket";
 
 const API = "https://questdo-backend-https.azurewebsites.net";
 
@@ -1166,7 +1167,7 @@ function LeaderboardPanel({ currentUser }) {
     if (!open) return;
     const interval = setInterval(() => {
       fetchAllRankings();
-    }, 30000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [open]);
   
@@ -1482,7 +1483,7 @@ function AdminPanel({ isOpen, onClose, headers, onRefreshAppData, onShowToast })
     if (!isOpen) return;
     const interval = setInterval(() => {
       fetchData();
-    }, 30000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [isOpen]);
 
@@ -1740,6 +1741,39 @@ export default function App() {
   const isProcessingQueue = useRef(false);
 
   const headers = { Authorization: `Bearer ${token}` };
+  const { isConnected } = useWebSocket();
+
+  useEffect(() => {
+    if (!isConnected) return;
+    
+    const handleMessage = (event) => {
+      const data = JSON.parse(event.data);
+      console.log('[WS] Received:', data);
+      
+      switch (data.type) {
+        case 'task_updated':
+          fetchData();
+          break;
+        case 'shopping_updated':
+          loadShoppingItems();
+          if (familyId) loadSummary();
+          break;
+        case 'schedule_updated':
+          loadSchedule();
+          break;
+        case 'work_updated':
+          loadWork();
+          break;
+        default:
+          break
+      }
+    };
+
+    const ws = new WebSocket('wss://questdo-backend-https.azurewebsites.net/ws');
+    ws.onmessage = handleMessage;
+    
+    return () => ws.close();
+  }, [isConnected, familyId]);
 
   const enqueueRequest = async (requestFn) => {
     apiQueue.current.push({ fn: requestFn });
@@ -1954,7 +1988,7 @@ export default function App() {
   useEffect(() => {
     const interval = setInterval(() => {
       loadFamilyInvitations();
-    }, 30000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [token]);
 

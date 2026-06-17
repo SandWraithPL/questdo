@@ -17,11 +17,11 @@ export default function FamilyInvitationsBanner({ api, headers, onToast, onFamil
     loadInvitations();
   }, [api, headers]);
 
-  // Poll for new invitations every 30 seconds
+  // Poll for new invitations every 60 seconds
   useEffect(() => {
     const interval = setInterval(() => {
       loadInvitations();
-    }, 30000);
+    }, 60000);
     return () => clearInterval(interval);
   }, [api, headers]);
 

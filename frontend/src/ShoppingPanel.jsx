@@ -212,7 +212,7 @@ export default function ShoppingPanel({
     const interval = setInterval(() => {
       loadShoppingItems();
       loadSummary();
-    }, 5000);
+    }, 10000); // Changed from 5000ms to 10000ms for better performance
 
     return () => clearInterval(interval);
   }, [familyId]);

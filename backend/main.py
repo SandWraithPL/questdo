@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Depends, HTTPException, status, Request
+from fastapi import FastAPI, Depends, HTTPException, status, Request, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
@@ -24,6 +24,7 @@ import json
 import threading
 from zoneinfo import ZoneInfo
 import logging
+import asyncio
 
 try:
     from pywebpush import webpush, WebPushException
@@ -48,6 +49,27 @@ REMINDER_TZ = ZoneInfo("Europe/Warsaw")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "")
 VAPID_PUBLIC_KEY = os.getenv("VAPID_PUBLIC_KEY", "")
 VAPID_CONTACT = os.getenv("VAPID_CONTACT", "mailto:questdo@example.com")
+
+class ConnectionManager:
+    def __init__(self):
+        self.active_connections: list[WebSocket] = []
+
+    async def connect(self, websocket: WebSocket):
+        await websocket.accept()
+        self.active_connections.append(websocket)
+
+    def disconnect(self, websocket: WebSocket):
+        if websocket in self.active_connections:
+            self.active_connections.remove(websocket)
+
+    async def broadcast(self, message: dict):
+        for connection in self.active_connections:
+            try:
+                await connection.send_json(message)
+            except:
+                pass
+
+manager = ConnectionManager()
 
 def create_tables():
     for i in range(10):
@@ -560,6 +582,16 @@ def startup_event():
     print("[scheduler] Work & Schedule auto-complete + push reminders started (Europe/Warsaw)")
     if not _push_configured():
         print("[push] Web Push disabled — set VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY")
+    print("[websocket] WebSocket endpoint ready at /ws")
+
+@app.websocket("/ws")
+async def websocket_endpoint(websocket: WebSocket):
+    await manager.connect(websocket)
+    try:
+        while True:
+            await websocket.receive_text()  # Keep connection alive
+    except WebSocketDisconnect:
+        manager.disconnect(websocket)
 
 app.add_middleware(
     CORSMiddleware,
@@ -1530,7 +1562,12 @@ def delete_account(
     return {"message": "Konto zostało usunięte"}
 
 @app.get("/tasks")
-def get_tasks(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def get_tasks(
+    page: int = 1,
+    limit: int = 50,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db)
+):
     process_delayed_task_rewards(current_user, db)
     
     process_work_auto_completion()
@@ -1540,8 +1577,17 @@ def get_tasks(current_user: models.User = Depends(get_current_user), db: Session
         generate_recurring_event_instances(current_user, db, target_date)
         generate_recurring_panel_instances(current_user, db, target_date)
     
-    tasks = db.query(models.Task).filter(models.Task.owner_id == current_user.id).all()
-    return [task_to_dict(t) for t in tasks]
+    offset = (page - 1) * limit
+    tasks = db.query(models.Task).filter(
+        models.Task.owner_id == current_user.id
+    ).offset(offset).limit(limit).all()
+    total = db.query(models.Task).filter(models.Task.owner_id == current_user.id).count()
+    return {
+        "data": [task_to_dict(t) for t in tasks],
+        "total": total,
+        "page": page,
+        "limit": limit,
+    }
 
 @app.get("/tasks/by-date/{date_str}")
 def get_tasks_by_date(date_str: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -1551,6 +1597,15 @@ def get_tasks_by_date(date_str: str, current_user: models.User = Depends(get_cur
         models.Task.due_date == target_date
     ).all()
     return [task_to_dict(t) for t in tasks]
+
+@app.get("/tasks/stats")
+def get_tasks_stats(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    total = db.query(models.Task).filter(models.Task.owner_id == current_user.id).count()
+    completed = db.query(models.Task).filter(
+        models.Task.owner_id == current_user.id,
+        models.Task.completed == True
+    ).count()
+    return {"total": total, "completed": completed}
 
 @app.get("/calendar-stats/{year_month}")
 def get_calendar_stats(year_month: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -1613,6 +1668,16 @@ def create_task(task: TaskCreate, current_user: models.User = Depends(get_curren
     db.add(new_task)
     db.commit()
     db.refresh(new_task)
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "task_updated",
+            "data": task_to_dict(new_task)
+        }))
+    except:
+        pass
+    
     return {"id": new_task.id, "message": "Task created", "due_date": str(new_task.due_date), "task_type": new_task.task_type}
 
 @app.patch("/tasks/{task_id}")
@@ -1834,6 +1899,16 @@ def update_task(task_id: int, task_update: TaskUpdate,
 
     db.commit()
     db.refresh(task)
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "task_updated",
+            "data": task_to_dict(task)
+        }))
+    except:
+        pass
+    
     daily_bonus, daily_bonus_level_ups = try_award_daily_triple_bonus(current_user, db)
     level_ups.extend(daily_bonus_level_ups)
     if daily_bonus:
@@ -2180,6 +2255,15 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
 
     reconcile_standard_achievements(current_user, db)
     db.commit()
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "task_updated",
+            "data": {"id": task_id, "deleted": True}
+        }))
+    except:
+        pass
 
     history_data = build_history_list(current_user.id, db)
     achievements_payload = build_achievements_payload(current_user, db)
@@ -2521,6 +2605,16 @@ def create_schedule(entry: ScheduleCreate, current_user: models.User = Depends(g
     db.add(row)
     db.commit()
     db.refresh(row)
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "schedule_updated",
+            "data": lm.schedule_to_dict(row)
+        }))
+    except:
+        pass
+    
     return lm.schedule_to_dict(row)
 
 
@@ -2555,6 +2649,16 @@ def update_schedule(entry_id: int, body: ScheduleUpdate, current_user: models.Us
         row.end_date = parse_due_date(body.end_date)
     db.commit()
     db.refresh(row)
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "schedule_updated",
+            "data": lm.schedule_to_dict(row)
+        }))
+    except:
+        pass
+    
     return lm.schedule_to_dict(row)
 
 
@@ -2568,6 +2672,16 @@ def delete_schedule(entry_id: int, current_user: models.User = Depends(get_curre
         raise HTTPException(status_code=404, detail="Nie znaleziono wpisu")
     db.delete(row)
     db.commit()
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "schedule_updated",
+            "data": {"id": entry_id, "deleted": True}
+        }))
+    except:
+        pass
+    
     return {"message": "Usunięto wpis planu"}
 
 
@@ -2637,6 +2751,16 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
     db.commit()
     db.refresh(row)
     print(f"[SHOPPING] Created item with family_id: {row.family_id}")  # ← DODAJ
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "shopping_updated",
+            "data": lm.shopping_to_dict(row)
+        }))
+    except:
+        pass
+    
     return lm.shopping_to_dict(row)
 
 
@@ -2670,6 +2794,16 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
         row.bought = bool(body.bought)
     db.commit()
     db.refresh(row)
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "shopping_updated",
+            "data": lm.shopping_to_dict(row)
+        }))
+    except:
+        pass
+    
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
         "item": lm.shopping_to_dict(row),
@@ -2701,6 +2835,16 @@ def delete_shopping(item_id: int, current_user: models.User = Depends(get_curren
         raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
     db.delete(row)
     db.commit()
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "shopping_updated",
+            "data": {"id": item_id, "deleted": True}
+        }))
+    except:
+        pass
+    
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
         "message": "Usunięto produkt",
@@ -2849,6 +2993,15 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
         for row in created_entries:
             db.refresh(row)
         
+        # Broadcast WebSocket message
+        try:
+            asyncio.run(manager.broadcast({
+                "type": "work_updated",
+                "data": {"entries": [lm.work_to_dict(row) for row in created_entries]}
+            }))
+        except:
+            pass
+        
         # Zaktualizuj podsumowanie użytkownika dla auto-ukończonych wpisów
         total_net = 0.0
         for row in created_entries:
@@ -2896,6 +3049,15 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
     db.add(row)
     db.commit()
     db.refresh(row)
+    
+    # Broadcast WebSocket message
+    try:
+        asyncio.run(manager.broadcast({
+            "type": "work_updated",
+            "data": lm.work_to_dict(row)
+        }))
+    except:
+        pass
     
     # Jeśli auto-ukończono, zaktualizuj podsumowanie użytkownika
     if auto_complete:
