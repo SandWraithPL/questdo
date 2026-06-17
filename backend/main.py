@@ -11,6 +11,7 @@ from typing import Optional, List
 import models
 from database import get_db, engine
 from encryption import encrypt_field, decrypt_field
+import hashlib
 import life_modules as lm
 from sqlalchemy import inspect, text, func
 import daily_quests as dq
@@ -38,6 +39,10 @@ logging.basicConfig(
 logger = logging.getLogger("questdo")
 
 FORBIDDEN_USERNAMES = ["dominik", "knyc", "spust", "obrzydliwe", "sex", "porno"]
+
+def hash_username(username: str) -> str:
+    """Deterministic SHA256 hash for username matching."""
+    return hashlib.sha256(username.lower().encode()).hexdigest()
 
 REMINDER_TZ = ZoneInfo("Europe/Warsaw")
 VAPID_PRIVATE_KEY = os.getenv("VAPID_PRIVATE_KEY", "")
@@ -3692,17 +3697,17 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
         logger.warning(f"[INVITE] User {target_user.username} is already a member of family {family_id}")
         raise HTTPException(status_code=400, detail="Użytkownik jest już członkiem tej rodziny")
     
-    # Use lowercase username for encryption to ensure consistency
-    username_to_encrypt = target_user.username.lower()
-    encrypted_username = encrypt_field(username_to_encrypt)
+    # Use deterministic hash for username matching
+    username_to_hash = target_user.username.lower()
+    hashed_username = hash_username(username_to_hash)
     
-    logger.info(f"[INVITE] Username to encrypt: {username_to_encrypt}")
-    logger.info(f"[INVITE] Encrypted username: {encrypted_username}")
+    logger.info(f"[INVITE] Username to hash: {username_to_hash}")
+    logger.info(f"[INVITE] Hashed username: {hashed_username}")
     
     # Check if there's already a pending invitation
     existing_invitation = db.query(models.FamilyInvitation).filter(
         models.FamilyInvitation.family_id == family_id,
-        models.FamilyInvitation.invited_username == encrypted_username,
+        models.FamilyInvitation.invited_username == hashed_username,
         models.FamilyInvitation.status == "pending"
     ).first()
     if existing_invitation:
@@ -3712,7 +3717,7 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
     invitation = models.FamilyInvitation(
         family_id=family_id,
         invited_by=current_user.id,
-        invited_username=encrypted_username,
+        invited_username=hashed_username,
         status="pending"
     )
     db.add(invitation)
@@ -3730,13 +3735,13 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
 @app.get("/family/invitations")
 def list_family_invitations(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     username_to_check = current_user.username.lower()
-    encrypted_username = encrypt_field(username_to_check)
+    hashed_username = hash_username(username_to_check)
     
     logger.info(f"[INVITATIONS] Checking invitations for user: {current_user.username} (lowercased: {username_to_check})")
-    logger.info(f"[INVITATIONS] Encrypted username: {encrypted_username}")
+    logger.info(f"[INVITATIONS] Hashed username: {hashed_username}")
     
     invitations = db.query(models.FamilyInvitation).filter(
-        models.FamilyInvitation.invited_username == encrypted_username,
+        models.FamilyInvitation.invited_username == hashed_username,
         models.FamilyInvitation.status == "pending"
     ).all()
     
@@ -3761,7 +3766,7 @@ def list_family_invitations(current_user: models.User = Depends(get_current_user
 def accept_family_invitation(invitation_id: int, body: EmptyBody = EmptyBody(), current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     invitation = db.query(models.FamilyInvitation).filter(
         models.FamilyInvitation.id == invitation_id,
-        models.FamilyInvitation.invited_username == encrypt_field(current_user.username.lower()),
+        models.FamilyInvitation.invited_username == hash_username(current_user.username.lower()),
         models.FamilyInvitation.status == "pending"
     ).first()
     
@@ -3806,7 +3811,7 @@ def accept_family_invitation(invitation_id: int, body: EmptyBody = EmptyBody(), 
 def decline_family_invitation(invitation_id: int, body: EmptyBody = EmptyBody(), current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     invitation = db.query(models.FamilyInvitation).filter(
         models.FamilyInvitation.id == invitation_id,
-        models.FamilyInvitation.invited_username == encrypt_field(current_user.username.lower()),
+        models.FamilyInvitation.invited_username == hash_username(current_user.username.lower()),
         models.FamilyInvitation.status == "pending"
     ).first()
     
