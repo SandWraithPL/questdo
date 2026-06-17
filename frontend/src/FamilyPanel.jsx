@@ -15,7 +15,11 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
       const res = await axios.get(`${api}/families`, { headers });
       setFamilies(res.data);
       if (res.data.length > 0 && !selectedFamily) {
-        setSelectedFamily(res.data[0]);
+        const firstFamily = res.data[0];
+        setSelectedFamily(firstFamily);
+        if (onFamilyChange) {
+          onFamilyChange(firstFamily.id);
+        }
       }
     } catch (err) {
       console.error("Błąd ładowania rodzin:", err);
