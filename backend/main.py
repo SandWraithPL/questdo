@@ -71,6 +71,16 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+def safe_broadcast(message):
+    try:
+        loop = asyncio.get_event_loop()
+        if loop.is_running():
+            asyncio.create_task(manager.broadcast(message))
+        else:
+            loop.run_until_complete(manager.broadcast(message))
+    except:
+        pass
+
 def create_tables():
     for i in range(10):
         try:
@@ -1670,13 +1680,10 @@ def create_task(task: TaskCreate, current_user: models.User = Depends(get_curren
     db.refresh(new_task)
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "task_updated",
-            "data": task_to_dict(new_task)
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "task_updated",
+        "data": task_to_dict(new_task)
+    })
     
     return {"id": new_task.id, "message": "Task created", "due_date": str(new_task.due_date), "task_type": new_task.task_type}
 
@@ -1901,13 +1908,10 @@ def update_task(task_id: int, task_update: TaskUpdate,
     db.refresh(task)
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "task_updated",
-            "data": task_to_dict(task)
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "task_updated",
+        "data": task_to_dict(task)
+    })
     
     daily_bonus, daily_bonus_level_ups = try_award_daily_triple_bonus(current_user, db)
     level_ups.extend(daily_bonus_level_ups)
@@ -2257,13 +2261,10 @@ def delete_task(task_id: int, current_user: models.User = Depends(get_current_us
     db.commit()
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "task_updated",
-            "data": {"id": task_id, "deleted": True}
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "task_updated",
+        "data": {"id": task_id, "deleted": True}
+    })
 
     history_data = build_history_list(current_user.id, db)
     achievements_payload = build_achievements_payload(current_user, db)
@@ -2607,13 +2608,10 @@ def create_schedule(entry: ScheduleCreate, current_user: models.User = Depends(g
     db.refresh(row)
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "schedule_updated",
-            "data": lm.schedule_to_dict(row)
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "schedule_updated",
+        "data": lm.schedule_to_dict(row)
+    })
     
     return lm.schedule_to_dict(row)
 
@@ -2651,13 +2649,10 @@ def update_schedule(entry_id: int, body: ScheduleUpdate, current_user: models.Us
     db.refresh(row)
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "schedule_updated",
-            "data": lm.schedule_to_dict(row)
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "schedule_updated",
+        "data": lm.schedule_to_dict(row)
+    })
     
     return lm.schedule_to_dict(row)
 
@@ -2674,13 +2669,10 @@ def delete_schedule(entry_id: int, current_user: models.User = Depends(get_curre
     db.commit()
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "schedule_updated",
-            "data": {"id": entry_id, "deleted": True}
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "schedule_updated",
+        "data": {"id": entry_id, "deleted": True}
+    })
     
     return {"message": "Usunięto wpis planu"}
 
@@ -2753,13 +2745,10 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
     print(f"[SHOPPING] Created item with family_id: {row.family_id}")  # ← DODAJ
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "shopping_updated",
-            "data": lm.shopping_to_dict(row)
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "shopping_updated",
+        "data": lm.shopping_to_dict(row)
+    })
     
     return lm.shopping_to_dict(row)
 
@@ -2796,13 +2785,10 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
     db.refresh(row)
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "shopping_updated",
-            "data": lm.shopping_to_dict(row)
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "shopping_updated",
+        "data": lm.shopping_to_dict(row)
+    })
     
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
@@ -2837,13 +2823,10 @@ def delete_shopping(item_id: int, current_user: models.User = Depends(get_curren
     db.commit()
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "shopping_updated",
-            "data": {"id": item_id, "deleted": True}
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "shopping_updated",
+        "data": {"id": item_id, "deleted": True}
+    })
     
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
@@ -2881,13 +2864,10 @@ def clear_bought_shopping(family_id: Optional[int] = None, current_user: models.
     db.commit()
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "shopping_updated",
-            "data": {"action": "cleared_bought"}
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "shopping_updated",
+        "data": {"action": "cleared_bought"}
+    })
     
     return {"message": f"Usunięto {len(bought)} kupionych produktów"}
 
@@ -3004,13 +2984,10 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
             db.refresh(row)
         
         # Broadcast WebSocket message
-        try:
-            asyncio.run(manager.broadcast({
-                "type": "work_updated",
-                "data": {"entries": [lm.work_to_dict(row) for row in created_entries]}
-            }))
-        except:
-            pass
+        safe_broadcast({
+            "type": "work_updated",
+            "data": {"entries": [lm.work_to_dict(row) for row in created_entries]}
+        })
         
         # Zaktualizuj podsumowanie użytkownika dla auto-ukończonych wpisów
         total_net = 0.0
@@ -3061,13 +3038,10 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
     db.refresh(row)
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "work_updated",
-            "data": lm.work_to_dict(row)
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "work_updated",
+        "data": lm.work_to_dict(row)
+    })
     
     # Jeśli auto-ukończono, zaktualizuj podsumowanie użytkownika
     if auto_complete:
@@ -3173,13 +3147,10 @@ def update_work(entry_id: int, body: WorkUpdate, current_user: models.User = Dep
     db.refresh(row)
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "work_updated",
-            "data": lm.work_to_dict(row)
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "work_updated",
+        "data": lm.work_to_dict(row)
+    })
     
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
@@ -3221,13 +3192,10 @@ def delete_work(entry_id: int, current_user: models.User = Depends(get_current_u
     db.commit()
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "work_updated",
-            "data": {"id": entry_id, "deleted": True}
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "work_updated",
+        "data": {"id": entry_id, "deleted": True}
+    })
     
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
@@ -3477,13 +3445,10 @@ def create_shopping_history(data: ShoppingHistoryCreate, family_id: Optional[int
     db.refresh(history)
     
     # Broadcast WebSocket message
-    try:
-        asyncio.run(manager.broadcast({
-            "type": "shopping_history_updated",
-            "data": {"id": history.id, "total_items": history.total_items}
-        }))
-    except:
-        pass
+    safe_broadcast({
+        "type": "shopping_history_updated",
+        "data": {"id": history.id, "total_items": history.total_items}
+    })
     
     return {
         "id": history.id,
