@@ -133,11 +133,24 @@ function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onT
 
 function matchScheduleToDate(entry, dateStr, freeDays = []) {
   const isFreeDay = freeDays.some(fd => fd.date === dateStr);
+  const targetDate = new Date(dateStr);
   
   if (entry.is_recurring) {
     // Skip recurring entries on free days
     if (isFreeDay) {
       return false;
+    }
+    if (entry.start_date) {
+      const startDate = new Date(entry.start_date);
+      if (targetDate < startDate) {
+        return false;
+      }
+    }
+    if (entry.end_date) {
+      const endDate = new Date(entry.end_date);
+      if (targetDate > endDate) {
+        return false;
+      }
     }
     return entry.day_of_week === weekdayIndex(dateStr);
   }
@@ -157,6 +170,8 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
     const d = selectedDate instanceof Date ? selectedDate : new Date();
     return d.toISOString().slice(0, 10);
   });
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
@@ -173,6 +188,10 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
       onToast("Podaj nazwę zajęć");
       return;
     }
+    if (isRecurring && !startDate) {
+      onToast("Podaj datę rozpoczęcia dla zajęć cyklicznych");
+      return;
+    }
     enqueueRequest(async () => {
       try {
         const payload = {
@@ -184,12 +203,16 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
           is_recurring: isRecurring,
           day_of_week: isRecurring ? dayOfWeek : null,
           entry_date: isRecurring ? null : entryDate,
+          start_date: isRecurring ? startDate : null,
+          end_date: isRecurring && endDate ? endDate : null,
         };
         const res = await axios.post(`${api}/schedule`, payload, { headers });
         setEntries((prev) => [...prev, res.data]);
         setTitle("");
         setLocation("");
         setLecturer("");
+        setStartDate("");
+        setEndDate("");
         setShowAdd(false);
         onToast("✅ Dodano zajęcia do planu");
       } catch (err) {
@@ -398,11 +421,15 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
             <span>Cykliczne (co tydzień)</span>
           </label>
           {isRecurring ? (
-            <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))}>
-              {WEEKDAYS_LONG.map((day, idx) => (
-                <option key={day} value={idx}>{day}</option>
-              ))}
-            </select>
+            <>
+              <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))}>
+                {WEEKDAYS_LONG.map((day, idx) => (
+                  <option key={day} value={idx}>{day}</option>
+                ))}
+              </select>
+              <DatePicker value={startDate} onChange={setStartDate} label="Data rozpoczęcia" />
+              <DatePicker value={endDate} onChange={setEndDate} label="Data zakończenia (opcjonalnie)" />
+            </>
           ) : (
             <DatePicker value={entryDate} onChange={setEntryDate} label="Data" />
           )}

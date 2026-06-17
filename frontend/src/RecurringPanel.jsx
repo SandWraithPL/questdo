@@ -180,7 +180,7 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
         <div className="add-task">
           <h3>+ Nowe wydarzenie cykliczne</h3>
           <input
-            placeholder="Nazwa (np. Urodziny Zuzi)"
+            placeholder="Nazwa"
             value={title}
             onChange={(e) => setTitle(e.target.value)}
           />

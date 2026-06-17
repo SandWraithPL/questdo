@@ -207,6 +207,7 @@ export default function EarningsPanel({
   onToast,
   enqueueRequest,
   freeDays = [],
+  setFreeDays,
 }) {
   const [showAdd, setShowAdd] = useState(false);
   const [startTime, setStartTime] = useState("08:00");
@@ -224,9 +225,11 @@ export default function EarningsPanel({
   const [editNotes, setEditNotes] = useState("");
   const [isRecurring, setIsRecurring] = useState(false);
   const [dayOfWeek, setDayOfWeek] = useState(0);
+  const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [editIsRecurring, setEditIsRecurring] = useState(false);
   const [editDayOfWeek, setEditDayOfWeek] = useState(0);
+  const [editStartDate, setEditStartDate] = useState("");
   const [editEndDate, setEditEndDate] = useState("");
   const [isSavingDefault, setIsSavingDefault] = useState(false);
   const autoCompletedIds = useRef(new Set());
@@ -332,6 +335,10 @@ export default function EarningsPanel({
       onToast("Podaj stawkę godzinową");
       return;
     }
+    if (isRecurring && !startDate) {
+      onToast("Podaj datę rozpoczęcia dla pracy cyklicznej");
+      return;
+    }
     enqueueRequest(async () => {
       try {
         const res = await axios.post(`${api}/work`, {
@@ -344,6 +351,7 @@ export default function EarningsPanel({
           tax_percent: parseFloat(taxPercent) || 0,
           is_recurring: isRecurring,
           day_of_week: isRecurring ? dayOfWeek : null,
+          start_date: isRecurring ? startDate : null,
           end_date: isRecurring && endDate ? endDate : null,
         }, { headers });
         setEntries((prev) => [res.data, ...prev]);
@@ -353,6 +361,7 @@ export default function EarningsPanel({
         setNotes("");
         setIsRecurring(false);
         setDayOfWeek(0);
+        setStartDate("");
         setEndDate("");
         onToast("✅ Dodano wpis pracy");
       } catch (err) {
@@ -423,6 +432,7 @@ export default function EarningsPanel({
     setEditNotes(entry.notes || "");
     setEditIsRecurring(entry.is_recurring || false);
     setEditDayOfWeek(entry.day_of_week || 0);
+    setEditStartDate(entry.start_date ? entry.start_date.slice(0, 10) : "");
     setEditEndDate(entry.end_date ? entry.end_date.slice(0, 10) : "");
   };
 
@@ -443,6 +453,7 @@ export default function EarningsPanel({
           notes: editNotes,
           is_recurring: editIsRecurring,
           day_of_week: editIsRecurring ? editDayOfWeek : null,
+          start_date: editIsRecurring ? editStartDate : null,
           end_date: editIsRecurring && editEndDate ? editEndDate : null,
         }, { headers });
         setEntries((prev) => prev.map((e) => (e.id === entry.id ? res.data.entry : e)));
@@ -541,7 +552,8 @@ export default function EarningsPanel({
                           <option key={day} value={idx}>{day}</option>
                         ))}
                       </select>
-                      <input type="date" placeholder="Data zakończenia" value={editEndDate} onChange={(e) => setEditEndDate(e.target.value)} />
+                      <DatePicker value={editStartDate} onChange={setEditStartDate} label="Data rozpoczęcia" />
+                      <DatePicker value={editEndDate} onChange={setEditEndDate} label="Data zakończenia (opcjonalnie)" />
                     </>
                   ) : null}
                   <button type="button" className="save-mini" onClick={() => saveEdit(entry)}>✓</button>
@@ -623,11 +635,15 @@ export default function EarningsPanel({
             <span>Cykliczne (co tydzień)</span>
           </label>
           {isRecurring ? (
-            <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))}>
-              {WEEKDAYS_LONG.map((day, idx) => (
-                <option key={day} value={idx}>{day}</option>
-              ))}
-            </select>
+            <>
+              <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))}>
+                {WEEKDAYS_LONG.map((day, idx) => (
+                  <option key={day} value={idx}>{day}</option>
+                ))}
+              </select>
+              <DatePicker value={startDate} onChange={setStartDate} label="Data rozpoczęcia" />
+              <DatePicker value={endDate} onChange={setEndDate} label="Data zakończenia (opcjonalnie)" />
+            </>
           ) : (
             <DatePicker value={selectedStr} onChange={() => {}} label="Data" />
           )}

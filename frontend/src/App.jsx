@@ -1774,6 +1774,16 @@ export default function App() {
     return () => window.matchMedia("(display-mode: standalone)").removeEventListener("change", onDisplayMode);
   }, []);
 
+  // Temporarily disable service worker
+  /*
+  useEffect(() => {
+    const cleanup = registerServiceWorkerForUpdates();
+    return () => {
+      if (cleanup) cleanup();
+    };
+  }, []);
+  */
+
   useEffect(() => {
     if (!notificationsEnabled || !tasks.length) return undefined;
 
@@ -2412,6 +2422,7 @@ export default function App() {
           onToast={showToast}
           enqueueRequest={enqueueRequest}
           freeDays={freeDays}
+          setFreeDays={setFreeDays}
         />
       )}
 

@@ -45,6 +45,9 @@ def schedule_to_dict(entry: models.ScheduleEntry) -> dict:
         "start_time": entry.start_time,
         "end_time": entry.end_time,
         "created_at": str(entry.created_at),
+        "completed": entry.completed,
+        "start_date": str(entry.start_date) if entry.start_date else None,
+        "end_date": str(entry.end_date) if entry.end_date else None,
     }
 
 

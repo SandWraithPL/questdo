@@ -166,6 +166,20 @@ def migrate_schema():
     if "schedule_entries" not in insp.get_table_names():
         models.ScheduleEntry.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę schedule_entries")
+    elif "schedule_entries" in insp.get_table_names():
+        schedule_cols = {c["name"] for c in insp.get_columns("schedule_entries")}
+        if "completed" not in schedule_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE schedule_entries ADD COLUMN completed BOOLEAN DEFAULT FALSE"))
+            print("Migracja: dodano kolumnę schedule_entries.completed")
+        if "start_date" not in schedule_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE schedule_entries ADD COLUMN start_date DATE"))
+            print("Migracja: dodano kolumnę schedule_entries.start_date")
+        if "end_date" not in schedule_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE schedule_entries ADD COLUMN end_date DATE"))
+            print("Migracja: dodano kolumnę schedule_entries.end_date")
     if "shopping_items" not in insp.get_table_names():
         models.ShoppingItem.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę shopping_items")
@@ -174,6 +188,18 @@ def migrate_schema():
         print("Migracja: utworzono tabelę work_entries")
     elif "work_entries" in insp.get_table_names():
         work_cols = {c["name"] for c in insp.get_columns("work_entries")}
+        if "is_recurring" not in work_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE work_entries ADD COLUMN is_recurring BOOLEAN DEFAULT FALSE"))
+            print("Migracja: dodano kolumnę work_entries.is_recurring")
+        if "day_of_week" not in work_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE work_entries ADD COLUMN day_of_week INTEGER"))
+            print("Migracja: dodano kolumnę work_entries.day_of_week")
+        if "end_date" not in work_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE work_entries ADD COLUMN end_date DATE"))
+            print("Migracja: dodano kolumnę work_entries.end_date")
     if "default_articles" not in insp.get_table_names():
         models.DefaultArticle.__table__.create(bind=engine)
         print("Migracja: utworzono tabelę default_articles")
@@ -384,6 +410,51 @@ def process_work_auto_completion():
         db.close()
 
 
+def schedule_matches_date(entry: models.ScheduleEntry, target_date: date) -> bool:
+    if entry.is_recurring:
+        if entry.start_date and target_date < entry.start_date:
+            return False
+        if entry.end_date and target_date > entry.end_date:
+            return False
+        return entry.day_of_week == target_date.weekday()
+    return entry.entry_date == target_date
+
+
+def process_schedule_auto_completion():
+    db = next(get_db())
+    try:
+        now = datetime.now(REMINDER_TZ)
+        today = now.date()
+        current_minutes = now.hour * 60 + now.minute
+        entries = (
+            db.query(models.ScheduleEntry)
+            .filter(models.ScheduleEntry.completed.is_(False))
+            .all()
+        )
+        changed = False
+        completed_count = 0
+        for entry in entries:
+            if not schedule_matches_date(entry, today):
+                continue
+            try:
+                eh, em = lm.parse_time_hm(entry.end_time)
+            except ValueError:
+                continue
+            if current_minutes < eh * 60 + em:
+                continue
+            entry.completed = True
+            changed = True
+            completed_count += 1
+        if changed:
+            db.commit()
+            print(f"[schedule-auto] Auto-completed {completed_count} schedule entries at {now}")
+    except Exception as exc:
+        db.rollback()
+        print(f"[schedule-auto] scheduler error: {exc}")
+    finally:
+        db.close()
+
+
 def recurring_event_occurs_on(event: models.RecurringEvent, target_date: date) -> bool:
     if event.interval_type and event.start_date:
         start = event.start_date
@@ -464,6 +535,7 @@ def reminder_scheduler_loop():
     while True:
         try:
             process_work_auto_completion()
+            process_schedule_auto_completion()
             process_scheduled_reminders()
         except Exception as exc:
             print(f"[reminders] loop error: {exc}")
@@ -474,7 +546,7 @@ def reminder_scheduler_loop():
 def startup_event():
     create_tables()
     threading.Thread(target=reminder_scheduler_loop, daemon=True).start()
-    print("[scheduler] Work auto-complete + push reminders started (Europe/Warsaw)")
+    print("[scheduler] Work & Schedule auto-complete + push reminders started (Europe/Warsaw)")
     if not _push_configured():
         print("[push] Web Push disabled — set VAPID_PRIVATE_KEY and VAPID_PUBLIC_KEY")
 
@@ -2395,10 +2467,11 @@ def delete_schedule(entry_id: int, current_user: models.User = Depends(get_curre
 @app.delete("/schedule/all")
 def delete_all_schedule(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     deleted = db.query(models.ScheduleEntry).filter(
-        models.ScheduleEntry.owner_id == current_user.id
+        models.ScheduleEntry.owner_id == current_user.id,
+        models.ScheduleEntry.completed.is_(False)
     ).delete()
     db.commit()
-    return {"message": f"Usunięto cały plan zajęć ({deleted} wpisów)", "deleted": deleted}
+    return {"message": f"Usunięto {deleted} nieukończonych wpisów planu", "deleted": deleted}
 
 
 @app.get("/shopping")
