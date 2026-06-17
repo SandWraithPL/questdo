@@ -2445,6 +2445,7 @@ export default function App() {
           enqueueRequest={enqueueRequest}
           familyId={familyId}
           onFamilyChange={setFamilyId}
+          currentUserId={user?.id}
         />
       )}
 

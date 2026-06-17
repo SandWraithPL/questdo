@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 
-export default function FamilyPanel({ api, headers, onToast, onFamilyChange, initialMode }) {
+export default function FamilyPanel({ api, headers, onToast, onFamilyChange, initialMode, currentUserId }) {
   const [families, setFamilies] = useState([]);
   const [invitations, setInvitations] = useState([]);
   const [showCreate, setShowCreate] = useState(false);
@@ -9,7 +9,6 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
   const [familyName, setFamilyName] = useState("");
   const [inviteUsername, setInviteUsername] = useState("");
   const [selectedFamily, setSelectedFamily] = useState(null);
-  const [currentUserId, setCurrentUserId] = useState(null);
 
   const loadFamilies = async () => {
     try {
@@ -36,17 +35,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     }
   };
 
-  const loadCurrentUserId = async () => {
-    try {
-      const res = await axios.get(`${api}/me`, { headers });
-      setCurrentUserId(res.data.id);
-    } catch (err) {
-      console.error("Błąd ładowania ID użytkownika:", err);
-    }
-  };
-
   useEffect(() => {
-    loadCurrentUserId();
     loadFamilies();
     loadInvitations();
   }, []);

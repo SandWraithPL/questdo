@@ -225,6 +225,10 @@ def migrate_schema():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE shopping_items ADD COLUMN family_id INTEGER REFERENCES families(id)"))
             print("Migracja: dodano kolumnę shopping_items.family_id")
+        if "unit" not in shopping_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE shopping_items ADD COLUMN unit VARCHAR DEFAULT 'szt'"))
+            print("Migracja: dodano kolumnę shopping_items.unit")
 
     if "shopping_history" in insp.get_table_names():
         history_cols = {c["name"] for c in insp.get_columns("shopping_history")}

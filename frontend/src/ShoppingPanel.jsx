@@ -78,11 +78,13 @@ export default function ShoppingPanel({
   onToast, 
   enqueueRequest, 
   familyId, 
-  onFamilyChange 
+  onFamilyChange,
+  currentUserId
 }) {
   console.log("[SHOPPING] familyId prop received:", familyId);
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
+  const [unit, setUnit] = useState("szt");
   const [category, setCategory] = useState("other");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
@@ -105,6 +107,7 @@ export default function ShoppingPanel({
         const res = await axios.patch(`${api}/shopping/${id}`, {
           name: form.name,
           quantity: form.qty,
+          unit: form.unit,
           category: form.cat,
           price: parseFloat(form.price) || 0,
         }, { headers });
@@ -224,6 +227,7 @@ export default function ShoppingPanel({
         const payload = { 
           name, 
           quantity: qty, 
+          unit,
           category, 
           price: parseFloat(editPrice) || 0,
           family_id: familyId || undefined
@@ -234,6 +238,7 @@ export default function ShoppingPanel({
         setItems((prev) => [res.data, ...prev]);
         setName("");
         setQty("");
+        setUnit("szt");
         setCategory(defaultCategory);
         setEditPrice("");
         setShowSuggestions(false);
@@ -279,6 +284,7 @@ export default function ShoppingPanel({
     startEdit(item, {
       name: item.name,
       qty: item.quantity || "",
+      unit: item.unit || "szt",
       cat: item.category || "other",
       price: item.price ? String(item.price) : "",
     });
@@ -474,6 +480,7 @@ export default function ShoppingPanel({
           onToast={onToast} 
           onFamilyChange={handleFamilySelected}
           initialMode={selectedMode}
+          currentUserId={currentUserId}
         />
       )}
 
@@ -526,6 +533,11 @@ export default function ShoppingPanel({
             )}
           </div>
           <input className="input-small" placeholder="Ilość" value={qty} onChange={(e) => setQty(e.target.value)} />
+          <select value={unit} onChange={(e) => setUnit(e.target.value)}>
+            <option value="szt">szt.</option>
+            <option value="kg">kg</option>
+            <option value="l">l</option>
+          </select>
           <input className="input-small" placeholder="Cena jedn. (zł)" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} type="number" step="0.01" min="0" />
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
             {SHOPPING_CATEGORIES.map((c) => (
@@ -584,6 +596,11 @@ export default function ShoppingPanel({
                 <div className="edit-mode">
                   <input value={editForm.name || ""} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nazwa" />
                   <input className="input-small" value={editForm.qty || ""} onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })} placeholder="Ilość" />
+                  <select value={editForm.unit || "szt"} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}>
+                    <option value="szt">szt.</option>
+                    <option value="kg">kg</option>
+                    <option value="l">l</option>
+                  </select>
                   <input className="input-small" value={editForm.price || ""} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} placeholder="Cena jedn. (zł)" type="number" step="0.01" min="0" />
                   <select value={editForm.cat || "other"} onChange={(e) => setEditForm({ ...editForm, cat: e.target.value })}>
                     {SHOPPING_CATEGORIES.map((c) => (
@@ -598,11 +615,11 @@ export default function ShoppingPanel({
                   <div className="task-info">
                     <h4 className={item.bought ? "done" : ""}>{item.name}</h4>
                     <div className="task-meta">
-                      {item.quantity && <span className="badge category">{item.quantity}</span>}
+                      {item.quantity && <span className="badge category">{item.quantity} {item.unit || "szt"}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
                       {item.price > 0 && (
                         <span className="badge category">
-                          💰 {item.quantity ? `${item.quantity} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
+                          💰 {item.quantity ? `${item.quantity} ${item.unit || "szt"} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
                         </span>
                       )}
                     </div>
@@ -700,11 +717,11 @@ export default function ShoppingPanel({
                   <div className="task-info">
                     <h4 className="done">{item.name}</h4>
                     <div className="task-meta">
-                      {item.quantity && <span className="badge category">{item.quantity}</span>}
+                      {item.quantity && <span className="badge category">{item.quantity} {item.unit || "szt"}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
                       {item.price > 0 && (
                         <span className="badge category">
-                          💰 {item.quantity ? `${item.quantity} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
+                          💰 {item.quantity ? `${item.quantity} ${item.unit || "szt"} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
                         </span>
                       )}
                     </div>
