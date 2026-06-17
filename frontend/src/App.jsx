@@ -14,7 +14,7 @@ import FamilyInvitationsBanner from "./FamilyInvitationsBanner";
 import { getRecurringCategoriesForDate, toVirtualRecurringTasks } from "./recurringHelpers";
 import { useEditItem } from "./hooks/useEditItem";
 
-const API = "https://questdo-backend.azurewebsites.net";
+const API = "https://questdo-backend-https.azurewebsites.net";
 
 const DEFAULT_LEVEL_THRESHOLDS = [
   0, 80, 180, 320, 480, 660, 860, 1080, 1320, 1600, 1900, 2250, 2650, 3100, 3600,
