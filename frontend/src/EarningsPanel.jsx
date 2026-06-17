@@ -5,133 +5,6 @@ import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
 import { applyUserFromResponse } from "./helpers";
 
-// Komponent FreeDayManager - wspólny dla wszystkich kalendarzy
-function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onToast, enqueueRequest }) {
-  const [showFreeDayManager, setShowFreeDayManager] = useState(false);
-  const [freeDayType, setFreeDayType] = useState("holiday");
-  const [freeDayName, setFreeDayName] = useState("");
-
-  const selectedStr = selectedDate instanceof Date
-    ? selectedDate.toISOString().slice(0, 10)
-    : String(selectedDate).slice(0, 10);
-
-  const handleCreateFreeDay = () => {
-    if (enqueueRequest) {
-      enqueueRequest(async () => {
-        try {
-          const res = await axios.post(`${api}/free-days`, {
-            date: selectedStr,
-            day_type: freeDayType,
-            notes: freeDayName
-          }, { headers });
-          if (setFreeDays) {
-            setFreeDays(prev => [...prev, res.data]);
-          }
-          setFreeDayName("");
-          setShowFreeDayManager(false);
-          onToast("✅ Oznaczono dzień jako wolny");
-        } catch (err) {
-          onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
-        }
-      });
-    } else {
-      axios.post(`${api}/free-days`, {
-        date: selectedStr,
-        day_type: freeDayType,
-        notes: freeDayName
-      }, { headers }).then(res => {
-        if (setFreeDays) {
-          setFreeDays(prev => [...prev, res.data]);
-        }
-        setFreeDayName("");
-        setShowFreeDayManager(false);
-        onToast("✅ Oznaczono dzień jako wolny");
-      }).catch(err => {
-        onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
-      });
-    }
-  };
-
-  const handleDeleteFreeDay = () => {
-    const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
-    if (!existingFreeDay) return;
-
-    if (enqueueRequest) {
-      enqueueRequest(async () => {
-        try {
-          await axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers });
-          if (setFreeDays) {
-            setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
-          }
-          onToast("🗑️ Usunięto oznaczenie dnia wolnego");
-        } catch (err) {
-          onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
-        }
-      });
-    } else {
-      axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers }).then(() => {
-        if (setFreeDays) {
-          setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
-        }
-        onToast("🗑️ Usunięto oznaczenie dnia wolnego");
-      }).catch(err => {
-        onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
-      });
-    }
-  };
-
-  const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
-
-  return (
-    <>
-      <button
-        type="button"
-        className="icon-btn free-day-btn"
-        onClick={() => setShowFreeDayManager(!showFreeDayManager)}
-        title="Zarządzaj dniami wolnymi"
-        aria-label="Zarządzaj dniami wolnymi"
-      >
-        🎓
-      </button>
-      {showFreeDayManager && (
-        <div className="add-task free-day-manager">
-          <h3>🎓 Zarządzaj dniami wolnymi</h3>
-          {existingFreeDay ? (
-            <div>
-              <p>Ten dzień jest oznaczony jako: <strong>
-                {existingFreeDay.day_type === "holiday" ? "Święto" :
-                 existingFreeDay.day_type === "deans_day" ? "Dzień dziekański" : "Dzień rektorski"}
-              </strong>
-              {existingFreeDay.notes && <span> — {existingFreeDay.notes}</span>}</p>
-              <div className="row" style={{ marginTop: 12, gap: "8px" }}>
-                <button type="button" className="danger-btn" onClick={handleDeleteFreeDay}>🗑️ Usuń oznaczenie</button>
-                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <select value={freeDayType} onChange={(e) => setFreeDayType(e.target.value)}>
-                <option value="holiday">🎉 Święto</option>
-                <option value="deans_day">🎓 Dzień dziekański</option>
-                <option value="rector_day">🏛️ Dzień rektorski</option>
-              </select>
-              <input
-                placeholder="Nazwa święta (opcjonalne)"
-                value={freeDayName}
-                onChange={(e) => setFreeDayName(e.target.value)}
-              />
-              <div className="row" style={{ marginTop: 12 }}>
-                <button type="button" className="add-task-btn" onClick={handleCreateFreeDay}>Oznacz dzień</button>
-                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
 // Funkcja formatująca pieniądze z przecinkiem i 2 miejscami po przecinku
 function formatMoney(value) {
   const num = Number(value || 0);
@@ -178,19 +51,17 @@ function matchWorkToDate(entry, dateStr, freeDays = []) {
   const isFreeDay = freeDays.some(fd => fd.date === dateStr);
   
   if (entry.is_recurring) {
-    // Skip recurring entries on free days
-    if (isFreeDay) {
-      return false;
-    }
+    if (isFreeDay) return false;
     if (entry.end_date) {
       const endDate = new Date(entry.end_date);
-      if (targetDate > endDate) {
-        return false;
-      }
+      if (targetDate > endDate) return false;
+    }
+    if (entry.start_date) {
+      const startDate = new Date(entry.start_date);
+      if (targetDate < startDate) return false;
     }
     return entry.day_of_week === weekdayIndex(dateStr);
   }
-  // Allow manual override for non-recurring entries
   return entry.work_date === dateStr;
 }
 
@@ -341,7 +212,7 @@ export default function EarningsPanel({
     }
     enqueueRequest(async () => {
       try {
-        const res = await axios.post(`${api}/work`, {
+        const payload = {
           work_date: selectedStr,
           start_time: startTime,
           end_time: endTime,
@@ -353,7 +224,8 @@ export default function EarningsPanel({
           day_of_week: isRecurring ? dayOfWeek : null,
           start_date: isRecurring ? startDate : null,
           end_date: isRecurring && endDate ? endDate : null,
-        }, { headers });
+        };
+        const res = await axios.post(`${api}/work`, payload, { headers });
         setEntries((prev) => [res.data, ...prev]);
         await refreshSummary();
         setShowAdd(false);
@@ -366,19 +238,6 @@ export default function EarningsPanel({
         onToast("✅ Dodano wpis pracy");
       } catch (err) {
         onToast(err.response?.data?.detail || "Błąd dodawania");
-      }
-    });
-  };
-
-  const toggleCompleted = (entry) => {
-    enqueueRequest(async () => {
-      try {
-        const res = await axios.patch(`${api}/work/${entry.id}`, { completed: !entry.completed }, { headers });
-        setEntries((prev) => prev.map((e) => (e.id === entry.id ? res.data.entry : e)));
-        await refreshSummary();
-        onToast(entry.completed ? "🔄 Cofnięto potwierdzenie" : "✅ Praca potwierdzona");
-      } catch (err) {
-        onToast(err.response?.data?.detail || "Błąd aktualizacji");
       }
     });
   };
@@ -400,10 +259,10 @@ export default function EarningsPanel({
   const deleteUnfinishedEntries = () => {
     const unfinished = entries.filter((e) => !e.completed);
     if (unfinished.length === 0) {
-      onToast("Brak niewykończonych wpisów");
+      onToast("Brak nieukończonych wpisów");
       return;
     }
-    if (!window.confirm(`Czy na pewno chcesz usunąć ${unfinished.length} niewykończonych wpisów pracy?`)) {
+    if (!window.confirm(`Czy na pewno chcesz usunąć ${unfinished.length} nieukończonych wpisów pracy?`)) {
       return;
     }
     enqueueRequest(async () => {
@@ -412,7 +271,7 @@ export default function EarningsPanel({
         await Promise.all(deletePromises);
         setEntries((prev) => prev.filter((e) => e.completed));
         await refreshSummary();
-        onToast(`🗑️ Usunięto ${unfinished.length} niewykończonych wpisów`);
+        onToast(`🗑️ Usunięto ${unfinished.length} nieukończonych wpisów`);
       } catch (err) {
         onToast(err.response?.data?.detail || "Błąd usuwania");
       }
@@ -468,6 +327,7 @@ export default function EarningsPanel({
 
   return (
     <div className="module-panel earnings-panel">
+      {/* Summary - bez zmian */}
       <div className="earnings-summary">
         <div className="earnings-stat">
           <span className="earnings-stat-label">Dzień</span>
@@ -487,6 +347,7 @@ export default function EarningsPanel({
         </div>
       </div>
 
+      {/* Kalendarz */}
       <SharedCalendar
         items={entries}
         selectedDate={selectedDate}
@@ -503,7 +364,7 @@ export default function EarningsPanel({
             {item.completed && <span className="badge exp">Potwierdzone</span>}
           </div>
         )}
-        onItemToggle={toggleCompleted}
+        onItemToggle={() => {}}
         onItemDelete={deleteEntry}
         sectionTitle="💰 Kalendarz zarobków"
         emptyLabel="Brak pracy"
@@ -513,21 +374,11 @@ export default function EarningsPanel({
         freeDays={freeDays}
       />
 
+      {/* Lista wpisów */}
       <div className="day-tasks-panel">
         <div className="tasks-header">
           <h3>Praca — {new Date(`${selectedStr}T12:00:00`).toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" })}</h3>
-          <div className="import-export-buttons">
-            <FreeDayManager
-              freeDays={freeDays}
-              setFreeDays={setFreeDays}
-              selectedDate={selectedDate}
-              api={api}
-              headers={headers}
-              onToast={onToast}
-              enqueueRequest={enqueueRequest}
-            />
-            <span className="earnings-day-total">{formatMoney(dayTotal)}</span>
-          </div>
+          <span className="earnings-day-total">{formatMoney(dayTotal)}</span>
         </div>
         {dayEntries.length === 0 && <p className="empty">Brak wpisów pracy na ten dzień.</p>}
         {dayEntries.map((entry) => {
@@ -584,6 +435,7 @@ export default function EarningsPanel({
         })}
       </div>
 
+      {/* Przyciski akcji */}
       {!showAdd ? (
         <div className="row panel-actions-row">
           <button type="button" className="add-task-btn" onClick={() => {

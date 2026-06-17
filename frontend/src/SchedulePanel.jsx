@@ -4,133 +4,6 @@ import SharedCalendar, { weekdayIndex, WEEKDAYS_LONG } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
 
-// Komponent FreeDayManager - wspólny dla wszystkich kalendarzy
-function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onToast, enqueueRequest }) {
-  const [showFreeDayManager, setShowFreeDayManager] = useState(false);
-  const [freeDayType, setFreeDayType] = useState("holiday");
-  const [freeDayName, setFreeDayName] = useState("");
-
-  const selectedStr = selectedDate instanceof Date
-    ? selectedDate.toISOString().slice(0, 10)
-    : String(selectedDate).slice(0, 10);
-
-  const handleCreateFreeDay = () => {
-    if (enqueueRequest) {
-      enqueueRequest(async () => {
-        try {
-          const res = await axios.post(`${api}/free-days`, {
-            date: selectedStr,
-            day_type: freeDayType,
-            notes: freeDayName
-          }, { headers });
-          if (setFreeDays) {
-            setFreeDays(prev => [...prev, res.data]);
-          }
-          setFreeDayName("");
-          setShowFreeDayManager(false);
-          onToast("✅ Oznaczono dzień jako wolny");
-        } catch (err) {
-          onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
-        }
-      });
-    } else {
-      axios.post(`${api}/free-days`, {
-        date: selectedStr,
-        day_type: freeDayType,
-        notes: freeDayName
-      }, { headers }).then(res => {
-        if (setFreeDays) {
-          setFreeDays(prev => [...prev, res.data]);
-        }
-        setFreeDayName("");
-        setShowFreeDayManager(false);
-        onToast("✅ Oznaczono dzień jako wolny");
-      }).catch(err => {
-        onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
-      });
-    }
-  };
-
-  const handleDeleteFreeDay = () => {
-    const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
-    if (!existingFreeDay) return;
-
-    if (enqueueRequest) {
-      enqueueRequest(async () => {
-        try {
-          await axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers });
-          if (setFreeDays) {
-            setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
-          }
-          onToast("🗑️ Usunięto oznaczenie dnia wolnego");
-        } catch (err) {
-          onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
-        }
-      });
-    } else {
-      axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers }).then(() => {
-        if (setFreeDays) {
-          setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
-        }
-        onToast("🗑️ Usunięto oznaczenie dnia wolnego");
-      }).catch(err => {
-        onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
-      });
-    }
-  };
-
-  const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
-
-  return (
-    <>
-      <button
-        type="button"
-        className="icon-btn free-day-btn"
-        onClick={() => setShowFreeDayManager(!showFreeDayManager)}
-        title="Zarządzaj dniami wolnymi"
-        aria-label="Zarządzaj dniami wolnymi"
-      >
-        🎓
-      </button>
-      {showFreeDayManager && (
-        <div className="add-task free-day-manager">
-          <h3>🎓 Zarządzaj dniami wolnymi</h3>
-          {existingFreeDay ? (
-            <div>
-              <p>Ten dzień jest oznaczony jako: <strong>
-                {existingFreeDay.day_type === "holiday" ? "Święto" :
-                 existingFreeDay.day_type === "deans_day" ? "Dzień dziekański" : "Dzień rektorski"}
-              </strong>
-              {existingFreeDay.notes && <span> — {existingFreeDay.notes}</span>}</p>
-              <div className="row" style={{ marginTop: 12, gap: "8px" }}>
-                <button type="button" className="danger-btn" onClick={handleDeleteFreeDay}>🗑️ Usuń oznaczenie</button>
-                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <select value={freeDayType} onChange={(e) => setFreeDayType(e.target.value)}>
-                <option value="holiday">🎉 Święto</option>
-                <option value="deans_day">🎓 Dzień dziekański</option>
-                <option value="rector_day">🏛️ Dzień rektorski</option>
-              </select>
-              <input
-                placeholder="Nazwa święta (opcjonalne)"
-                value={freeDayName}
-                onChange={(e) => setFreeDayName(e.target.value)}
-              />
-              <div className="row" style={{ marginTop: 12 }}>
-                <button type="button" className="add-task-btn" onClick={handleCreateFreeDay}>Oznacz dzień</button>
-                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
 function matchScheduleToDate(entry, dateStr, freeDays = []) {
   const isFreeDay = freeDays.some(fd => fd.date === dateStr);
   const targetDate = new Date(dateStr);
@@ -158,7 +31,18 @@ function matchScheduleToDate(entry, dateStr, freeDays = []) {
   return entry.entry_date === dateStr;
 }
 
-export default function SchedulePanel({ api, headers, entries, setEntries, selectedDate, onDateSelect, onToast, enqueueRequest, freeDays = [], setFreeDays }) {
+export default function SchedulePanel({ 
+  api, 
+  headers, 
+  entries, 
+  setEntries, 
+  selectedDate, 
+  onDateSelect, 
+  onToast, 
+  enqueueRequest, 
+  freeDays = [], 
+  setFreeDays 
+}) {
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
   const [lecturer, setLecturer] = useState("");
@@ -301,22 +185,22 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
   };
 
   const handleDeleteAll = () => {
-    if (entries.length === 0) {
-      onToast("Plan zajęć jest pusty");
+    const unfinished = entries.filter(e => !e.completed);
+    if (unfinished.length === 0) {
+      onToast("Brak nieukończonych zajęć do usunięcia");
       return;
     }
-    if (!window.confirm(`Czy na pewno chcesz usunąć cały plan zajęć (${entries.length} wpisów)?`)) {
+    if (!window.confirm(`Czy na pewno chcesz usunąć ${unfinished.length} nieukończonych zajęć?`)) {
       return;
     }
     enqueueRequest(async () => {
       try {
-        const res = await axios.delete(`${api}/schedule/all`, { 
-          headers,
-          data: {} 
-        });
-        console.log("Delete response:", res.data);
-        setEntries([]);
-        onToast("🗑️ Usunięto cały plan zajęć");
+        const deletePromises = unfinished.map((entry) => 
+          axios.delete(`${api}/schedule/${entry.id}`, { headers })
+        );
+        await Promise.all(deletePromises);
+        setEntries((prev) => prev.filter((e) => e.completed));
+        onToast(`🗑️ Usunięto ${unfinished.length} nieukończonych zajęć`);
       } catch (err) {
         console.error("Delete error:", err);
         onToast(err.response?.data?.detail || "Błąd usuwania planu");
@@ -353,22 +237,13 @@ export default function SchedulePanel({ api, headers, entries, setEntries, selec
         freeDays={freeDays}
       />
 
-        <div className="day-tasks-panel">
+      <div className="day-tasks-panel">
         <div className="tasks-header">
           <h3>Zajęcia — {new Date(`${selectedStr}T12:00:00`).toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" })}</h3>
           <div className="import-export-buttons">
-            <FreeDayManager
-              freeDays={freeDays}
-              setFreeDays={setFreeDays}
-              selectedDate={selectedDate}
-              api={api}
-              headers={headers}
-              onToast={onToast}
-              enqueueRequest={enqueueRequest}
-            />
             <button type="button" className="icon-btn" onClick={handleExport} title="Eksportuj plan">📥</button>
             <button type="button" className="icon-btn" onClick={() => setShowImport(!showImport)} title="Importuj plan">📤</button>
-            <button type="button" className="danger-btn danger-btn--inline" onClick={handleDeleteAll} title="Usuń cały plan">🗑️ Usuń cały plan</button>
+            <button type="button" className="danger-btn danger-btn--inline" onClick={handleDeleteAll} title="Usuń nieukończone zajęcia">🗑️ Usuń nieukończone</button>
           </div>
         </div>
         {sortedDayEntries.length === 0 && <p className="empty">Brak zajęć w tym dniu.</p>}
