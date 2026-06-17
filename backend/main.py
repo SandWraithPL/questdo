@@ -3653,6 +3653,8 @@ def create_family(data: FamilyCreate, current_user: models.User = Depends(get_cu
 
 @app.post("/families/{family_id}/invite")
 def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    logger.info(f"[INVITE] START: user={current_user.username}, target={data.username}, family={family_id}")
+    
     # Check if user is admin of the family
     membership = db.query(models.FamilyMember).filter(
         models.FamilyMember.family_id == family_id,
@@ -3661,18 +3663,25 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
     ).first()
     
     if not membership:
+        logger.warning(f"[INVITE] User {current_user.username} is not admin of family {family_id}")
         raise HTTPException(status_code=403, detail="Nie masz uprawnień do zapraszania")
     
     username = (data.username or "").strip().lower()
     if not username:
+        logger.warning("[INVITE] Empty username provided")
         raise HTTPException(status_code=400, detail="Nazwa użytkownika jest wymagana")
+    
+    logger.info(f"[INVITE] Looking for user: {username}")
     
     # Check if user exists (case-insensitive)
     target_user = db.query(models.User).filter(
         func.lower(models.User.username) == username
     ).first()
     if not target_user:
+        logger.warning(f"[INVITE] Target user not found: {username}")
         raise HTTPException(status_code=404, detail="Użytkownik nie istnieje")
+    
+    logger.info(f"[INVITE] Target user found: {target_user.username} (id={target_user.id})")
     
     # Check if user is already in the family
     existing_member = db.query(models.FamilyMember).filter(
@@ -3680,13 +3689,14 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
         models.FamilyMember.user_id == target_user.id
     ).first()
     if existing_member:
+        logger.warning(f"[INVITE] User {target_user.username} is already a member of family {family_id}")
         raise HTTPException(status_code=400, detail="Użytkownik jest już członkiem tej rodziny")
     
     # Use lowercase username for encryption to ensure consistency
     username_to_encrypt = target_user.username.lower()
     encrypted_username = encrypt_field(username_to_encrypt)
     
-    logger.info(f"[INVITE] Creating invitation for user: {target_user.username} (lowercased: {username_to_encrypt})")
+    logger.info(f"[INVITE] Username to encrypt: {username_to_encrypt}")
     logger.info(f"[INVITE] Encrypted username: {encrypted_username}")
     
     # Check if there's already a pending invitation
@@ -3696,6 +3706,7 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
         models.FamilyInvitation.status == "pending"
     ).first()
     if existing_invitation:
+        logger.warning(f"[INVITE] Invitation already exists: {existing_invitation.id}")
         raise HTTPException(status_code=400, detail="Istnieje już zaproszenie dla tego użytkownika")
     
     invitation = models.FamilyInvitation(
@@ -3705,9 +3716,13 @@ def invite_to_family(family_id: int, data: FamilyInvite, current_user: models.Us
         status="pending"
     )
     db.add(invitation)
-    db.commit()
+    db.flush()  # Force ID generation before commit
     
     logger.info(f"[INVITE] Invitation created with ID: {invitation.id}")
+    logger.info(f"[INVITE] Invitation data: family_id={invitation.family_id}, invited_username={invitation.invited_username[:20]}..., status={invitation.status}")
+    
+    db.commit()
+    logger.info(f"[INVITE] COMMIT SUCCESSFUL")
     
     return {"message": f"Wysłano zaproszenie do {target_user.username}"}
 

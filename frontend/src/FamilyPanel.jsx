@@ -61,6 +61,10 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
   };
 
   const inviteUser = async () => {
+    console.log("[INVITE] Starting invite process");
+    console.log("[INVITE] Username:", inviteUsername);
+    console.log("[INVITE] Family ID:", selectedFamily?.id);
+    
     if (!inviteUsername.trim()) {
       onToast("Podaj nazwę użytkownika");
       return;
@@ -70,16 +74,25 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange }) {
       return;
     }
     try {
-      console.log("Inviting user:", inviteUsername, "to family:", selectedFamily.id);
-      const res = await axios.post(`${api}/families/${selectedFamily.id}/invite`,
-        { username: inviteUsername.toLowerCase().trim() }, { headers });
-      console.log("Invite response:", res.data);
+      const usernameToSend = inviteUsername.trim().toLowerCase();
+      console.log("[INVITE] Sending to:", usernameToSend);
+      console.log("[INVITE] API URL:", `${api}/families/${selectedFamily.id}/invite`);
+      console.log("[INVITE] Headers:", headers);
+      
+      const res = await axios.post(
+        `${api}/families/${selectedFamily.id}/invite`,
+        { username: usernameToSend },
+        { headers }
+      );
+      
+      console.log("[INVITE] Response:", res.data);
       setInviteUsername("");
       setShowInvite(false);
       onToast("📧 Wysłano zaproszenie");
     } catch (err) {
-      console.error("Invite error:", err);
-      console.error("Error response:", err.response?.data);
+      console.error("[INVITE] Error:", err);
+      console.error("[INVITE] Error response:", err.response?.data);
+      console.error("[INVITE] Error status:", err.response?.status);
       onToast(err.response?.data?.detail || "Błąd wysyłania zaproszenia");
     }
   };
