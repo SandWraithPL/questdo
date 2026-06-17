@@ -180,6 +180,7 @@ class ShoppingItem(Base):
     family_id = Column(Integer, ForeignKey("families.id"), nullable=True, index=True)
     name = Column(String)
     quantity = Column(String, default="")
+    unit = Column(String, default="szt")
     category = Column(String, default="other")
     bought = Column(Boolean, default=False)
     exp_awarded = Column(Boolean, default=False)

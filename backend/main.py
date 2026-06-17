@@ -225,6 +225,10 @@ def migrate_schema():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE shopping_items ADD COLUMN family_id INTEGER REFERENCES families(id)"))
             print("Migracja: dodano kolumnę shopping_items.family_id")
+        if "unit" not in shopping_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE shopping_items ADD COLUMN unit VARCHAR DEFAULT 'szt'"))
+            print("Migracja: dodano kolumnę shopping_items.unit")
 
     if "shopping_history" in insp.get_table_names():
         history_cols = {c["name"] for c in insp.get_columns("shopping_history")}
@@ -396,6 +400,9 @@ def process_work_auto_completion():
         changed = False
         completed_count = 0
         for entry in entries:
+            # Skip recurring templates / entries without a concrete date
+            if entry.is_recurring or entry.work_date is None:
+                continue
             # Auto-complete if work_date is in the past
             if entry.work_date < today:
                 entry.completed = True
@@ -436,6 +443,9 @@ def process_schedule_auto_completion():
         changed = False
         completed_count = 0
         for entry in entries:
+            # Skip recurring templates / entries without a concrete date
+            if entry.is_recurring or entry.entry_date is None:
+                continue
             # Auto-complete if entry_date is in the past
             if entry.entry_date < today:
                 entry.completed = True
@@ -1054,6 +1064,7 @@ class ScheduleUpdate(BaseModel):
 class ShoppingCreate(BaseModel):
     name: str
     quantity: Optional[str] = ""
+    unit: Optional[str] = "szt"
     category: Optional[str] = "other"
     family_id: Optional[int] = None
     price: Optional[float] = 0.0
@@ -1062,6 +1073,7 @@ class ShoppingCreate(BaseModel):
 class ShoppingUpdate(BaseModel):
     name: Optional[str] = None
     quantity: Optional[str] = None
+    unit: Optional[str] = None
     category: Optional[str] = None
     bought: Optional[bool] = None
     price: Optional[float] = None
@@ -1174,6 +1186,16 @@ def validate_shopping_category(category: str) -> str:
     if cat not in lm.VALID_SHOPPING_CATEGORIES:
         raise HTTPException(status_code=400, detail="Nieprawidłowa kategoria")
     return cat
+
+
+VALID_SHOPPING_UNITS = {"szt", "kg", "l"}
+
+
+def validate_shopping_unit(unit: str) -> str:
+    value = (unit or "szt").strip().lower()
+    if value not in VALID_SHOPPING_UNITS:
+        return "szt"
+    return value
 
 
 def verify_password(plain, hashed):
@@ -2617,6 +2639,7 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
         family_id=family_id,
         name=enc["name"],
         quantity=enc["quantity"],
+        unit=validate_shopping_unit(item.unit),
         category=validate_shopping_category(item.category or "other"),
         price=max(0.0, float(item.price or 0.0))
     )
@@ -2649,6 +2672,8 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
         row.name = encrypt_field(body.name.strip())
     if body.quantity is not None:
         row.quantity = encrypt_field(body.quantity.strip())
+    if body.unit is not None:
+        row.unit = validate_shopping_unit(body.unit)
     if body.category is not None:
         row.category = validate_shopping_category(body.category)
     if body.price is not None:
@@ -3575,8 +3600,12 @@ def shopping_summary(family_id: Optional[int] = None, current_user: models.User 
         month_totals[ym] = month_totals.get(ym, 0.0) + h.total_spent
         year_totals[y] = year_totals.get(y, 0.0) + h.total_spent
     
-    # Calculate current list total
-    current_list_total = sum((float(item.quantity or 0) * (item.price or 0.0)) for item in items if item.bought)
+    # Calculate current list total (quantity is stored as encrypted free text)
+    current_list_total = sum(
+        lm.quantity_to_number(item.quantity) * (item.price or 0.0)
+        for item in items
+        if item.bought
+    )
     
     all_time_total = sum(h.total_spent for h in history)
     
