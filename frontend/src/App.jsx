@@ -1932,7 +1932,7 @@ export default function App() {
       
       setUser(userRes.data);
       
-      const sortedTasks = [...tasksRes.data].sort((a, b) => {
+      const sortedTasks = [...(tasksRes.data.data || [])].sort((a, b) => {
         if (a.completed !== b.completed) {
           return a.completed ? 1 : -1;
         }
@@ -1948,12 +1948,12 @@ export default function App() {
       setChallenges(chRes.data);
       if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
       setHistory(historyRes.data || []);
-      setScheduleEntries(scheduleRes.data || []);
-      setShoppingItems(shoppingRes.data || []);
-      setWorkEntries(workRes.data || []);
+      setScheduleEntries(Array.isArray(scheduleRes.data) ? scheduleRes.data : []);
+      setShoppingItems(Array.isArray(shoppingRes.data) ? shoppingRes.data : []);
+      setWorkEntries(Array.isArray(workRes.data) ? workRes.data : []);
       setWorkSummary(workSummaryRes.data || null);
-      setFreeDays(freeDaysRes.data || []);
-      setRecurringEvents(recurringRes.data || []);
+      setFreeDays(Array.isArray(freeDaysRes.data) ? freeDaysRes.data : []);
+      setRecurringEvents(Array.isArray(recurringRes.data) ? recurringRes.data : []);
 
       // Auto-generate holidays for years 2020-2030
       try {
