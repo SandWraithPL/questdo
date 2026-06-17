@@ -3566,7 +3566,7 @@ def shopping_summary(family_id: Optional[int] = None, current_user: models.User 
         year_totals[y] = year_totals.get(y, 0.0) + h.total_spent
     
     # Calculate current list total
-    current_list_total = sum(item.price or 0.0 for item in items if item.bought)
+    current_list_total = sum((float(item.quantity or 0) * (item.price or 0.0)) for item in items if item.bought)
     
     all_time_total = sum(h.total_spent for h in history)
     

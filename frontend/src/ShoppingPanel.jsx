@@ -5,6 +5,7 @@ import { applyUserFromResponse } from "./helpers";
 import { useEditItem } from "./hooks/useEditItem";
 
 const SHOPPING_MODE_KEY = "questdo-shopping-mode";
+const SHOW_FAMILY_TOGGLE_KEY = "questdo-show-family-toggle";
 
 function readShoppingMode() {
   try {
@@ -17,6 +18,18 @@ function readShoppingMode() {
 function writeShoppingMode(mode) {
   try {
     localStorage.setItem(SHOPPING_MODE_KEY, mode);
+  } catch { /* ignore */ }
+}
+
+function readShowFamilyToggle() {
+  try {
+    return localStorage.getItem(SHOW_FAMILY_TOGGLE_KEY) === "true";
+  } catch { return false; }
+}
+
+function writeShowFamilyToggle(value) {
+  try {
+    localStorage.setItem(SHOW_FAMILY_TOGGLE_KEY, String(value));
   } catch { /* ignore */ }
 }
 
@@ -81,7 +94,7 @@ export default function ShoppingPanel({
   const [suggestions, setSuggestions] = useState([]);
   const [editPrice, setEditPrice] = useState("");
   const [summary, setSummary] = useState(null);
-  const [showFamilyToggle, setShowFamilyToggle] = useState(false);
+  const [showFamilyToggle, setShowFamilyToggle] = useState(readShowFamilyToggle);
   const [selectedMode, setSelectedMode] = useState(readShoppingMode);
   const [defaultCategory, setDefaultCategory] = useState("other");
 
@@ -150,6 +163,12 @@ export default function ShoppingPanel({
   useEffect(() => {
     loadShoppingItems();
   }, [familyId]);
+
+  useEffect(() => {
+    if (selectedMode === "family" && familyId) {
+      loadShoppingItems();
+    }
+  }, [familyId, selectedMode]);
 
   useEffect(() => {
     writeShoppingMode(selectedMode);
@@ -380,7 +399,7 @@ export default function ShoppingPanel({
       const payload = {
         items_json: itemsJson,
         total_items: boughtItems.length,
-        total_spent: boughtItems.reduce((sum, i) => sum + (i.price || 0), 0),
+        total_spent: boughtItems.reduce((sum, i) => sum + ((parseFloat(i.quantity) || 0) * (i.price || 0)), 0),
         notes: "",
         is_template: false
       };
@@ -400,7 +419,8 @@ export default function ShoppingPanel({
     console.log("[SHOPPING] Family selected, fid:", fid);
     console.log("[SHOPPING] Current familyId before:", familyId);
     onFamilyChange?.(fid);
-    setShowFamilyToggle(false);
+    setShowFamilyToggle(true);
+    writeShowFamilyToggle(true);
     setSelectedMode("family");
     writeShoppingMode("family");
     console.log("[SHOPPING] Called onFamilyChange with:", fid);
@@ -419,6 +439,7 @@ export default function ShoppingPanel({
               writeShoppingMode("individual");
               onFamilyChange?.(null);
               setShowFamilyToggle(false);
+              writeShowFamilyToggle(false);
             }}
           >
             👤 Indywidualna
@@ -430,6 +451,7 @@ export default function ShoppingPanel({
               setSelectedMode("family");
               writeShoppingMode("family");
               setShowFamilyToggle(true);
+              writeShowFamilyToggle(true);
             }}
           >
             👨‍👩‍👧‍👦 Rodzinna
@@ -496,7 +518,7 @@ export default function ShoppingPanel({
             )}
           </div>
           <input className="input-small" placeholder="Ilość" value={qty} onChange={(e) => setQty(e.target.value)} />
-          <input className="input-small" placeholder="Cena (zł)" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} type="number" step="0.01" min="0" />
+          <input className="input-small" placeholder="Cena jedn. (zł)" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} type="number" step="0.01" min="0" />
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
             {SHOPPING_CATEGORIES.map((c) => (
               <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
@@ -554,7 +576,7 @@ export default function ShoppingPanel({
                 <div className="edit-mode">
                   <input value={editForm.name || ""} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nazwa" />
                   <input className="input-small" value={editForm.qty || ""} onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })} placeholder="Ilość" />
-                  <input className="input-small" value={editForm.price || ""} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} placeholder="Cena (zł)" type="number" step="0.01" min="0" />
+                  <input className="input-small" value={editForm.price || ""} onChange={(e) => setEditForm({ ...editForm, price: e.target.value })} placeholder="Cena jedn. (zł)" type="number" step="0.01" min="0" />
                   <select value={editForm.cat || "other"} onChange={(e) => setEditForm({ ...editForm, cat: e.target.value })}>
                     {SHOPPING_CATEGORIES.map((c) => (
                       <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
@@ -570,7 +592,11 @@ export default function ShoppingPanel({
                     <div className="task-meta">
                       {item.quantity && <span className="badge category">{item.quantity}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
-                      {item.price > 0 && <span className="badge category">💰 {formatMoney(item.price)}</span>}
+                      {item.price > 0 && (
+                        <span className="badge category">
+                          💰 {item.quantity ? `${item.quantity} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
+                        </span>
+                      )}
                     </div>
                   </div>
                   <div className="task-actions">
@@ -668,7 +694,11 @@ export default function ShoppingPanel({
                     <div className="task-meta">
                       {item.quantity && <span className="badge category">{item.quantity}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
-                      {item.price > 0 && <span className="badge category">💰 {formatMoney(item.price)}</span>}
+                      {item.price > 0 && (
+                        <span className="badge category">
+                          💰 {item.quantity ? `${item.quantity} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
