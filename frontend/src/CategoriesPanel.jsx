@@ -32,12 +32,10 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
   const [editUnit, setEditUnit] = useState("szt");
   const [editCat, setEditCat] = useState("other");
   const [editPrice, setEditPrice] = useState("");
-  const [defaultHourlyRate, setDefaultHourlyRate] = useState("");
-  const [isFamilyMode, setIsFamilyMode] = useState(!!familyId);
 
   const loadArticles = async () => {
     try {
-      const params = isFamilyMode && familyId ? { family_id: familyId } : {};
+      const params = familyId ? { family_id: familyId } : {};
       const res = await axios.get(`${api}/default-articles`, { headers, params });
       setArticles(res.data);
     } catch (err) {
@@ -47,18 +45,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
 
   useEffect(() => {
     loadArticles();
-    loadDefaultHourlyRate();
-  }, [familyId, isFamilyMode]);
-
-  const loadDefaultHourlyRate = async () => {
-    try {
-      const res = await axios.get(`${api}/settings/default-hourly-rate`, { headers });
-      const rate = res.data.rate ? parseFloat(res.data.rate).toFixed(2).replace(".", ",") : "";
-      setDefaultHourlyRate(rate);
-    } catch {
-      /* ignore */
-    }
-  };
+  }, [familyId]);
 
   const addArticle = async () => {
     if (!name.trim()) {
@@ -72,7 +59,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
         unit,
         category,
         default_price: parseFloat(parseRateInput(price)) || 0,
-        family_id: isFamilyMode && familyId ? familyId : null
+        family_id: familyId || null
       }, { headers });
       setName("");
       setQty("");
@@ -128,65 +115,8 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
     }
   };
 
-  const saveDefaultHourlyRate = async () => {
-    const rateValue = parseRateInput(defaultHourlyRate);
-    const rate = parseFloat(rateValue);
-    if (!rate || rate <= 0) {
-      onToast("Podaj stawkę godzinową");
-      return;
-    }
-    try {
-      await axios.post(`${api}/settings/default-hourly-rate`, { rate }, { headers });
-      const formattedRate = rate.toFixed(2).replace(".", ",");
-      setDefaultHourlyRate(formattedRate);
-      onToast("💾 Zapisano domyślną stawkę godzinową");
-    } catch (err) {
-      onToast(err.response?.data?.detail || "Błąd zapisu domyślnej stawki");
-    }
-  };
-
   return (
     <div className="module-panel settings-panel">
-      <div className="add-task">
-        <h3>⚙️ Ustawienia kategorii i stawek</h3>
-        <div className="rate-input-group settings-rate-group">
-          <label htmlFor="default-hourly-rate">Domyślna stawka godzinowa:</label>
-          <input
-            id="default-hourly-rate"
-            type="text"
-            placeholder="Stawka (zł/h)"
-            value={defaultHourlyRate}
-            onChange={(e) => setDefaultHourlyRate(e.target.value)}
-          />
-          <button
-            type="button"
-            className="save-default-btn"
-            onClick={saveDefaultHourlyRate}
-          >
-            Zapisz
-          </button>
-        </div>
-      </div>
-      {familyId && (
-        <div className="add-task">
-          <div className="family-toggle">
-            <button
-              type="button"
-              className={`family-toggle-btn ${!isFamilyMode ? "active" : ""}`}
-              onClick={() => setIsFamilyMode(false)}
-            >
-              👤 Indywidualne
-            </button>
-            <button
-              type="button"
-              className={`family-toggle-btn ${isFamilyMode ? "active" : ""}`}
-              onClick={() => setIsFamilyMode(true)}
-            >
-              👨‍👩‍👧‍👦 Rodzinne
-            </button>
-          </div>
-        </div>
-      )}
       <div className="add-task">
         <h3>➕ Dodaj artykuł domyślny</h3>
         <div className="form-row-inline">

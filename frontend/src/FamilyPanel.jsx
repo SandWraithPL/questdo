@@ -129,6 +129,16 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
       await axios.post(`${api}/family/invitations/${invitationId}/accept`, {}, { headers });
       await loadInvitations();
       await loadFamilies();
+      
+      // 🔥 PO AKCEPTACJI – WYWOŁAJ onFamilyChange Z ID NOWEJ RODZINY
+      if (families.length > 0) {
+        const firstFamily = families[0];
+        setSelectedFamily(firstFamily);
+        if (onFamilyChange) {
+          onFamilyChange(firstFamily.id);
+        }
+      }
+      
       onToast("✅ Dołączyłeś do rodziny");
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd akceptacji");
@@ -169,7 +179,13 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     if (!selectedFamily) return;
     try {
       await axios.delete(`${api}/families/${selectedFamily.id}/members/${memberId}`, { headers });
-      await loadFamilies();
+      
+      // 🔥 AKTUALIZUJ LISTĘ CZŁONKÓW BEZ ODSWIEŻANIA
+      setSelectedFamily(prev => ({
+        ...prev,
+        members: prev.members.filter(m => m.id !== memberId)
+      }));
+      
       onToast("🗑️ Usunięto członka rodziny");
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd usuwania członka");
