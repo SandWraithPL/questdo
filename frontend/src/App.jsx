@@ -2460,33 +2460,48 @@ export default function App() {
   };
   
   const deleteAccount = async (password, onDone) => {
-    console.log("[deleteAccount] Starting deletion...");
-    if (!window.confirm("Na pewno usunąć konto? Ta operacja jest nieodwracalna!")) return;
-
-    if (!password || password.length < 3) {
-      showToast("Podaj poprawne hasło");
+    console.log("[deleteAccount] 1. Start - password length:", password?.length);
+    
+    if (!window.confirm("Na pewno usunąć konto? Ta operacja jest nieodwracalna!")) {
+      console.log("[deleteAccount] 2. Anulowane przez użytkownika");
       return;
     }
-
+    
+    if (!password || password.length < 3) {
+      showToast("Podaj poprawne hasło (min. 3 znaki)");
+      console.log("[deleteAccount] 3. Hasło za krótkie");
+      return;
+    }
+    
     try {
-      console.log("[deleteAccount] Sending DELETE request...");
-      const response = await axios({
-        method: 'delete',
-        url: `${API}/me`,
-        headers: headers,
-        data: { password }
+      console.log("[deleteAccount] 4. Wysyłam DELETE do:", `${API}/me`);
+      
+      const response = await fetch(`${API}/me`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({ password })
       });
-      console.log("[deleteAccount] Response:", response.data);
-
+      
+      console.log("[deleteAccount] 5. Status odpowiedzi:", response.status);
+      const data = await response.json();
+      console.log("[deleteAccount] 6. Odpowiedź:", data);
+      
+      if (!response.ok) {
+        throw new Error(data.detail || "Błąd usuwania konta");
+      }
+      
       localStorage.removeItem("token");
       setToken(null);
       setUser(null);
       showToast("✅ Konto usunięte");
-      onDone?.();
+      if (onDone) onDone();
+      
     } catch (err) {
-      console.error("[deleteAccount] Error:", err);
-      console.error("[deleteAccount] Response:", err.response?.data);
-      showToast(err.response?.data?.detail || "Nie udało się usunąć konta");
+      console.error("[deleteAccount] ❌ BŁĄD:", err);
+      showToast(err.message || "Nie udało się usunąć konta");
     }
   };
   

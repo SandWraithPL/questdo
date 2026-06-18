@@ -128,7 +128,18 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
       </button>
 
       {open && (
-        <div className="date-picker-popup" role="dialog" aria-label="Wybierz datę">
+        <div 
+          className="date-picker-popup" 
+          style={{ 
+            zIndex: 999999,
+            position: 'fixed',
+            top: '50%',
+            left: '50%',
+            transform: 'translate(-50%, -50%)'
+          }}
+          role="dialog" 
+          aria-label="Wybierz datę"
+        >
           <div className="dp-header">
             {view === "days" && (
               <>

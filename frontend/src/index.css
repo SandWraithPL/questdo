@@ -912,15 +912,17 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .delete-user-btn:hover { background: #c0392b; }
 
 .date-picker-wrap { position: relative; width: 100%; margin-bottom: 10px; overflow: visible !important; z-index: 1; }
-.date-picker-wrap.open { z-index: 100000; }
+.date-picker-wrap.open { z-index: 999999 !important; }
 .date-picker-label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 6px; }
 .date-picker-trigger { width: 100%; display: flex; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; font-size: 0.9rem; cursor: pointer; text-align: left; }
 .date-picker-trigger:hover { border-color: #ff8906; }
 .date-picker-icon { font-size: 1.1rem; }
 .date-picker-trigger span:nth-child(2) { flex: 1; }
 .date-picker-chevron { color: #888; font-size: 0.7rem; }
-.date-picker-popup { position: absolute !important; z-index: 99999 !important; top: calc(100% + 6px) !important; left: 0 !important; background: #1a1a2e !important; border: 1px solid #444 !important; border-radius: 12px !important; padding: 12px !important; box-shadow: 0 8px 24px rgba(0,0,0,0.45) !important; width: 280px !important; min-width: 280px !important; }
-.add-task-meta .date-picker-wrap { grid-column: 1 / -1; margin-bottom: 0; overflow: visible !important; z-index: 99999 !important; }
+.date-picker-popup { position: fixed !important; z-index: 999999 !important; top: 50% !important; left: 50% !important; transform: translate(-50%, -50%) !important; background: #1a1a2e !important; border: 1px solid #444 !important; border-radius: 12px !important; padding: 12px !important; box-shadow: 0 8px 24px rgba(0,0,0,0.45) !important; width: 280px !important; min-width: 280px !important; max-width: 90vw !important; }
+.add-task-meta .date-picker-wrap { grid-column: 1 / -1; margin-bottom: 0; overflow: visible !important; z-index: 999999 !important; }
+.add-task .row button { position: relative; z-index: 1 !important; }
+.add-task .row { position: relative; z-index: 1 !important; }
 .dp-header { display: flex !important; align-items: center !important; justify-content: space-between !important; margin-bottom: 10px !important; gap: 6px !important; flex-wrap: nowrap !important; }
 .dp-nav { background: #0f0e17 !important; border: 1px solid #333 !important; color: #fff !important; width: 28px !important; height: 28px !important; min-width: 28px !important; border-radius: 6px !important; cursor: pointer !important; flex-shrink: 0 !important; font-size: 0.9rem !important; display: flex !important; align-items: center !important; justify-content: center !important; padding: 0 !important; }
 .dp-nav:hover { border-color: #ff8906 !important; color: #ff8906 !important; }
