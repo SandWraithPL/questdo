@@ -315,12 +315,14 @@ function getGamificationFromExp(exp, levelsMeta = DEFAULT_LEVELS_META, threshold
   const thresh = thresholds?.length ? thresholds : DEFAULT_LEVEL_THRESHOLDS;
   let level = meta[0]?.level ?? 1;
   let title = meta[0]?.title ?? "Kadet";
+  let currentLevelThreshold = meta[0]?.threshold ?? 0;
   let nextLevelExp = null;
   let nextLevelTitle = null;
   for (let i = meta.length - 1; i >= 0; i--) {
     if (exp >= meta[i].threshold) {
       level = meta[i].level;
       title = meta[i].title;
+      currentLevelThreshold = meta[i].threshold;
       if (meta[i + 1]) {
         nextLevelExp = meta[i + 1].threshold;
         nextLevelTitle = meta[i + 1].title;
@@ -328,7 +330,14 @@ function getGamificationFromExp(exp, levelsMeta = DEFAULT_LEVELS_META, threshold
       break;
     }
   }
-  const { progress } = getExpProgress(exp, thresh);
+  let progress;
+  if (!nextLevelExp) {
+    progress = 100;
+  } else {
+    const expInLevel = exp - currentLevelThreshold;
+    const expNeeded = nextLevelExp - currentLevelThreshold;
+    progress = Math.min(100, (expInLevel / expNeeded) * 100);
+  }
   return { level, title, next_level_exp: nextLevelExp, next_level_title: nextLevelTitle, progress };
 }
 
