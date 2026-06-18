@@ -1823,21 +1823,12 @@ export default function App() {
           const { id, action, bought, family_id: wsFamilyId } = data.data;
           console.log('[WS] Shopping update:', action, id, bought, 'familyId:', wsFamilyId, 'current familyId:', familyId);
           // Only update if it affects current view (same family or individual)
-          if (wsFamilyId === familyId || (!wsFamilyId && !familyId)) {
-            if (action === 'toggled' || action === 'updated') {
-              setShoppingItems(prev => prev.map(item => 
-                item.id === id ? { ...item, bought: bought } : item
-              ));
-            } else if (action === 'deleted') {
-              setShoppingItems(prev => prev.filter(item => item.id !== id));
-            } else if (action === 'added') {
-              // Reload to get the new item
-              if (typeof loadShoppingItems === 'function') {
-                loadShoppingItems();
-              }
-            } else if (action === 'cleared_bought') {
-              setShoppingItems(prev => prev.map(item => ({ ...item, bought: false })));
-            }
+          if (wsFamilyId && familyId && wsFamilyId !== familyId) {
+            return;
+          }
+          // Always refresh the list for real-time sync
+          if (typeof loadShoppingItems === 'function') {
+            loadShoppingItems();
           }
           if (familyId && typeof loadSummary === 'function') {
             loadSummary();

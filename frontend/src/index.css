@@ -428,6 +428,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .task-card.hard { border-left-color: #f44336; }
 .task-card.event { border-left-color: #9b59b6; }
 .task-card.done { opacity: 0.82; background: #141320; border-left-color: #3a3a48 !important; }
+.schedule-card.done { opacity: 0.82; background: #141320; border-left-color: #3a3a48 !important; }
 .task-card.done.can-uncheck { border-left-color: #2e5a35 !important; box-shadow: inset 0 0 0 1px rgba(76, 175, 80, 0.12); }
 .task-check { width: 28px; height: 28px; border-radius: 50%; border: 2px solid #555; background: transparent; cursor: pointer; display: flex; align-items: center; justify-content: center; font-size: 1rem; flex-shrink: 0; transition: border-color 0.2s, background 0.2s, transform 0.15s, box-shadow 0.2s; color: #0f0e17; }
 .task-check:hover:not(:disabled) { border-color: #ff8906; transform: scale(1.05); }

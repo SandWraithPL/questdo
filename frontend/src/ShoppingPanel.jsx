@@ -232,6 +232,19 @@ export default function ShoppingPanel({
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [familyId, selectedMode]);
 
+  // Fallback polling every 3 seconds for real-time sync
+  useEffect(() => {
+    if (!familyId && selectedMode !== "individual") return;
+    
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadShoppingItems();
+      }
+    }, 3000);
+    
+    return () => clearInterval(interval);
+  }, [familyId, selectedMode]);
+
   const loadDefaultCategory = async () => {
     try {
       const res = await axios.get(`${api}/settings/default-category`, { headers });

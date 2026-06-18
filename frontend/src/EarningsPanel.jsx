@@ -452,21 +452,38 @@ export default function EarningsPanel({
           return;
         }
         
-        // Check if time changed
+        // Find original entry
         const original = entries.find(e => e.id === entry.id);
-        const timeChanged = original && (editStartTime !== original.start_time || editEndTime !== original.end_time || editDate !== original.work_date);
+        if (!original) return;
         
-        // If time changed, reset completed if new end time is in the future
-        let newCompleted = original?.completed || false;
+        // Check if time changed
+        const timeChanged = (editStartTime !== original.start_time) || (editEndTime !== original.end_time) || (editDate !== original.work_date);
+        
+        // Calculate new completed status
+        let newCompleted = original.completed;
+        
         if (timeChanged) {
+          const today = new Date().toISOString().slice(0, 10);
           const now = new Date();
-          const today = now.toISOString().slice(0, 10);
           const nowMinutes = now.getHours() * 60 + now.getMinutes();
+          
           const [h, m] = editEndTime.split(":").map(Number);
           const endMinutes = h * 60 + m;
           
-          // If date is in the future OR today and time hasn't passed yet → not completed
-          if (editDate > today || (editDate === today && endMinutes > nowMinutes)) {
+          // If date is in the past → completed = true
+          if (editDate < today) {
+            newCompleted = true;
+          }
+          // If date is today and time has passed → completed = true
+          else if (editDate === today && endMinutes <= nowMinutes) {
+            newCompleted = true;
+          }
+          // If date is today and time hasn't passed → completed = false
+          else if (editDate === today && endMinutes > nowMinutes) {
+            newCompleted = false;
+          }
+          // If date is in the future → completed = false
+          else if (editDate > today) {
             newCompleted = false;
           }
         }
