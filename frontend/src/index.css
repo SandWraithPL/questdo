@@ -1175,7 +1175,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   border-radius: 14px;
   position: sticky;
   top: 8px;
-  z-index: 10;
+  z-index: 5;
 }
 
 .app-tab {
@@ -1869,4 +1869,64 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
     padding: 8px;
     font-size: 0.85rem;
   }
+}
+
+/* ============================================
+   NAPRAWA MINI KALENDARZA - ZAWSZE NA WIERZCHU
+   ============================================ */
+
+/* Wszystkie kontenery DatePicker */
+.date-picker-wrap {
+  position: relative !important;
+  z-index: 999999 !important;
+}
+
+/* Wszystkie popupy DatePicker */
+.date-picker-popup {
+  position: fixed !important;
+  z-index: 999999 !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+  background: #1a1a2e !important;
+  border: 1px solid #444 !important;
+  border-radius: 12px !important;
+  padding: 12px !important;
+  box-shadow: 0 8px 24px rgba(0,0,0,0.45) !important;
+  width: 280px !important;
+  max-width: 90vw !important;
+  max-height: 90vh !important;
+  overflow-y: auto !important;
+}
+
+/* Kalendarz w edycji task-card */
+.task-card .edit-mode .date-picker-wrap {
+  z-index: 999999 !important;
+  position: relative !important;
+}
+
+/* Kalendarz w formularzach dodawania */
+.add-task .date-picker-wrap {
+  z-index: 999999 !important;
+  position: relative !important;
+}
+
+/* Kalendarz w modułach */
+.module-panel .date-picker-wrap {
+  z-index: 999999 !important;
+  position: relative !important;
+}
+
+/* Kalendarz w RecurringPanel */
+.recurring-panel .date-picker-wrap {
+  z-index: 999999 !important;
+  position: relative !important;
+}
+
+.recurring-panel .date-picker-popup {
+  z-index: 999999 !important;
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
 }

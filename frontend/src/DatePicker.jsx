@@ -119,7 +119,7 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
   }
 
   return (
-    <div className="date-picker-wrap" ref={wrapRef}>
+    <div className={`date-picker-wrap ${open ? "open" : ""}`} ref={wrapRef}>
       {label && <span className="date-picker-label">{label}</span>}
       <button type="button" className="date-picker-trigger" onClick={togglePicker}>
         <span className="date-picker-icon">📅</span>
