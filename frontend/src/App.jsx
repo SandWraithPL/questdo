@@ -907,7 +907,6 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
                 {task.description && <p>{task.description}</p>}
                 <div className="task-meta">
                   {isEvent && <span className="badge event-type">{getEventCategoryLabel(task.event_category)}</span>}
-                  {isVirtual && <span className="badge recurring">🔄 Cykliczne</span>}
                   {!isEvent && <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>}
                   {!isEvent && <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>}
                   {isEvent && task.recurring_pattern && <span className="badge recurring">{task.recurring_pattern === "yearly" ? "🔄 Co rok" : task.recurring_pattern === "monthly" ? "🔄 Co miesiąc" : "🔄 Co tydzień"}</span>}
@@ -1407,7 +1406,6 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
                 {task.description && <p className={task.completed ? "done-desc" : ""}>{task.description}</p>}
                 <div className="task-meta">
                   {isEvent && <span className="badge event-type">{getEventCategoryLabel(task.event_category)}</span>}
-                  {isVirtual && <span className="badge recurring">🔄 Cykliczne</span>}
                   {!isEvent && <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>}
                   {!isVirtual && !isEvent && <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>}
                   {!isEvent && !isVirtual && <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>}

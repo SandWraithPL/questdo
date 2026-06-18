@@ -1583,7 +1583,7 @@ def get_me(current_user: models.User = Depends(get_current_user), db: Session = 
     today = date.today()
     for days_ahead in range(31):
         target_date = today + timedelta(days=days_ahead)
-        generate_recurring_event_instances(current_user, db, target_date)
+        # generate_recurring_event_instances(current_user, db, target_date)  # Removed - causes duplicates
         generate_recurring_panel_instances(current_user, db, target_date)
     
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
@@ -1743,7 +1743,7 @@ def get_tasks(
     today = date.today()
     for days_ahead in range(31):
         target_date = today + timedelta(days=days_ahead)
-        generate_recurring_event_instances(current_user, db, target_date)
+        # generate_recurring_event_instances(current_user, db, target_date)  # Removed - causes duplicates
         generate_recurring_panel_instances(current_user, db, target_date)
     
     offset = (page - 1) * limit
@@ -2220,49 +2220,15 @@ def generate_recurring_event_instances(user: models.User, db: Session, target_da
 
 
 def generate_recurring_panel_instances(user: models.User, db: Session, target_date: date) -> int:
-    """Create task instances from RecurringEvent definitions for a given date."""
-    created_count = 0
-    events = db.query(models.RecurringEvent).filter(
-        models.RecurringEvent.owner_id == user.id
-    ).all()
-
-    for event in events:
-        if not recurring_event_occurs_on(event, target_date):
-            continue
-
-        day_tasks = db.query(models.Task).filter(
-            models.Task.owner_id == user.id,
-            models.Task.task_type == "event",
-            models.Task.due_date == target_date,
-        ).all()
-        existing = next(
-            (t for t in day_tasks if decrypt_field(t.title) == event.title),
-            None,
-        )
-
-        if existing:
-            continue
-
-        new_task = models.Task(
-            title=encrypt_field(event.title),
-            description=encrypt_field(""),
-            difficulty="easy",
-            category="Inne",
-            due_date=target_date,
-            important=False,
-            reminder_offset_days=None,
-            completed=False,
-            task_type="event",
-            event_category=event.category,
-            owner_id=user.id,
-        )
-        db.add(new_task)
-        created_count += 1
-
-    if created_count > 0:
-        db.commit()
-
-    return created_count
+    """Create VIRTUAL task instances from RecurringEvent definitions for a given date.
+    
+    This function no longer creates actual database instances. RecurringEvent instances
+    are now virtual and created on the frontend via recurringHelpers.js.
+    This prevents duplicate instances from being created.
+    """
+    # NIE ZAPISUJEMY NICZEGO W BAZIE – zwracamy tylko informację, że instancja istnieje
+    # Ta funkcja jest używana tylko do wyświetlania, nie do zapisu
+    return 0  # Nie tworzymy żadnych instancji w bazie
 
 
 def build_challenges_payload(user: models.User, db: Session, day: Union[date, None] = None) -> dict:
