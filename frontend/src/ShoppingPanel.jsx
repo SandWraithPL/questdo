@@ -224,25 +224,13 @@ export default function ShoppingPanel({
   useEffect(() => {
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible" && (selectedMode === "family" ? familyId : true)) {
+        // TYLKO JEDNORAZOWE ODSWIEŻENIE (nie polling)
         loadShoppingItems();
       }
     };
 
     document.addEventListener("visibilitychange", handleVisibilityChange);
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [familyId, selectedMode]);
-
-  // Fallback polling every 3 seconds for real-time sync
-  useEffect(() => {
-    if (!familyId && selectedMode !== "individual") return;
-    
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        loadShoppingItems();
-      }
-    }, 3000);
-    
-    return () => clearInterval(interval);
   }, [familyId, selectedMode]);
 
   const loadDefaultCategory = async () => {
@@ -293,14 +281,31 @@ export default function ShoppingPanel({
   };
 
   const toggleBought = (item) => {
+    // 🔥 AKTUALIZUJ LOKALNIE NATYCHMIAST (OPTIMISTIC UPDATE)
+    const updatedItem = { ...item, bought: !item.bought };
+    setItems(prev => prev.map(i => i.id === item.id ? updatedItem : i));
+    
+    // 🔥 WYŚLIJ ZAPYTANIE DO API (w tle)
     enqueueRequest(async () => {
       try {
-        const res = await axios.patch(`${api}/shopping/${item.id}`, { bought: !item.bought }, { headers });
-        setItems((prev) => prev.map((i) => (i.id === item.id ? res.data.item : i)));
+        const res = await axios.patch(`${api}/shopping/${item.id}`, { 
+          bought: !item.bought 
+        }, { headers });
+        
+        // 🔥 AKTUALIZUJ NA PODSTAWIE ODPOWIEDZI Z BACKENDU
+        // (WebSocket i tak to zrobi, ale dla pewności)
+        setItems(prev => prev.map(i => 
+          i.id === item.id ? res.data.item : i
+        ));
+        
         applyUserFromResponse(res.data, onUserUpdate);
         await loadSummary();
         onToast("🛒 Kupione!");
       } catch (err) {
+        // 🔥 COFNIJ ZMIANĘ W RAZIE BŁĘDU
+        setItems(prev => prev.map(i => 
+          i.id === item.id ? item : i
+        ));
         onToast(err.response?.data?.detail || "Błąd aktualizacji");
       }
     });

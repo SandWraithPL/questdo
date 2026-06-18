@@ -1138,6 +1138,7 @@ class ScheduleUpdate(BaseModel):
     end_time: Optional[str] = None
     start_date: Optional[str] = None
     end_date: Optional[str] = None
+    completed: Optional[bool] = None
 
 
 class ShoppingCreate(BaseModel):
@@ -2725,6 +2726,8 @@ def update_schedule(entry_id: int, body: ScheduleUpdate, current_user: models.Us
         row.start_date = parse_due_date(body.start_date)
     if body.end_date is not None:
         row.end_date = parse_due_date(body.end_date)
+    if body.completed is not None:
+        row.completed = body.completed
     db.commit()
     db.refresh(row)
     
@@ -2887,7 +2890,8 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
             "id": row.id,
             "action": "toggled",
             "bought": row.bought,
-            "family_id": row.family_id
+            "family_id": row.family_id,
+            "item": lm.shopping_to_dict(row)
         }
     })
     

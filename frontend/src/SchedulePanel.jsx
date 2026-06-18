@@ -268,38 +268,6 @@ export default function SchedulePanel({
     const original = entries.find(e => e.id === editingId);
     if (!original) return;
     
-    // Check if time changed
-    const timeChanged = (editStartTime !== original.start_time) || (editEndTime !== original.end_time);
-    
-    // Calculate new completed status
-    let newCompleted = original.completed;
-    
-    if (timeChanged) {
-      const today = new Date().toISOString().slice(0, 10);
-      const now = new Date();
-      const nowMinutes = now.getHours() * 60 + now.getMinutes();
-      
-      const [h, m] = editEndTime.split(":").map(Number);
-      const endMinutes = h * 60 + m;
-      
-      // If date is in the past → completed = true
-      if (original.entry_date < today) {
-        newCompleted = true;
-      }
-      // If date is today and time has passed → completed = true
-      else if (original.entry_date === today && endMinutes <= nowMinutes) {
-        newCompleted = true;
-      }
-      // If date is today and time hasn't passed → completed = false
-      else if (original.entry_date === today && endMinutes > nowMinutes) {
-        newCompleted = false;
-      }
-      // If date is in the future → completed = false
-      else if (original.entry_date > today) {
-        newCompleted = false;
-      }
-    }
-    
     enqueueRequest(async () => {
       try {
         await axios.patch(`${api}/schedule/${editingId}`, {
@@ -308,7 +276,7 @@ export default function SchedulePanel({
           lecturer: editLecturer,
           start_time: editStartTime,
           end_time: editEndTime,
-          completed: newCompleted
+          // Don't send completed - let backend handle it or keep original
         }, { headers });
         
         // Odśwież listę
@@ -329,6 +297,22 @@ export default function SchedulePanel({
     setEditLecturer("");
     setEditStartTime("");
     setEditEndTime("");
+  };
+
+  const toggleCompleted = (entry) => {
+    enqueueRequest(async () => {
+      try {
+        await axios.patch(`${api}/schedule/${entry.id}`, {
+          completed: !entry.completed
+        }, { headers });
+        
+        const res = await axios.get(`${api}/schedule`, { headers });
+        setEntries(res.data);
+        onToast(entry.completed ? "✅ Oznaczono jako ukończone" : "↩️ Oznaczono jako nieukończone");
+      } catch (err) {
+        onToast(err.response?.data?.detail || "Błąd aktualizacji");
+      }
+    });
   };
 
   const handleExport = async () => {
@@ -538,6 +522,14 @@ export default function SchedulePanel({
                     </div>
                   </div>
                   <div className="task-actions">
+                    <button 
+                      type="button" 
+                      className={`icon-btn ${entry.completed ? "" : "check-btn"}`}
+                      onClick={() => toggleCompleted(entry)}
+                      title={entry.completed ? "Oznacz jako nieukończone" : "Oznacz jako ukończone"}
+                    >
+                      {entry.completed ? "↩️" : "✅"}
+                    </button>
                     <button 
                       type="button" 
                       className="icon-btn" 
