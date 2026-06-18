@@ -1888,7 +1888,13 @@ export default function App() {
     return () => ws.close();
   }, [isConnected, familyId]);
 
-  const enqueueRequest = async (requestFn) => {
+  const enqueueRequest = async (requestFn, priority = false) => {
+    if (priority) {
+      // Wykonaj natychmiast dla priorytetowych zapytań (np. POST)
+      await requestFn();
+      return;
+    }
+    // Normalna kolejka dla pozostałych zapytań
     apiQueue.current.push({ fn: requestFn });
     if (!isProcessingQueue.current) {
       isProcessingQueue.current = true;

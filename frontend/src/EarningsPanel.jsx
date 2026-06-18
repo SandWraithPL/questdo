@@ -374,16 +374,37 @@ export default function EarningsPanel({
         };
         const res = await axios.post(`${api}/work`, payload, { headers });
         
+        console.log("[Earnings] Add work response:", res.data);
+        
+        // 🔥 OBSŁUGA RÓŻNYCH ODPOWIEDZI
+        let newEntry;
+        if (res.data.entries && Array.isArray(res.data.entries)) {
+          // Cykliczne – bierz pierwszy wpis
+          newEntry = res.data.entries[0];
+        } else if (res.data.id) {
+          // Pojedynczy wpis
+          newEntry = res.data;
+        } else if (res.data.entry) {
+          // Backend zwraca { entry: {...} }
+          newEntry = res.data.entry;
+        } else {
+          // Nieznany format – bierz całą odpowiedź
+          newEntry = res.data;
+        }
+        
+        console.log("[Earnings] New entry from backend:", newEntry);
+        
         // ✅ ZASTĄP tymczasowy wpis prawdziwym
-        setEntries(prev => prev.map(e => e.id === tempId ? res.data : e));
+        setEntries(prev => prev.map(e => e.id === tempId ? newEntry : e));
         await refreshSummary();
         onToast("✅ Dodano wpis pracy");
       } catch (err) {
         // ❌ ROLLBACK – usuń tymczasowy wpis
         setEntries(prev => prev.filter(e => e.id !== tempId));
+        console.error("[Earnings] Add work error:", err.response?.data);
         onToast(err.response?.data?.detail || "Błąd dodawania");
       }
-    });
+    }, true);
   };
 
   const deleteEntry = (entry) => {
