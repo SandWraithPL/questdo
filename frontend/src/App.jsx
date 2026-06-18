@@ -1820,35 +1820,30 @@ export default function App() {
           loadTasksOnly();
           break;
         case 'shopping_updated':
-          const { id, action, bought, family_id: wsFamilyId, item } = data.data;
-          console.log('[WS] Shopping update:', { action, id, bought, wsFamilyId, currentFamilyId: familyId });
-          
-          // 🔥 POMIŃ GDY DOTYCZY INNEJ RODZINY
-          if (wsFamilyId && familyId && wsFamilyId !== familyId) {
-            console.log('[WS] Ignoring - different family');
-            return;
-          }
-          
-          // 🔥 AKTUALIZUJ LOKALNIE (BEZ ZAPYTANIA DO API)
-          if (action === 'toggled' || action === 'updated') {
-            setShoppingItems(prev => prev.map(i => 
-              i.id === id ? { ...i, bought: bought } : i
-            ));
-          } else if (action === 'deleted') {
-            setShoppingItems(prev => prev.filter(i => i.id !== id));
-          } else if (action === 'cleared_bought') {
-            setShoppingItems(prev => prev.map(i => ({ ...i, bought: false })));
-          } else if (action === 'added') {
-            // Dla nowego produktu – dodaj na początek listy
-            if (item) {
-              setShoppingItems(prev => [item, ...prev]);
-            } else {
-              // Jeśli nie ma item, przeładuj
-              if (typeof loadShoppingItems === 'function') {
-                loadShoppingItems();
-              }
-            }
-          }
+          // 🔥 TYMCZASOWO WYŁĄCZONE – PROBLEMY Z SYNCHRONIZACJĄ
+          // const { id, action, bought, family_id: wsFamilyId, item } = data.data;
+          // console.log('[WS] Shopping update:', { action, id, bought, wsFamilyId, currentFamilyId: familyId });
+          // if (wsFamilyId && familyId && wsFamilyId !== familyId) {
+          //   console.log('[WS] Ignoring - different family');
+          //   return;
+          // }
+          // if (action === 'toggled' || action === 'updated') {
+          //   setShoppingItems(prev => prev.map(i => 
+          //     i.id === id ? { ...i, bought: bought } : i
+          //   ));
+          // } else if (action === 'deleted') {
+          //   setShoppingItems(prev => prev.filter(i => i.id !== id));
+          // } else if (action === 'cleared_bought') {
+          //   setShoppingItems(prev => prev.map(i => ({ ...i, bought: false })));
+          // } else if (action === 'added') {
+          //   if (item) {
+          //     setShoppingItems(prev => [item, ...prev]);
+          //   } else {
+          //     if (typeof loadShoppingItems === 'function') {
+          //       loadShoppingItems();
+          //     }
+          //   }
+          // }
           break;
         case 'shopping_history_updated':
           if (typeof loadHistory === 'function') {

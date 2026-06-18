@@ -2918,21 +2918,21 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
         row.price = max(0.0, float(body.price))
     if body.bought is not None:
         row.bought = bool(body.bought)
+        print(f"[SHOPPING] ✅ Item {item_id} bought set to {row.bought}")
     db.commit()
     db.refresh(row)
     
-    # Broadcast WebSocket message
-    print(f"[WS] Broadcasting shopping_updated: toggled, id={row.id}, bought={row.bought}, family_id={row.family_id}")
-    safe_broadcast({
-        "type": "shopping_updated",
-        "data": {
-            "id": row.id,
-            "action": "toggled",
-            "bought": row.bought,
-            "family_id": row.family_id,
-            "item": lm.shopping_to_dict(row)
-        }
-    })
+    # 🔥 TYMCZASOWO WYŁĄCZAMY WEBSOCKET
+    # safe_broadcast({
+    #     "type": "shopping_updated",
+    #     "data": {
+    #         "id": row.id,
+    #         "action": "toggled",
+    #         "bought": row.bought,
+    #         "family_id": row.family_id,
+    #         "item": lm.shopping_to_dict(row)
+    #     }
+    # })
     
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {

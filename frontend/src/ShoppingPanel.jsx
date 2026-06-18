@@ -233,6 +233,20 @@ export default function ShoppingPanel({
     return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
   }, [familyId, selectedMode]);
 
+  // 🔥 POLLING FALLBACK CO 2 SEKUNDY (tylko gdy karta widoczna)
+  useEffect(() => {
+    if (!familyId && selectedMode !== "individual") return;
+    
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadShoppingItems();
+        loadSummary();
+      }
+    }, 2000); // ← co 2 sekundy
+    
+    return () => clearInterval(interval);
+  }, [familyId, selectedMode]);
+
   const loadDefaultCategory = async () => {
     try {
       const res = await axios.get(`${api}/settings/default-category`, { headers });
@@ -281,26 +295,34 @@ export default function ShoppingPanel({
   };
 
   const toggleBought = (item) => {
-    // 🔥 AKTUALIZUJ LOKALNIE NATYCHMIAST (OPTIMISTIC UPDATE)
-    const updatedItem = { ...item, bought: !item.bought };
-    setItems(prev => prev.map(i => i.id === item.id ? updatedItem : i));
+    const newBought = !item.bought;
+    
+    // 🔥 OPTIMISTIC UPDATE
+    setItems(prev => prev.map(i => 
+      i.id === item.id ? { ...i, bought: newBought } : i
+    ));
     
     // 🔥 WYŚLIJ ZAPYTANIE DO API (w tle)
     enqueueRequest(async () => {
       try {
         const res = await axios.patch(`${api}/shopping/${item.id}`, { 
-          bought: !item.bought 
+          bought: newBought 
         }, { headers });
         
         // 🔥 AKTUALIZUJ NA PODSTAWIE ODPOWIEDZI Z BACKENDU
-        // (WebSocket i tak to zrobi, ale dla pewności)
         setItems(prev => prev.map(i => 
           i.id === item.id ? res.data.item : i
         ));
         
         applyUserFromResponse(res.data, onUserUpdate);
         await loadSummary();
-        onToast("🛒 Kupione!");
+        
+        // 🔥 TOAST TYLKO PRZY ZAZNACZANIU (newBought === true)
+        if (newBought) {
+          onToast("🛒 Kupione!");
+        } else {
+          onToast("↩️ Cofnięto zakup");
+        }
       } catch (err) {
         // 🔥 COFNIJ ZMIANĘ W RAZIE BŁĘDU
         setItems(prev => prev.map(i => 
