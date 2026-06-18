@@ -148,11 +148,36 @@ export default function ShoppingPanel({
   };
 
   const loadShoppingItems = async () => {
+    const CACHE_KEY = `shopping_${selectedMode}_${familyId || 'personal'}`;
+    const CACHE_TTL = 30000; // 30 seconds
+    
+    // Check cache
     try {
-      const params = familyId ? { family_id: familyId } : {};
-      console.log("[SHOPPING] Loading items with familyId:", familyId, "params:", params);
+      const cached = localStorage.getItem(CACHE_KEY);
+      if (cached) {
+        const { data, timestamp } = JSON.parse(cached);
+        if (Date.now() - timestamp < CACHE_TTL) {
+          setItems(data);
+          await loadSummary();
+          return;
+        }
+      }
+    } catch {
+      // Ignore cache errors
+    }
+    
+    try {
+      const params = selectedMode === "family" && familyId ? { family_id: familyId } : {};
+      console.log("[SHOPPING] Loading items with selectedMode:", selectedMode, "familyId:", familyId, "params:", params);
       const res = await axios.get(`${api}/shopping`, { headers, params });
       setItems(res.data);
+      
+      // Save to cache
+      localStorage.setItem(CACHE_KEY, JSON.stringify({
+        data: res.data,
+        timestamp: Date.now()
+      }));
+      
       await loadSummary();
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd ładowania listy");

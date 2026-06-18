@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
+import CategoriesPanel from "./CategoriesPanel";
 
 export default function FamilyPanel({ api, headers, onToast, onFamilyChange, initialMode, currentUserId }) {
   const [families, setFamilies] = useState([]);
@@ -9,6 +10,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
   const [familyName, setFamilyName] = useState("");
   const [inviteUsername, setInviteUsername] = useState("");
   const [selectedFamily, setSelectedFamily] = useState(null);
+  const [collapsed, setCollapsed] = useState(false);
 
   const loadFamilies = async () => {
     try {
@@ -243,37 +245,39 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
 
           {selectedFamily && (
             <div className="family-details">
-              <div className="family-header">
+              <div className="family-header" style={{ cursor: 'pointer' }} onClick={() => setCollapsed(!collapsed)}>
                 <h4>{selectedFamily.name}</h4>
                 <span className="family-role">
-                  {selectedFamily.role === "admin" ? "👑 Administrator" : "👤 Członek"}
+                  {selectedFamily.role === "admin" ? "👑 Admin" : "👤 Członek"}
                 </span>
+                <span className="calendar-section-chevron">{collapsed ? "▼" : "▲"}</span>
               </div>
-
-              <div className="family-members">
-                <h5>Członkowie ({selectedFamily.members.length})</h5>
-                {selectedFamily.members.map((member) => (
-                  <div key={member.id} className="member-item">
-                    <span className="member-name">{member.username}</span>
-                    <span className="member-role">
-                      {member.role === "admin" ? "👑" : "👤"}
-                    </span>
-                    {selectedFamily.role === "admin" && currentUserId && member.id !== currentUserId && (
-                      <button 
-                        type="button" 
-                        className="icon-btn delete" 
-                        onClick={() => removeMember(member.id)}
-                        title="Usuń członka"
-                      >
-                        🗑️
-                      </button>
-                    )}
+              {!collapsed && (
+                <>
+                  <div className="family-members">
+                    <h5>Członkowie ({selectedFamily.members.length})</h5>
+                    {selectedFamily.members.map((member) => (
+                      <div key={member.id} className="member-item">
+                        <span className="member-name">{member.username}</span>
+                        <span className="member-role">
+                          {member.role === "admin" ? "👑" : "👤"}
+                        </span>
+                        {selectedFamily.role === "admin" && currentUserId && member.id !== currentUserId && (
+                          <button 
+                            type="button" 
+                            className="icon-btn delete" 
+                            onClick={() => removeMember(member.id)}
+                            title="Usuń członka"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
 
-              <div className="family-actions">
-                {selectedFamily.role === "admin" && (
+                  <div className="family-actions">
+                    {selectedFamily.role === "admin" && (
                   <button type="button" className="add-task-btn" onClick={() => setShowInvite(!showInvite)} style={{ marginBottom: 8 }}>
                     📧 Zaproś członka
                   </button>
@@ -300,7 +304,18 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
                   </div>
                 </div>
               )}
+                </>
+              )}
             </div>
+          )}
+          
+          {selectedFamily && (
+            <CategoriesPanel
+              api={api}
+              headers={headers}
+              onToast={onToast}
+              familyId={selectedFamily.id}
+            />
           )}
         </div>
       )}

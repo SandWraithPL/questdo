@@ -23,11 +23,13 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
   const [articles, setArticles] = useState([]);
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
+  const [unit, setUnit] = useState("szt");
   const [category, setCategory] = useState("other");
   const [price, setPrice] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editQty, setEditQty] = useState("");
+  const [editUnit, setEditUnit] = useState("szt");
   const [editCat, setEditCat] = useState("other");
   const [editPrice, setEditPrice] = useState("");
   const [defaultHourlyRate, setDefaultHourlyRate] = useState("");
@@ -67,12 +69,14 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
       await axios.post(`${api}/default-articles`, {
         name,
         quantity: qty,
+        unit,
         category,
         default_price: parseFloat(parseRateInput(price)) || 0,
         family_id: isFamilyMode && familyId ? familyId : null
       }, { headers });
       setName("");
       setQty("");
+      setUnit("szt");
       setCategory("other");
       setPrice("");
       onToast("✅ Dodano artykuł domyślny");
@@ -86,6 +90,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
     setEditingId(article.id);
     setEditName(article.name);
     setEditQty(article.quantity || "");
+    setEditUnit(article.unit || "szt");
     setEditCat(article.category || "other");
     setEditPrice(article.default_price ? article.default_price.toFixed(2).replace(".", ",") : "");
   };
@@ -96,12 +101,14 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
       await axios.patch(`${api}/default-articles/${editingId}`, {
         name: editName,
         quantity: editQty,
+        unit: editUnit,
         category: editCat,
         default_price: parseFloat(parseRateInput(editPrice)) || 0
       }, { headers });
       setEditingId(null);
       setEditName("");
       setEditQty("");
+      setEditUnit("szt");
       setEditCat("other");
       setEditPrice("");
       onToast("✅ Zaktualizowano artykuł");
@@ -190,6 +197,11 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
             onKeyDown={(e) => e.key === "Enter" && addArticle()} 
           />
           <input className="input-small" placeholder="Ilość" value={qty} onChange={(e) => setQty(e.target.value)} />
+          <select className="input-tiny" value={unit} onChange={(e) => setUnit(e.target.value)}>
+            <option value="szt">szt</option>
+            <option value="kg">kg</option>
+            <option value="l">l</option>
+          </select>
           <input className="input-small" placeholder="Cena (zł)" value={price} onChange={(e) => setPrice(e.target.value)} />
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
             {SHOPPING_CATEGORIES.map((c) => (
@@ -216,6 +228,11 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
                 <div className="edit-mode">
                   <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nazwa" />
                   <input className="input-small" value={editQty} onChange={(e) => setEditQty(e.target.value)} placeholder="Ilość" />
+                  <select className="input-tiny" value={editUnit} onChange={(e) => setEditUnit(e.target.value)}>
+                    <option value="szt">szt</option>
+                    <option value="kg">kg</option>
+                    <option value="l">l</option>
+                  </select>
                   <input className="input-small" value={editPrice} onChange={(e) => setEditPrice(e.target.value)} placeholder="Cena (zł)" />
                   <select value={editCat} onChange={(e) => setEditCat(e.target.value)}>
                     {SHOPPING_CATEGORIES.map((c) => (
@@ -223,7 +240,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
                     ))}
                   </select>
                   <button type="button" className="save-mini" onClick={saveEdit}>✓</button>
-                  <button type="button" className="cancel-mini" onClick={() => { setEditingId(null); setEditName(""); setEditQty(""); setEditCat("other"); setEditPrice(""); }}>✗</button>
+                  <button type="button" className="cancel-mini" onClick={() => { setEditingId(null); setEditName(""); setEditQty(""); setEditUnit("szt"); setEditCat("other"); setEditPrice(""); }}>✗</button>
                 </div>
               ) : (
                 <>

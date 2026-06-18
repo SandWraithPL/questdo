@@ -424,11 +424,13 @@ def process_work_auto_completion():
         now = datetime.now(REMINDER_TZ)
         today = now.date()
         current_minutes = now.hour * 60 + now.minute
+        print(f"[work-auto] Checking at {now}, today={today}, current_minutes={current_minutes}")
         entries = (
             db.query(models.WorkEntry)
             .filter(models.WorkEntry.completed.is_(False))
             .all()
         )
+        print(f"[work-auto] Found {len(entries)} incomplete entries")
         changed = False
         completed_count = 0
         for entry in entries:
@@ -437,20 +439,25 @@ def process_work_auto_completion():
                 entry.completed = True
                 changed = True
                 completed_count += 1
+                print(f"[work-auto] Auto-completed entry {entry.id} from {entry.work_date} (past date)")
                 continue
             # Auto-complete if work_date is today and end_time has passed
             if entry.work_date == today:
                 try:
                     eh, em = lm.parse_time_hm(entry.end_time)
                 except ValueError:
+                    print(f"[work-auto] Invalid end_time for entry {entry.id}: {entry.end_time}")
                     continue
                 if current_minutes >= eh * 60 + em:
                     entry.completed = True
                     changed = True
                     completed_count += 1
+                    print(f"[work-auto] Auto-completed entry {entry.id} at {entry.end_time} (time passed)")
         if changed:
             db.commit()
             print(f"[work-auto] Auto-completed {completed_count} work entries at {now}")
+        else:
+            print(f"[work-auto] No entries to auto-complete")
     except Exception as exc:
         db.rollback()
         print(f"[work-auto] scheduler error: {exc}")
@@ -464,11 +471,13 @@ def process_schedule_auto_completion():
         now = datetime.now(REMINDER_TZ)
         today = now.date()
         current_minutes = now.hour * 60 + now.minute
+        print(f"[schedule-auto] Checking at {now}, today={today}, current_minutes={current_minutes}")
         entries = (
             db.query(models.ScheduleEntry)
             .filter(models.ScheduleEntry.completed.is_(False))
             .all()
         )
+        print(f"[schedule-auto] Found {len(entries)} incomplete entries")
         changed = False
         completed_count = 0
         for entry in entries:
@@ -477,20 +486,25 @@ def process_schedule_auto_completion():
                 entry.completed = True
                 changed = True
                 completed_count += 1
+                print(f"[schedule-auto] Auto-completed entry {entry.id} from {entry.entry_date} (past date)")
                 continue
             # Auto-complete if entry_date is today and end_time has passed
             if entry.entry_date == today:
                 try:
                     eh, em = lm.parse_time_hm(entry.end_time)
                 except ValueError:
+                    print(f"[schedule-auto] Invalid end_time for entry {entry.id}: {entry.end_time}")
                     continue
                 if current_minutes >= eh * 60 + em:
                     entry.completed = True
                     changed = True
                     completed_count += 1
+                    print(f"[schedule-auto] Auto-completed entry {entry.id} at {entry.end_time} (time passed)")
         if changed:
             db.commit()
             print(f"[schedule-auto] Auto-completed {completed_count} schedule entries at {now}")
+        else:
+            print(f"[schedule-auto] No entries to auto-complete")
     except Exception as exc:
         db.rollback()
         print(f"[schedule-auto] scheduler error: {exc}")
@@ -2747,7 +2761,11 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
     # Broadcast WebSocket message
     safe_broadcast({
         "type": "shopping_updated",
-        "data": lm.shopping_to_dict(row)
+        "data": {
+            "id": row.id,
+            "action": "added",
+            "family_id": row.family_id
+        }
     })
     
     return lm.shopping_to_dict(row)
@@ -2787,7 +2805,12 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
     # Broadcast WebSocket message
     safe_broadcast({
         "type": "shopping_updated",
-        "data": lm.shopping_to_dict(row)
+        "data": {
+            "id": row.id,
+            "action": "updated",
+            "bought": row.bought,
+            "family_id": row.family_id
+        }
     })
     
     level, title, next_exp, next_title = gc.get_level(current_user.exp)

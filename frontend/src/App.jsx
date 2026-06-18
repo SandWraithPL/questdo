@@ -1166,8 +1166,10 @@ function LeaderboardPanel({ currentUser }) {
   useEffect(() => {
     if (!open) return;
     const interval = setInterval(() => {
-      fetchAllRankings();
-    }, 60000);
+      if (document.visibilityState === "visible") {
+        fetchAllRankings();
+      }
+    }, 300000);
     return () => clearInterval(interval);
   }, [open]);
   
@@ -1482,8 +1484,10 @@ function AdminPanel({ isOpen, onClose, headers, onRefreshAppData, onShowToast })
   useEffect(() => {
     if (!isOpen) return;
     const interval = setInterval(() => {
-      fetchData();
-    }, 60000);
+      if (document.visibilityState === "visible") {
+        fetchData();
+      }
+    }, 300000);
     return () => clearInterval(interval);
   }, [isOpen]);
 
@@ -1755,8 +1759,23 @@ export default function App() {
           loadTasksOnly();
           break;
         case 'shopping_updated':
-          if (typeof loadShoppingItems === 'function') {
-            loadShoppingItems();
+          const { id, action, bought, family_id: wsFamilyId } = data.data;
+          // Only update if it affects current view (same family or individual)
+          if (wsFamilyId === familyId || (!wsFamilyId && !familyId)) {
+            if (action === 'toggled' || action === 'updated') {
+              setShoppingItems(prev => prev.map(item => 
+                item.id === id ? { ...item, bought: bought } : item
+              ));
+            } else if (action === 'deleted') {
+              setShoppingItems(prev => prev.filter(item => item.id !== id));
+            } else if (action === 'added') {
+              // Reload to get the new item
+              if (typeof loadShoppingItems === 'function') {
+                loadShoppingItems();
+              }
+            } else if (action === 'cleared_bought') {
+              setShoppingItems(prev => prev.map(item => ({ ...item, bought: false })));
+            }
           }
           if (familyId && typeof loadSummary === 'function') {
             loadSummary();
@@ -1900,67 +1919,56 @@ export default function App() {
       'Pragma': 'no-cache'
     };
     
+    // 🔥 TIMEOUT – nie czekaj dłużej niż 5s na zapytania
+    const timeout = (promise, ms = 5000) => {
+      return Promise.race([
+        promise,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms))
+      ]).catch(() => null);
+    };
+    
     try {
       const shoppingParams = familyId ? { family_id: familyId } : {};
       
-      // 🔥 KROK 1 – ŁADUJ TYLKO TO, CO WIDAĆ OD RAZU
-      const [userRes, tasksRes, chRes] = await Promise.all([
-        axios.get(`${API}/me`, { headers: noCacheHeaders }),
-        axios.get(`${API}/tasks`, { headers: noCacheHeaders }),
-        axios.get(`${API}/challenges`, { headers: noCacheHeaders }),
+      // 🔥 KROK 1 – TYLKO TO, CO KRYTYCZNE (z timeout)
+      const [userRes, tasksRes] = await Promise.all([
+        timeout(axios.get(`${API}/me`, { headers: noCacheHeaders })),
+        timeout(axios.get(`${API}/tasks`, { headers: noCacheHeaders })),
       ]);
       
-      setUser(userRes.data);
+      if (userRes) setUser(userRes.data);
+      if (tasksRes) {
+        const tasksData = Array.isArray(tasksRes.data?.data) ? tasksRes.data.data : [];
+        const sortedTasks = [...tasksData].sort((a, b) => {
+          if (a.completed !== b.completed) return a.completed ? 1 : -1;
+          return new Date(a.due_date) - new Date(b.due_date);
+        });
+        setTasks(sortedTasks);
+      }
       
-      const tasksData = Array.isArray(tasksRes.data?.data) ? tasksRes.data.data : [];
-      const sortedTasks = [...tasksData].sort((a, b) => {
-        if (a.completed !== b.completed) return a.completed ? 1 : -1;
-        return new Date(a.due_date) - new Date(b.due_date);
-      });
-      setTasks(sortedTasks);
-      setChallenges(chRes.data);
-      
-      // 🔥 KROK 2 – RESZTA W TLE (nie blokuje interfejsu)
+      // 🔥 KROK 2 – RESZTA W TLE (nie blokuje)
       setTimeout(async () => {
         try {
-          // Poziomy z cache (optymalizacja)
-          let levelsRes;
-          const cachedLevels = getCachedLevels();
-          if (cachedLevels) {
-            levelsRes = { data: cachedLevels };
-          } else {
-            levelsRes = await axios.get(`${API}/game/levels`, { headers: noCacheHeaders }).catch(() => ({ data: null }));
-            if (levelsRes.data) setCachedLevels(levelsRes.data);
-          }
-          
-          const [achRes, rareDropsRes, scheduleRes, shoppingRes, workRes, workSummaryRes, freeDaysRes, recurringRes, historyRes] = await Promise.all([
-            axios.get(`${API}/achievements`, { headers: noCacheHeaders }),
-            axios.get(`${API}/rare-drops/inventory`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
+          const [chRes, achRes, scheduleRes, shoppingRes, workRes, freeDaysRes, recurringRes, historyRes] = await Promise.all([
+            axios.get(`${API}/challenges`, { headers: noCacheHeaders }).catch(() => null),
+            axios.get(`${API}/achievements`, { headers: noCacheHeaders }).catch(() => null),
             axios.get(`${API}/schedule`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
             axios.get(`${API}/shopping`, { headers: noCacheHeaders, params: shoppingParams }).catch(() => ({ data: [] })),
             axios.get(`${API}/work`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
-            axios.get(`${API}/work/summary`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
             axios.get(`${API}/free-days`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
             axios.get(`${API}/recurring-events`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
             axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
           ]);
           
-          const newUnlocked = achRes.data.unlocked || [];
+          if (chRes) setChallenges(chRes.data);
+          if (achRes) setAchievements(achRes.data);
+          setScheduleEntries(Array.isArray(scheduleRes?.data) ? scheduleRes.data : []);
+          setShoppingItems(Array.isArray(shoppingRes?.data) ? shoppingRes.data : []);
+          setWorkEntries(Array.isArray(workRes?.data) ? workRes.data : []);
+          setFreeDays(Array.isArray(freeDaysRes?.data) ? freeDaysRes.data : []);
+          setRecurringEvents(Array.isArray(recurringRes?.data) ? recurringRes.data : []);
+          setHistory(historyRes?.data || []);
           
-          setAchievements(newUnlocked.length ? { unlocked: newUnlocked, next: achRes.data.next } : achRes.data);
-          if (levelsRes.data?.length) {
-            setLevelsMeta(levelsRes.data);
-            setLevelThresholds(levelsRes.data.map((l) => l.threshold));
-          }
-          if (rareDropsRes.data) setRareDrops(rareDropsRes.data);
-          setHistory(historyRes.data || []);
-          setScheduleEntries(Array.isArray(scheduleRes.data) ? scheduleRes.data : []);
-          setShoppingItems(Array.isArray(shoppingRes.data) ? shoppingRes.data : []);
-          setWorkEntries(Array.isArray(workRes.data) ? workRes.data : []);
-          setWorkSummary(workSummaryRes.data || null);
-          setFreeDays(Array.isArray(freeDaysRes.data) ? freeDaysRes.data : []);
-          setRecurringEvents(Array.isArray(recurringRes.data) ? recurringRes.data : []);
-
           // Auto-generate holidays for years 2020-2030
           try {
             for (let year = 2020; year <= 2030; year++) {
@@ -1972,7 +1980,7 @@ export default function App() {
         } catch (err) {
           console.error("Background load error:", err);
         }
-      }, 100);
+      }, 50);
       
     } catch (err) {
       console.error("Fetch error:", err);
