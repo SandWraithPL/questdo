@@ -228,6 +228,7 @@ export default function EarningsPanel({
   useEffect(() => {
     loadDefaultHourlyRate();
     setWorkDate(selectedStr);
+    refreshSummary();
   }, [selectedStr]);
 
   useEffect(() => {
