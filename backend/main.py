@@ -2666,6 +2666,16 @@ def create_schedule(entry: ScheduleCreate, current_user: models.User = Depends(g
         "data": lm.schedule_to_dict(row)
     })
     
+    # Broadcast completion status
+    safe_broadcast({
+        "type": "schedule_updated",
+        "data": {
+            "id": row.id,
+            "action": "completed",
+            "completed": row.completed
+        }
+    })
+    
     return lm.schedule_to_dict(row)
 
 
@@ -2705,6 +2715,16 @@ def update_schedule(entry_id: int, body: ScheduleUpdate, current_user: models.Us
     safe_broadcast({
         "type": "schedule_updated",
         "data": lm.schedule_to_dict(row)
+    })
+    
+    # Broadcast completion status
+    safe_broadcast({
+        "type": "schedule_updated",
+        "data": {
+            "id": row.id,
+            "action": "completed",
+            "completed": row.completed
+        }
     })
     
     return lm.schedule_to_dict(row)
@@ -2843,12 +2863,12 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
     db.refresh(row)
     
     # Broadcast WebSocket message
-    print(f"[WS] Broadcasting shopping_updated: updated, id={row.id}, bought={row.bought}, family_id={row.family_id}")
+    print(f"[WS] Broadcasting shopping_updated: toggled, id={row.id}, bought={row.bought}, family_id={row.family_id}")
     safe_broadcast({
         "type": "shopping_updated",
         "data": {
             "id": row.id,
-            "action": "updated",
+            "action": "toggled",
             "bought": row.bought,
             "family_id": row.family_id
         }
@@ -3114,6 +3134,16 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
         "data": lm.work_to_dict(row)
     })
     
+    # Broadcast completion status
+    safe_broadcast({
+        "type": "work_updated",
+        "data": {
+            "id": row.id,
+            "action": "completed",
+            "completed": row.completed
+        }
+    })
+    
     # Jeśli auto-ukończono, zaktualizuj podsumowanie użytkownika
     if auto_complete:
         from sqlalchemy import func
@@ -3221,6 +3251,16 @@ def update_work(entry_id: int, body: WorkUpdate, current_user: models.User = Dep
     safe_broadcast({
         "type": "work_updated",
         "data": lm.work_to_dict(row)
+    })
+    
+    # Broadcast completion status
+    safe_broadcast({
+        "type": "work_updated",
+        "data": {
+            "id": row.id,
+            "action": "completed",
+            "completed": row.completed
+        }
     })
     
     level, title, next_exp, next_title = gc.get_level(current_user.exp)

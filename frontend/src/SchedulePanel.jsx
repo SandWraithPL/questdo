@@ -418,6 +418,18 @@ export default function SchedulePanel({
               </div>
             </div>
             <div className="task-actions">
+              {/* ✏️ ZAWSZE – nawet dla ukończonych */}
+              <button 
+                type="button" 
+                className="icon-btn" 
+                onClick={() => {
+                  // TODO: Implement edit functionality
+                  onToast("Edycja zajęć - funkcjonalność w przygotowaniu");
+                }}
+                title="Edytuj"
+              >
+                ✏️
+              </button>
               <button type="button" className="icon-btn" onClick={() => setCopyModal({ entryId: entry.id, targetDate: toDateStr(new Date()) })} title="Kopiuj">📋</button>
               <button type="button" className="icon-btn delete" onClick={() => deleteEntry(entry)}>🗑️</button>
             </div>

@@ -1849,8 +1849,15 @@ export default function App() {
           }
           break;
         case 'schedule_updated':
-          if (typeof loadSchedule === 'function') {
-            loadSchedule();
+          const scheduleData = data.data;
+          if (scheduleData.action === 'completed') {
+            setScheduleEntries(prev => prev.map(item => 
+              item.id === scheduleData.id ? { ...item, completed: scheduleData.completed } : item
+            ));
+          } else {
+            if (typeof loadSchedule === 'function') {
+              loadSchedule();
+            }
           }
           break;
         case 'work_updated':
