@@ -2459,18 +2459,35 @@ export default function App() {
     });
   };
   
-  const deleteAccount = async (password, onDone) => { 
-    if (!window.confirm("Na pewno usunąć konto?")) return; 
-    try { 
-      await axios.delete(`${API}/me`, { headers, data: { password } }); 
-      localStorage.removeItem("token"); 
-      setToken(null); 
-      setUser(null); 
-      showToast("Konto usunięte"); 
-      onDone?.(); 
-    } catch (err) { 
-      showToast(err.response?.data?.detail || "Nie udało się usunąć konta"); 
-    } 
+  const deleteAccount = async (password, onDone) => {
+    console.log("[deleteAccount] Starting deletion...");
+    if (!window.confirm("Na pewno usunąć konto? Ta operacja jest nieodwracalna!")) return;
+
+    if (!password || password.length < 3) {
+      showToast("Podaj poprawne hasło");
+      return;
+    }
+
+    try {
+      console.log("[deleteAccount] Sending DELETE request...");
+      const response = await axios({
+        method: 'delete',
+        url: `${API}/me`,
+        headers: headers,
+        data: { password }
+      });
+      console.log("[deleteAccount] Response:", response.data);
+
+      localStorage.removeItem("token");
+      setToken(null);
+      setUser(null);
+      showToast("✅ Konto usunięte");
+      onDone?.();
+    } catch (err) {
+      console.error("[deleteAccount] Error:", err);
+      console.error("[deleteAccount] Response:", err.response?.data);
+      showToast(err.response?.data?.detail || "Nie udało się usunąć konta");
+    }
   };
   
   const deleteTask = async (task) => {
