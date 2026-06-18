@@ -1360,38 +1360,48 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
           {editing && !isVirtual ? (
             <div className="edit-mode">
               <input value={editForm.title || ""} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} placeholder="Nazwa zadania" />
-              <textarea value={editForm.description || ""} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} placeholder="Opis" rows="2" />
-              <select value={editForm.task_type || "quest"} onChange={(e) => setEditForm({ ...editForm, task_type: e.target.value })}>
-                <option value="quest">⚔️ Quest (do wykonania)</option>
-                <option value="event">📅 Wydarzenie (urodziny, notatka)</option>
-              </select>
-              {editForm.task_type !== "event" && !tasks.find(t => t.id === task.id)?.exp_awarded && (<>
-                <select value={editForm.difficulty || "easy"} onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}>
-                  <option value="easy">⚔️ Łatwe (+10 EXP)</option><option value="medium">🗡️ Średnie (+25 EXP)</option><option value="hard">💀 Trudne (+50 EXP)</option>
+              <textarea value={editForm.description || ""} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} placeholder="Opis (opcjonalnie)" rows="2" />
+              <div className="edit-row-inline">
+                <select value={editForm.task_type || "quest"} onChange={(e) => setEditForm({ ...editForm, task_type: e.target.value })}>
+                  <option value="quest">⚔️ Quest (do wykonania)</option>
+                  <option value="event">📅 Wydarzenie (urodziny, notatka)</option>
                 </select>
-                <select value={editForm.category || "Inne"} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
-                  {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}
-                </select>
-                <DatePicker value={editForm.due_date || ""} onChange={(due_date) => setEditForm({ ...editForm, due_date })} />
-              </>)}
+                {editForm.task_type !== "event" && !tasks.find(t => t.id === task.id)?.exp_awarded && (
+                  <select value={editForm.difficulty || "easy"} onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}>
+                    <option value="easy">⚔️ Łatwe (+10 EXP)</option><option value="medium">🗡️ Średnie (+25 EXP)</option><option value="hard">💀 Trudne (+50 EXP)</option>
+                  </select>
+                )}
+              </div>
+              {editForm.task_type !== "event" && !tasks.find(t => t.id === task.id)?.exp_awarded && (
+                <div className="edit-row-inline">
+                  <select value={editForm.category || "Inne"} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
+                    {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}
+                  </select>
+                  <DatePicker value={editForm.due_date || ""} onChange={(due_date) => setEditForm({ ...editForm, due_date })} />
+                </div>
+              )}
               {editForm.task_type === "event" && (
-                <>
+                <div className="edit-row-inline">
                   <select value={editForm.event_category || ""} onChange={(e) => setEditForm({ ...editForm, event_category: e.target.value })}>
                     <option value="">Wybierz kategorię wydarzenia</option>
                     {EVENT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
                   </select>
                   <DatePicker value={editForm.due_date || ""} onChange={(due_date) => setEditForm({ ...editForm, due_date })} />
-                </>
+                </div>
               )}
-              <label className="important-toggle">
-                <input type="checkbox" checked={!!editForm.important} onChange={(e) => setEditForm({ ...editForm, important: e.target.checked, reminder_offset_days: e.target.checked && editForm.reminder_offset_days === "" ? "7" : editForm.reminder_offset_days })} />
-                <span>Ważne</span>
-              </label>
-              <select value={editForm.reminder_offset_days ?? ""} onChange={(e) => setEditForm({ ...editForm, reminder_offset_days: e.target.value })}>
-                {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-              </select>
-              <button type="button" className="save-mini" onClick={() => saveEdit(task)} disabled={loadingTaskIds.has(task.id)}>{loadingTaskIds.has(task.id) ? "⏳" : "✓"}</button>
-              <button type="button" className="cancel-mini" onClick={cancelEdit}>✗</button>
+              <div className="edit-row-inline">
+                <label className="important-toggle">
+                  <input type="checkbox" checked={!!editForm.important} onChange={(e) => setEditForm({ ...editForm, important: e.target.checked, reminder_offset_days: e.target.checked && editForm.reminder_offset_days === "" ? "7" : editForm.reminder_offset_days })} />
+                  <span>Ważne</span>
+                </label>
+                <select value={editForm.reminder_offset_days ?? ""} onChange={(e) => setEditForm({ ...editForm, reminder_offset_days: e.target.value })}>
+                  {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              <div className="edit-row-inline">
+                <button type="button" className="save-mini" onClick={() => saveEdit(task)} disabled={loadingTaskIds.has(task.id)}>{loadingTaskIds.has(task.id) ? "⏳" : "✅ Zapisz"}</button>
+                <button type="button" className="cancel-mini" onClick={cancelEdit}>❌ Anuluj</button>
+              </div>
             </div>
           ) : (
             <>

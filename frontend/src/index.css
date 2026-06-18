@@ -1294,12 +1294,23 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   flex: 1;
 }
 
-.edit-mode input,
-.edit-mode textarea,
-.edit-mode select {
-  flex: 1;
-  min-width: 100px;
-  padding: 8px;
+/* ===== EDYCJA – SPÓJNA Z DODAWANIEM ===== */
+
+/* Kontener edycji – taki sam jak add-task */
+.task-card .edit-mode {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 0;
+}
+
+/* Wszystkie pola w edycji – identyczne jak w dodawaniu */
+.task-card .edit-mode input,
+.task-card .edit-mode textarea,
+.task-card .edit-mode select {
+  width: 100%;
+  padding: 10px 12px;
   border-radius: 8px;
   border: 1px solid #333;
   background: #0f0e17;
@@ -1307,20 +1318,106 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   font-size: 0.9rem;
   min-height: 44px;
   box-sizing: border-box;
+  font-family: inherit;
 }
 
-.edit-mode textarea {
+/* Textarea – TYLKO nieco większy, ale nie za bardzo */
+.task-card .edit-mode textarea {
   min-height: 60px;
+  max-height: 120px;
   resize: vertical;
-  font-family: inherit;
   line-height: 1.4;
 }
 
-.task-card .edit-mode textarea {
-  background: #0f0e17 !important;
-  border: 1px solid #333 !important;
-  color: #fff !important;
-  border-radius: 8px !important;
+/* Checkbox "Ważne" – normalnych rozmiarów */
+.task-card .edit-mode .important-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  min-height: 44px;
+  border: 1px solid #333;
+  border-radius: 8px;
+  background: #0f0e17;
+  color: #fff;
+  cursor: pointer;
+  font-weight: bold;
+  margin-bottom: 0;
+}
+
+.task-card .edit-mode .important-toggle input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  min-height: unset;
+  padding: 0;
+  margin: 0;
+  accent-color: #ff8906;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.task-card .edit-mode .important-toggle span {
+  color: #ff8f45;
+  font-size: 0.9rem;
+}
+
+/* Przyciski zapisz/anuluj w edycji */
+.task-card .edit-mode .save-mini,
+.task-card .edit-mode .cancel-mini {
+  min-height: 44px;
+  padding: 0 16px;
+  border-radius: 8px;
+  border: 1px solid;
+  font-weight: bold;
+  font-size: 0.9rem;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.15s, box-shadow 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+  flex: 1;
+}
+
+.task-card .edit-mode .save-mini {
+  background: #4caf50;
+  color: #0f0e17;
+  border-color: #3d8b40;
+}
+
+.task-card .edit-mode .save-mini:hover {
+  background: #5cb860;
+  border-color: #4caf50;
+  box-shadow: 0 4px 6px rgba(76, 175, 80, 0.3);
+}
+
+.task-card .edit-mode .cancel-mini {
+  background: #333;
+  color: #fff;
+  border-color: #444;
+}
+
+.task-card .edit-mode .cancel-mini:hover {
+  background: #444;
+  border-color: #555;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+}
+
+/* Układ pól w edycji – jak w dodawaniu */
+.task-card .edit-mode .edit-row {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.task-card .edit-mode .edit-row-inline {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+/* Na telefonach – wszystkie pola w kolumnie */
+@media (max-width: 600px) {
+  .task-card .edit-mode .edit-row-inline {
+    grid-template-columns: 1fr;
+  }
 }
 
 .save-mini, .cancel-mini {
