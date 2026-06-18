@@ -1976,12 +1976,13 @@ export default function App() {
     return () => window.matchMedia("(display-mode: standalone)").removeEventListener("change", onDisplayMode);
   }, []);
 
-  useEffect(() => {
-    const cleanup = registerServiceWorkerForUpdates();
-    return () => {
-      if (cleanup) cleanup();
-    };
-  }, []);
+  // 🔥 WYŁĄCZONE – SERVICE WORKER POWODUJE PROBLEMY Z CORS
+  // useEffect(() => {
+  //   const cleanup = registerServiceWorkerForUpdates();
+  //   return () => {
+  //     if (cleanup) cleanup();
+  //   };
+  // }, []);
 
   useEffect(() => {
     if (!notificationsEnabled || !tasks.length) return undefined;

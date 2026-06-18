@@ -35,7 +35,9 @@ self.addEventListener('message', (event) => {
 self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(event.request.url);
 
+  // 🔥 NIE PRZECHWYTUJ ZAPYTAŃ DO API - PRZEPUŚĆ BEZ CACHE
   if (requestUrl.hostname.includes('onrender.com') ||
+      requestUrl.hostname.includes('azurewebsites.net') ||
       requestUrl.pathname.startsWith('/api') ||
       requestUrl.pathname.includes('/rankings') ||
       requestUrl.pathname.includes('/tasks') ||
@@ -43,7 +45,15 @@ self.addEventListener('fetch', (event) => {
       requestUrl.pathname.includes('/achievements') ||
       requestUrl.pathname.includes('/challenges') ||
       requestUrl.pathname.includes('/history') ||
-      requestUrl.pathname.includes('/rare-drops')) {
+      requestUrl.pathname.includes('/rare-drops') ||
+      requestUrl.pathname.includes('/shopping') ||
+      requestUrl.pathname.includes('/work') ||
+      requestUrl.pathname.includes('/schedule') ||
+      requestUrl.pathname.includes('/admin') ||
+      requestUrl.pathname.includes('/free-days') ||
+      requestUrl.pathname.includes('/push') ||
+      requestUrl.pathname.includes('/token') ||
+      requestUrl.pathname.includes('/register')) {
     event.respondWith(fetch(event.request, { cache: 'no-store' }));
     return;
   }
