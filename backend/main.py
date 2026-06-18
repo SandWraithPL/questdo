@@ -424,7 +424,8 @@ def process_work_auto_completion():
         now = datetime.now(REMINDER_TZ)
         today = now.date()
         current_minutes = now.hour * 60 + now.minute
-        print(f"[work-auto] 🔥 Checking at {now}, today={today}")
+        
+        print(f"[work-auto] 🔥 Checking at {now.strftime('%H:%M:%S')}, today={today}, current_minutes={current_minutes}")
         
         # Pobierz WSZYSTKIE nieukończone wpisy
         entries = db.query(models.WorkEntry).filter(
@@ -435,15 +436,15 @@ def process_work_auto_completion():
         
         changed = False
         completed_count = 0
+        completed_entries = []
         
         for entry in entries:
-            print(f"[work-auto] Entry {entry.id}: date={entry.work_date}, end={entry.end_time}")
-            
             # ✅ SPRAWDŹ CZY DATA JEST WCZEŚNIEJSZA NIŻ DZISIAJ
             if entry.work_date < today:
                 entry.completed = True
                 changed = True
                 completed_count += 1
+                completed_entries.append(entry)
                 print(f"[work-auto] ✅ Completed past work {entry.id} from {entry.work_date}")
                 continue
             
@@ -452,16 +453,28 @@ def process_work_auto_completion():
                 try:
                     eh, em = lm.parse_time_hm(entry.end_time)
                     end_minutes = eh * 60 + em
+                    print(f"[work-auto] Entry {entry.id}: end_time={entry.end_time}, end_minutes={end_minutes}, current_minutes={current_minutes}")
                     if current_minutes >= end_minutes:
                         entry.completed = True
                         changed = True
                         completed_count += 1
+                        completed_entries.append(entry)
                         print(f"[work-auto] ✅ Completed today's work {entry.id} at {entry.end_time}")
                 except ValueError:
                     continue
         
         if changed:
             db.commit()
+            # 🔥 WYŚLIJ WEBSOCKET O ZMIANIE
+            for entry in completed_entries:
+                safe_broadcast({
+                    "type": "work_updated",
+                    "data": {
+                        "id": entry.id,
+                        "action": "completed",
+                        "completed": True
+                    }
+                })
             print(f"[work-auto] ✅ Auto-completed {completed_count} work entries")
         else:
             print("[work-auto] ⏳ No entries to complete")
@@ -479,7 +492,8 @@ def process_schedule_auto_completion():
         now = datetime.now(REMINDER_TZ)
         today = now.date()
         current_minutes = now.hour * 60 + now.minute
-        print(f"[schedule-auto] 🔥 Checking at {now}, today={today}")
+        
+        print(f"[schedule-auto] 🔥 Checking at {now.strftime('%H:%M:%S')}, today={today}, current_minutes={current_minutes}")
         
         # Pobierz WSZYSTKIE nieukończone wpisy
         entries = db.query(models.ScheduleEntry).filter(
@@ -490,16 +504,16 @@ def process_schedule_auto_completion():
         
         changed = False
         completed_count = 0
+        completed_entries = []
         
         for entry in entries:
-            print(f"[schedule-auto] Entry {entry.id}: date={entry.entry_date}, end={entry.end_time}")
-            
             # ✅ SPRAWDŹ CZY DATA JEST WCZEŚNIEJSZA NIŻ DZISIAJ
             if entry.entry_date < today:
                 entry.completed = True
                 changed = True
                 completed_count += 1
-                print(f"[schedule-auto] ✅ Completed past schedule {entry.id} from {entry.entry_date}")
+                completed_entries.append(entry)
+                print(f"[schedule-auto] ✅ Completed past entry {entry.id} from {entry.entry_date}")
                 continue
             
             # ✅ SPRAWDŹ CZY DATA TO DZISIAJ I CZAS MINĄŁ
@@ -507,16 +521,28 @@ def process_schedule_auto_completion():
                 try:
                     eh, em = lm.parse_time_hm(entry.end_time)
                     end_minutes = eh * 60 + em
+                    print(f"[schedule-auto] Entry {entry.id}: end_time={entry.end_time}, end_minutes={end_minutes}, current_minutes={current_minutes}")
                     if current_minutes >= end_minutes:
                         entry.completed = True
                         changed = True
                         completed_count += 1
-                        print(f"[schedule-auto] ✅ Completed today's schedule {entry.id} at {entry.end_time}")
+                        completed_entries.append(entry)
+                        print(f"[schedule-auto] ✅ Completed today's entry {entry.id} at {entry.end_time}")
                 except ValueError:
                     continue
         
         if changed:
             db.commit()
+            # 🔥 WYŚLIJ WEBSOCKET O ZMIANIE
+            for entry in completed_entries:
+                safe_broadcast({
+                    "type": "schedule_updated",
+                    "data": {
+                        "id": entry.id,
+                        "action": "completed",
+                        "completed": True
+                    }
+                })
             print(f"[schedule-auto] ✅ Auto-completed {completed_count} schedule entries")
         else:
             print("[schedule-auto] ⏳ No entries to complete")
@@ -613,7 +639,7 @@ def reminder_scheduler_loop():
             process_scheduled_reminders()
         except Exception as exc:
             print(f"[reminders] loop error: {exc}")
-        time.sleep(60)
+        time.sleep(30)  # ← ZMIEŃ Z 60 NA 30 SEKUND
 
 
 @app.on_event("startup")
@@ -1550,7 +1576,10 @@ def get_me(current_user: models.User = Depends(get_current_user), db: Session = 
         db.commit()
     process_delayed_task_rewards(current_user, db)
     
+    # 🔥 WYWOŁAJ AUTO-UKOŃCZANIE PRZY KAŻDYM ODSWIEŻENIU
     process_work_auto_completion()
+    process_schedule_auto_completion()
+    
     today = date.today()
     for days_ahead in range(31):
         target_date = today + timedelta(days=days_ahead)
@@ -1628,7 +1657,10 @@ def get_tasks(
 ):
     process_delayed_task_rewards(current_user, db)
     
+    # 🔥 WYWOŁAJ AUTO-UKOŃCZANIE PRZY KAŻDYM ODSWIEŻENIU
     process_work_auto_completion()
+    process_schedule_auto_completion()
+    
     today = date.today()
     for days_ahead in range(31):
         target_date = today + timedelta(days=days_ahead)
@@ -2549,6 +2581,10 @@ def ranking_all(db: Session = Depends(get_db)):
 
 @app.get("/schedule")
 def list_schedule(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    # 🔥 WYWOŁAJ AUTO-UKOŃCZANIE DLA PLANU
+    process_work_auto_completion()
+    process_schedule_auto_completion()
+    
     entries = db.query(models.ScheduleEntry).filter(
         models.ScheduleEntry.owner_id == current_user.id
     ).order_by(models.ScheduleEntry.day_of_week, models.ScheduleEntry.start_time).all()
