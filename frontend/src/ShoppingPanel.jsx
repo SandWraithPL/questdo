@@ -148,64 +148,35 @@ export default function ShoppingPanel({
   };
 
   const loadShoppingItems = async () => {
-    const CACHE_KEY = `shopping_${selectedMode}_${familyId || 'personal'}`;
-    const CACHE_TTL = 30000; // 30 seconds
-    
-    // Check cache
-    try {
-      const cached = localStorage.getItem(CACHE_KEY);
-      if (cached) {
-        const { data, timestamp } = JSON.parse(cached);
-        if (Date.now() - timestamp < CACHE_TTL) {
-          setItems(data);
-          await loadSummary();
-          return;
-        }
-      }
-    } catch {
-      // Ignore cache errors
-    }
-    
     try {
       const params = selectedMode === "family" && familyId ? { family_id: familyId } : {};
-      console.log("[SHOPPING] Loading items with selectedMode:", selectedMode, "familyId:", familyId, "params:", params);
+      console.log("[SHOPPING] Loading items with params:", params);
       const res = await axios.get(`${api}/shopping`, { headers, params });
+      console.log("[SHOPPING] Loaded items:", res.data.length);
       setItems(res.data);
-      
-      // Save to cache
-      localStorage.setItem(CACHE_KEY, JSON.stringify({
-        data: res.data,
-        timestamp: Date.now()
-      }));
-      
       await loadSummary();
     } catch (err) {
+      console.error("[SHOPPING] Error loading:", err);
       onToast(err.response?.data?.detail || "Błąd ładowania listy");
     }
   };
 
-  // Initial load when component mounts
+  // ============ POLLING – CO 3 SEKUNDY ============
   useEffect(() => {
-    if (selectedMode === "family" && familyId) {
-      loadShoppingItems();
-    } else if (selectedMode === "individual") {
-      loadShoppingItems();
-    }
-  }, []);
-
-  useEffect(() => {
-    loadSummary();
-  }, [familyId]);
-
-  useEffect(() => {
-    // Load shopping items when familyId or selectedMode changes
-    if (selectedMode === "family" && familyId) {
-      loadShoppingItems();
-    } else if (selectedMode === "individual") {
-      loadShoppingItems();
-    }
+    // Pierwsze załadowanie
+    loadShoppingItems();
+    
+    // Polling co 3 sekundy
+    const interval = setInterval(() => {
+      if (document.visibilityState === "visible") {
+        loadShoppingItems();
+      }
+    }, 3000);
+    
+    return () => clearInterval(interval);
   }, [familyId, selectedMode]);
 
+  // ============ ZAPAMIĘTYWANIE STANÓW ============
   useEffect(() => {
     writeShoppingMode(selectedMode);
   }, [selectedMode]);
@@ -220,33 +191,6 @@ export default function ShoppingPanel({
     loadDefaultCategory();
   }, []);
 
-  // Refresh shopping items when tab becomes visible (for real-time sync)
-  useEffect(() => {
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === "visible" && (selectedMode === "family" ? familyId : true)) {
-        // TYLKO JEDNORAZOWE ODSWIEŻENIE (nie polling)
-        loadShoppingItems();
-      }
-    };
-
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
-  }, [familyId, selectedMode]);
-
-  // 🔥 POLLING FALLBACK CO 2 SEKUNDY (tylko gdy karta widoczna)
-  useEffect(() => {
-    if (!familyId && selectedMode !== "individual") return;
-    
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        loadShoppingItems();
-        loadSummary();
-      }
-    }, 2000); // ← co 2 sekundy
-    
-    return () => clearInterval(interval);
-  }, [familyId, selectedMode]);
-
   const loadDefaultCategory = async () => {
     try {
       const res = await axios.get(`${api}/settings/default-category`, { headers });
@@ -257,13 +201,13 @@ export default function ShoppingPanel({
     }
   };
 
-  // Polling removed - WebSocket handles real-time updates
-
+  // ============ DODAWANIE PRODUKTU ============
   const addItem = () => {
     if (!name.trim()) {
       onToast("Podaj nazwę produktu");
       return;
     }
+    
     enqueueRequest(async () => {
       try {
         const payload = { 
@@ -272,12 +216,15 @@ export default function ShoppingPanel({
           unit,
           category, 
           price: parseFloat(editPrice) || 0,
-          family_id: familyId || undefined
+          family_id: selectedMode === "family" && familyId ? familyId : undefined
         };
-        console.log("[SHOPPING] Adding item with payload:", payload);
-        const res = await axios.post(`${api}/shopping`, payload, { headers });
-        console.log("[SHOPPING] Response:", res.data);
-        setItems((prev) => [res.data, ...prev]);
+        
+        console.log("[SHOPPING] Adding item:", payload);
+        await axios.post(`${api}/shopping`, payload, { headers });
+        
+        // 🔥 ODŚWIEŻ LISTĘ PO DODANIU
+        await loadShoppingItems();
+        
         setName("");
         setQty("");
         setUnit("szt");
@@ -285,7 +232,7 @@ export default function ShoppingPanel({
         setEditPrice("");
         setShowSuggestions(false);
         setSuggestions([]);
-        await loadSummary();
+        
         onToast("✅ Dodano do listy zakupów");
       } catch (err) {
         console.error("[SHOPPING] Error:", err.response?.data);
@@ -294,54 +241,45 @@ export default function ShoppingPanel({
     });
   };
 
+  // ============ ZAZNACZANIE/ODZNAZCZANIE ============
   const toggleBought = (item) => {
     const newBought = !item.bought;
     
-    // 🔥 OPTIMISTIC UPDATE
-    setItems(prev => prev.map(i => 
-      i.id === item.id ? { ...i, bought: newBought } : i
-    ));
-    
-    // 🔥 WYŚLIJ ZAPYTANIE DO API (w tle)
     enqueueRequest(async () => {
       try {
-        const res = await axios.patch(`${api}/shopping/${item.id}`, { 
-          bought: newBought 
-        }, { headers });
+        console.log("[SHOPPING] Toggling item:", item.id, "to", newBought);
+        await axios.patch(`${api}/shopping/${item.id}`, { bought: newBought }, { headers });
         
-        // 🔥 AKTUALIZUJ NA PODSTAWIE ODPOWIEDZI Z BACKENDU
-        setItems(prev => prev.map(i => 
-          i.id === item.id ? res.data.item : i
-        ));
+        // 🔥 ODŚWIEŻ LISTĘ PO ZMIANIE
+        await loadShoppingItems();
         
-        applyUserFromResponse(res.data, onUserUpdate);
-        await loadSummary();
-        
-        // 🔥 TOAST TYLKO PRZY ZAZNACZANIU (newBought === true)
         if (newBought) {
           onToast("🛒 Kupione!");
         } else {
           onToast("↩️ Cofnięto zakup");
         }
       } catch (err) {
-        // 🔥 COFNIJ ZMIANĘ W RAZIE BŁĘDU
-        setItems(prev => prev.map(i => 
-          i.id === item.id ? item : i
-        ));
+        console.error("[SHOPPING] Error toggling:", err.response?.data);
         onToast(err.response?.data?.detail || "Błąd aktualizacji");
       }
     });
   };
 
+  // ============ USUWANIE PRODUKTU ============
   const deleteItem = (item) => {
     enqueueRequest(async () => {
       try {
+        console.log("[SHOPPING] Deleting item:", item.id);
         const res = await axios.delete(`${api}/shopping/${item.id}`, { headers });
-        setItems((prev) => prev.filter((i) => i.id !== item.id));
+        
+        // 🔥 ODŚWIEŻ LISTĘ PO USUNIĘCIU
+        await loadShoppingItems();
+        
         applyUserFromResponse(res.data, onUserUpdate);
         await loadSummary();
         onToast("🗑️ Usunięto produkt");
       } catch (err) {
+        console.error("[SHOPPING] Error deleting:", err.response?.data);
         onToast(err.response?.data?.detail || "Błąd usuwania");
       }
     });
@@ -362,7 +300,10 @@ export default function ShoppingPanel({
       try {
         const params = familyId ? { family_id: familyId } : {};
         await axios.delete(`${api}/shopping/bought/clear`, { headers, params });
-        setItems((prev) => prev.filter((i) => !i.bought));
+        
+        // 🔥 ODŚWIEŻ LISTĘ PO CZYSZCZENIU
+        await loadShoppingItems();
+        
         await loadSummary();
         onToast("🗑️ Usunięto kupione produkty");
       } catch (err) {

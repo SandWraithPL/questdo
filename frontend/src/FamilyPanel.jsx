@@ -10,7 +10,17 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
   const [familyName, setFamilyName] = useState("");
   const [inviteUsername, setInviteUsername] = useState("");
   const [selectedFamily, setSelectedFamily] = useState(null);
-  const [collapsed, setCollapsed] = useState(false);
+  
+  const FAMILY_COLLAPSED_KEY = "questdo-family-collapsed";
+  
+  // 🔥 DOMYŚLNIE ZWINIĘTY + ZAPAMIĘTYWANIE W localStorage
+  const [collapsed, setCollapsed] = useState(() => {
+    try {
+      return localStorage.getItem(FAMILY_COLLAPSED_KEY) === "true";
+    } catch {
+      return true; // domyślnie zwinięty
+    }
+  });
 
   const loadFamilies = async () => {
     try {
@@ -166,10 +176,21 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     }
   };
 
+  // 🔥 TOGGLE ZAPISUJE DO localStorage
+  const toggleCollapsed = () => {
+    setCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem(FAMILY_COLLAPSED_KEY, String(next));
+      } catch {}
+      return next;
+    });
+  };
+
   return (
     <div className="module-panel family-panel">
       {/* Collapse header - collapses entire panel */}
-      <div className="calendar-section-bar" style={{ cursor: 'pointer' }} onClick={() => setCollapsed(!collapsed)}>
+      <div className="calendar-section-bar" style={{ cursor: 'pointer' }} onClick={toggleCollapsed}>
         <span className="calendar-section-title">👨‍👩‍👧‍👦 Rodzina</span>
         <span className="calendar-section-chevron">{collapsed ? "▼" : "▲"}</span>
       </div>

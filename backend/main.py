@@ -2874,18 +2874,17 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
     db.add(row)
     db.commit()
     db.refresh(row)
-    print(f"[SHOPPING] Created item with family_id: {row.family_id}")  # ← DODAJ
+    print(f"[SHOPPING] Created item with family_id: {row.family_id}")
     
-    # Broadcast WebSocket message
-    print(f"[WS] Broadcasting shopping_updated: added, id={row.id}, family_id={row.family_id}")
-    safe_broadcast({
-        "type": "shopping_updated",
-        "data": {
-            "id": row.id,
-            "action": "added",
-            "family_id": row.family_id
-        }
-    })
+    # 🔥 TYMCZASOWO WYŁĄCZONE – POLLING JEST JEDYNYM ŹRÓDŁEM
+    # safe_broadcast({
+    #     "type": "shopping_updated",
+    #     "data": {
+    #         "id": row.id,
+    #         "action": "added",
+    #         "family_id": row.family_id
+    #     }
+    # })
     
     return lm.shopping_to_dict(row)
 
@@ -2968,12 +2967,11 @@ def delete_shopping(item_id: int, current_user: models.User = Depends(get_curren
     db.delete(row)
     db.commit()
     
-    # Broadcast WebSocket message
-    print(f"[WS] Broadcasting shopping_updated: deleted, id={item_id}, family_id={family_id}")
-    safe_broadcast({
-        "type": "shopping_updated",
-        "data": {"id": item_id, "deleted": True, "family_id": family_id}
-    })
+    # 🔥 TYMCZASOWO WYŁĄCZONE – POLLING JEST JEDYNYM ŹRÓDŁEM
+    # safe_broadcast({
+    #     "type": "shopping_updated",
+    #     "data": {"id": item_id, "deleted": True, "family_id": family_id}
+    # })
     
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
     return {
@@ -3010,12 +3008,11 @@ def clear_bought_shopping(family_id: Optional[int] = None, current_user: models.
         db.delete(row)
     db.commit()
     
-    # Broadcast WebSocket message
-    print(f"[WS] Broadcasting shopping_updated: cleared_bought, family_id={family_id}")
-    safe_broadcast({
-        "type": "shopping_updated",
-        "data": {"action": "cleared_bought", "family_id": family_id}
-    })
+    # 🔥 TYMCZASOWO WYŁĄCZONE – POLLING JEST JEDYNYM ŹRÓDŁEM
+    # safe_broadcast({
+    #     "type": "shopping_updated",
+    #     "data": {"action": "cleared_bought", "family_id": family_id}
+    # })
     
     return {"message": f"Usunięto {len(bought)} kupionych produktów"}
 
