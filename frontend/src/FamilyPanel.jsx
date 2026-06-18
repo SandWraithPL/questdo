@@ -168,10 +168,16 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
 
   return (
     <div className="module-panel family-panel">
-      <h3>👨‍👩‍👧‍👦 Rodzina</h3>
+      {/* Collapse header - collapses entire panel */}
+      <div className="calendar-section-bar" style={{ cursor: 'pointer' }} onClick={() => setCollapsed(!collapsed)}>
+        <span className="calendar-section-title">👨‍👩‍👧‍👦 Rodzina</span>
+        <span className="calendar-section-chevron">{collapsed ? "▼" : "▲"}</span>
+      </div>
 
-      {/* Oczekujące zaproszenia */}
-      {invitations.length > 0 && (
+      {!collapsed && (
+        <>
+          {/* Oczekujące zaproszenia */}
+          {invitations.length > 0 && (
         <div className="invitations-section">
           <h4>📨 Oczekujące zaproszenia ({invitations.length})</h4>
           {invitations.map((inv) => (
@@ -255,10 +261,10 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
                     <h5>Członkowie ({selectedFamily.members.length})</h5>
                     {selectedFamily.members.map((member) => (
                       <div key={member.id} className="member-item">
-                        <span className="member-name">{member.username}</span>
                         <span className="member-role">
                           {member.role === "admin" ? "👑" : "👤"}
                         </span>
+                        <span className="member-name">{member.username}</span>
                         {selectedFamily.role === "admin" && currentUserId && member.id !== currentUserId && (
                           <button 
                             type="button" 
@@ -319,6 +325,8 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
             </div>
           )}
         </div>
+      )}
+        </>
       )}
     </div>
   );

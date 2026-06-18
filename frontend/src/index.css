@@ -1168,7 +1168,9 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   flex-shrink: 0;
 }
 
-.icon-btn {
+/* Override icon-btn only for shopping and schedule cards to keep them flat */
+.shopping-card .icon-btn,
+.schedule-card .icon-btn {
   background: none;
   border: none;
   cursor: pointer;
@@ -1177,8 +1179,10 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   border-radius: 6px;
 }
 
-.icon-btn:hover { background: #2a2a3e; }
-.icon-btn.delete:hover { background: rgba(244, 67, 54, 0.15); }
+.shopping-card .icon-btn:hover,
+.schedule-card .icon-btn:hover { background: #2a2a3e; }
+.shopping-card .icon-btn.delete:hover,
+.schedule-card .icon-btn.delete:hover { background: rgba(244, 67, 54, 0.15); }
 
 .edit-mode {
   display: flex;

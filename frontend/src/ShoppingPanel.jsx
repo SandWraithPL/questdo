@@ -239,7 +239,7 @@ export default function ShoppingPanel({
         loadShoppingItems();
         loadSummary();
       }
-    }, 30000); // Changed from 10000ms to 30000ms for better performance
+    }, 1000); // 1 second for immediate family sync
 
     return () => clearInterval(interval);
   }, [familyId]);
