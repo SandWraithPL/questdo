@@ -4555,6 +4555,15 @@ def remove_family_member(family_id: int, user_id: int, current_user: models.User
 
     db.delete(target_membership)
     db.commit()
+    
+    # 🔥 WYŚLIJ WEBSOCKET DO USUNIĘTEGO UŻYTKOWNIKA
+    safe_broadcast({
+        "type": "family_member_removed",
+        "data": {
+            "user_id": user_id,
+            "family_id": family_id
+        }
+    })
 
     return {"message": "Usunięto członka rodziny"}
 

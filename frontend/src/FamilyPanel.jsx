@@ -128,11 +128,14 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     try {
       await axios.post(`${api}/family/invitations/${invitationId}/accept`, {}, { headers });
       await loadInvitations();
-      await loadFamilies();
       
-      // 🔥 PO AKCEPTACJI – WYWOŁAJ onFamilyChange Z ID NOWEJ RODZINY
-      if (families.length > 0) {
-        const firstFamily = families[0];
+      // 🔥 PO AKCEPTACJI – POBIERZ FRESH DATA I WYWOŁAJ onFamilyChange
+      const res = await axios.get(`${api}/families`, { headers });
+      const freshFamilies = res.data;
+      setFamilies(freshFamilies);
+      
+      if (freshFamilies.length > 0) {
+        const firstFamily = freshFamilies[0];
         setSelectedFamily(firstFamily);
         if (onFamilyChange) {
           onFamilyChange(firstFamily.id);

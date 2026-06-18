@@ -1877,6 +1877,17 @@ export default function App() {
             if (typeof loadWork === 'function') loadWork();
           }
           break;
+        case 'family_member_removed':
+          const { user_id: removedUserId, family_id: removedFamilyId } = data.data;
+          // 🔥 SPRAWDŹ CZY TO TEN SAM UŻYTKOWNIK
+          if (removedUserId === user?.id) {
+            // Użytkownik został usunięty z rodziny
+            setFamilyId(null);
+            // Odśwież dane
+            fetchData();
+            showToast("🗑️ Zostałeś usunięty z rodziny");
+          }
+          break;
         default:
           break
       }
