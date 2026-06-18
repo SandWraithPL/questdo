@@ -73,12 +73,16 @@ def work_rate(entry: models.WorkEntry) -> float:
 
 
 def work_earnings(entry: models.WorkEntry) -> dict:
-    hours = hours_between(entry.start_time, entry.end_time)
-    rate = work_rate(entry)
-    gross = round(hours * rate, 2)
-    tax = round(gross * (entry.tax_percent / 100), 2) if entry.tax_enabled else 0.0
-    net = round(gross - tax, 2)
-    return {"hours": hours, "gross": gross, "tax": tax, "net": net}
+    try:
+        hours = hours_between(entry.start_time, entry.end_time)
+        rate = work_rate(entry)
+        gross = round(hours * rate, 2)
+        tax = round(gross * (entry.tax_percent / 100), 2) if entry.tax_enabled else 0.0
+        net = round(gross - tax, 2)
+        return {"hours": hours, "gross": gross, "tax": tax, "net": net}
+    except Exception as e:
+        print(f"[work_earnings] Error for entry {entry.id}: {e}")
+        return {"hours": 0, "gross": 0, "tax": 0, "net": 0}
 
 
 def work_to_dict(entry: models.WorkEntry) -> dict:
@@ -154,13 +158,22 @@ def sum_work_earnings(entries: list[models.WorkEntry], completed_only: bool = Tr
     total_gross = 0.0
     total_net = 0.0
     total_hours = 0.0
+    count = 0
+    
     for entry in entries:
         if completed_only and not entry.completed:
             continue
-        e = work_earnings(entry)
-        total_gross += e["gross"]
-        total_net += e["net"]
-        total_hours += e["hours"]
+        try:
+            e = work_earnings(entry)
+            total_gross += e["gross"]
+            total_net += e["net"]
+            total_hours += e["hours"]
+            count += 1
+        except Exception as e:
+            print(f"[sum_work_earnings] Error for entry {entry.id}: {e}")
+    
+    print(f"[sum_work_earnings] Processed {count} entries, Net: {total_net}")
+    
     return {
         "gross": round(total_gross, 2),
         "net": round(total_net, 2),

@@ -3033,32 +3033,50 @@ def work_summary(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    # 🔥 WYWOŁAJ AUTO-UKOŃCZANIE PRZED OBLICZENIAMI
+    process_work_auto_completion()
+    
     entries = db.query(models.WorkEntry).filter(models.WorkEntry.owner_id == current_user.id).all()
     completed = [e for e in entries if e.completed]
+    
+    print(f"[work_summary] Total entries: {len(entries)}, Completed: {len(completed)}")
+    
     day_totals = {}
     month_totals = {}
     year_totals = {}
+    all_time_net = 0.0
+    
     for entry in completed:
-        e = lm.work_earnings(entry)
-        d = str(entry.work_date)
-        ym = d[:7]
-        y = d[:4]
-        day_totals[d] = day_totals.get(d, 0.0) + e["net"]
-        month_totals[ym] = month_totals.get(ym, 0.0) + e["net"]
-        year_totals[y] = year_totals.get(y, 0.0) + e["net"]
+        try:
+            e = lm.work_earnings(entry)
+            d = str(entry.work_date)
+            ym = d[:7]
+            y = d[:4]
+            
+            net = e.get("net", 0)
+            day_totals[d] = day_totals.get(d, 0.0) + net
+            month_totals[ym] = month_totals.get(ym, 0.0) + net
+            year_totals[y] = year_totals.get(y, 0.0) + net
+            all_time_net += net
+        except Exception as e:
+            print(f"[work_summary] Error for entry {entry.id}: {e}")
+    
     result = {
-        "all_time": lm.sum_work_earnings(entries),
+        "all_time": {"net": round(all_time_net, 2)},
         "by_day": {k: round(v, 2) for k, v in sorted(day_totals.items())},
         "by_month": {k: round(v, 2) for k, v in sorted(month_totals.items())},
         "by_year": {k: round(v, 2) for k, v in sorted(year_totals.items())},
     }
     if year and month:
         key = f"{year:04d}-{month:02d}"
-        month_entries = [e for e in entries if str(e.work_date).startswith(key)]
+        month_entries = [e for e in completed if str(e.work_date).startswith(key)]
         result["selected_month"] = lm.sum_work_earnings(month_entries)
     if year:
-        year_entries = [e for e in entries if str(e.work_date).startswith(f"{year:04d}")]
+        year_entries = [e for e in completed if str(e.work_date).startswith(f"{year:04d}")]
         result["selected_year"] = lm.sum_work_earnings(year_entries)
+    
+    print(f"[work_summary] Day totals: {len(day_totals)}, Month totals: {len(month_totals)}, Year totals: {len(year_totals)}")
+    
     return result
 
 
