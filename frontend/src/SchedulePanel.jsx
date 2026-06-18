@@ -264,9 +264,40 @@ export default function SchedulePanel({
       return;
     }
     
-    // Find original entry
+    // 🔥 Znajdź oryginalny wpis
     const original = entries.find(e => e.id === editingId);
     if (!original) return;
+    
+    // 🔥 Sprawdź czy zmieniono godzinę LUB datę
+    const timeChanged = (editStartTime !== original.start_time) || (editEndTime !== original.end_time);
+    
+    // 🔥 Oblicz nowy status completed na podstawie NOWEJ godziny
+    let newCompleted = original.completed;
+    
+    if (timeChanged) {
+      const today = new Date().toISOString().slice(0, 10);
+      const now = new Date();
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+      
+      const [h, m] = editEndTime.split(":").map(Number);
+      const endMinutes = h * 60 + m;
+      
+      // 📋 LOGIKA:
+      // - Jeśli data w przeszłości → completed = true
+      // - Jeśli data dzisiaj i czas minął → completed = true
+      // - Jeśli data dzisiaj i czas nie minął → completed = false
+      // - Jeśli data w przyszłości → completed = false
+      
+      if (original.entry_date < today) {
+        newCompleted = true;
+      } else if (original.entry_date === today) {
+        newCompleted = endMinutes <= nowMinutes;
+      } else if (original.entry_date > today) {
+        newCompleted = false;
+      }
+      
+      console.log(`[Schedule] Time changed: ${original.end_time} → ${editEndTime}, newCompleted: ${newCompleted}`);
+    }
     
     enqueueRequest(async () => {
       try {
@@ -276,10 +307,9 @@ export default function SchedulePanel({
           lecturer: editLecturer,
           start_time: editStartTime,
           end_time: editEndTime,
-          // Don't send completed - let backend handle it or keep original
+          completed: newCompleted  // ← PRZEKAŻ POPRAWNIE OBLICZONY STATUS
         }, { headers });
         
-        // Odśwież listę
         const res = await axios.get(`${api}/schedule`, { headers });
         setEntries(res.data);
         setEditingId(null);
@@ -522,14 +552,6 @@ export default function SchedulePanel({
                     </div>
                   </div>
                   <div className="task-actions">
-                    <button 
-                      type="button" 
-                      className={`icon-btn ${entry.completed ? "" : "check-btn"}`}
-                      onClick={() => toggleCompleted(entry)}
-                      title={entry.completed ? "Oznacz jako nieukończone" : "Oznacz jako ukończone"}
-                    >
-                      {entry.completed ? "↩️" : "✅"}
-                    </button>
                     <button 
                       type="button" 
                       className="icon-btn" 

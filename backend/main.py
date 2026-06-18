@@ -2767,6 +2767,9 @@ def update_schedule(entry_id: int, body: ScheduleUpdate, current_user: models.Us
     db.commit()
     db.refresh(row)
     
+    # 🔥 WYWOŁAJ AUTO-UKOŃCZANIE (na wypadek gdyby czas minął)
+    process_schedule_auto_completion()
+    
     # Broadcast WebSocket message
     safe_broadcast({
         "type": "schedule_updated",
@@ -3317,6 +3320,9 @@ def update_work(entry_id: int, body: WorkUpdate, current_user: models.User = Dep
         raise HTTPException(status_code=400, detail="Nieprawidłowy format godziny (HH:MM)")
     db.commit()
     db.refresh(row)
+    
+    # 🔥 WYWOŁAJ AUTO-UKOŃCZANIE (na wypadek gdyby czas minął)
+    process_work_auto_completion()
     
     # Broadcast WebSocket message
     safe_broadcast({
