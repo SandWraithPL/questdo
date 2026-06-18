@@ -220,6 +220,18 @@ export default function ShoppingPanel({
     loadDefaultCategory();
   }, []);
 
+  // Refresh shopping items when tab becomes visible (for real-time sync)
+  useEffect(() => {
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible" && (selectedMode === "family" ? familyId : true)) {
+        loadShoppingItems();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [familyId, selectedMode]);
+
   const loadDefaultCategory = async () => {
     try {
       const res = await axios.get(`${api}/settings/default-category`, { headers });

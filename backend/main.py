@@ -2625,6 +2625,23 @@ def create_schedule(entry: ScheduleCreate, current_user: models.User = Depends(g
         # Manual auto-completion call for immediate effect
         process_schedule_auto_completion()
         
+        # Broadcast WebSocket message
+        safe_broadcast({
+            "type": "schedule_updated",
+            "data": {"entries": [lm.schedule_to_dict(row) for row in created_entries]}
+        })
+        
+        # Broadcast completion status for each entry
+        for row in created_entries:
+            safe_broadcast({
+                "type": "schedule_updated",
+                "data": {
+                    "id": row.id,
+                    "action": "completed",
+                    "completed": row.completed
+                }
+            })
+        
         return [lm.schedule_to_dict(row) for row in created_entries]
     
     # Normalny wpis (niecykliczny)
@@ -2903,13 +2920,16 @@ def delete_shopping(item_id: int, current_user: models.User = Depends(get_curren
             raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
     elif row.owner_id != current_user.id:
         raise HTTPException(status_code=403, detail="Nie masz dostępu do tego produktu")
+    # Store family_id before deletion for broadcast
+    family_id = row.family_id
     db.delete(row)
     db.commit()
     
     # Broadcast WebSocket message
+    print(f"[WS] Broadcasting shopping_updated: deleted, id={item_id}, family_id={family_id}")
     safe_broadcast({
         "type": "shopping_updated",
-        "data": {"id": item_id, "deleted": True}
+        "data": {"id": item_id, "deleted": True, "family_id": family_id}
     })
     
     level, title, next_exp, next_title = gc.get_level(current_user.exp)
@@ -3076,6 +3096,17 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
             "type": "work_updated",
             "data": {"entries": [lm.work_to_dict(row) for row in created_entries]}
         })
+        
+        # Broadcast completion status for each entry
+        for row in created_entries:
+            safe_broadcast({
+                "type": "work_updated",
+                "data": {
+                    "id": row.id,
+                    "action": "completed",
+                    "completed": row.completed
+                }
+            })
         
         # Zaktualizuj podsumowanie użytkownika dla auto-ukończonych wpisów
         total_net = 0.0

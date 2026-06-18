@@ -1861,8 +1861,18 @@ export default function App() {
           }
           break;
         case 'work_updated':
-          if (typeof loadWork === 'function') {
-            loadWork();
+          const workData = data.data;
+          console.log('[WS] Work update:', workData);
+          
+          if (workData.action === 'completed') {
+            setWorkEntries(prev => prev.map(item => 
+              item.id === workData.id ? { ...item, completed: workData.completed } : item
+            ));
+          } else if (workData.action === 'deleted') {
+            setWorkEntries(prev => prev.filter(item => item.id !== workData.id));
+          } else {
+            // Pełne odświeżenie jeśli trzeba
+            if (typeof loadWork === 'function') loadWork();
           }
           break;
         default:

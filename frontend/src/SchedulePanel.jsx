@@ -171,6 +171,12 @@ export default function SchedulePanel({
   const [importText, setImportText] = useState("");
   const [manualEntryDate, setManualEntryDate] = useState("");
   const [copyModal, setCopyModal] = useState(null); // { entryId, targetDate }
+  const [editingId, setEditingId] = useState(null);
+  const [editTitle, setEditTitle] = useState("");
+  const [editLocation, setEditLocation] = useState("");
+  const [editLecturer, setEditLecturer] = useState("");
+  const [editStartTime, setEditStartTime] = useState("");
+  const [editEndTime, setEditEndTime] = useState("");
 
   const selectedStr = selectedDate instanceof Date
     ? selectedDate.toISOString().slice(0, 10)
@@ -241,6 +247,51 @@ export default function SchedulePanel({
         onToast(err.response?.data?.detail || "Błąd usuwania");
       }
     });
+  };
+
+  const startEdit = (entry) => {
+    setEditingId(entry.id);
+    setEditTitle(entry.title);
+    setEditLocation(entry.location || "");
+    setEditLecturer(entry.lecturer || "");
+    setEditStartTime(entry.start_time);
+    setEditEndTime(entry.end_time);
+  };
+
+  const saveEdit = async () => {
+    if (!editTitle.trim()) {
+      onToast("Podaj nazwę zajęć");
+      return;
+    }
+    
+    enqueueRequest(async () => {
+      try {
+        await axios.patch(`${api}/schedule/${editingId}`, {
+          title: editTitle,
+          location: editLocation,
+          lecturer: editLecturer,
+          start_time: editStartTime,
+          end_time: editEndTime,
+        }, { headers });
+        
+        // Odśwież listę
+        const res = await axios.get(`${api}/schedule`, { headers });
+        setEntries(res.data);
+        setEditingId(null);
+        onToast("✅ Zaktualizowano zajęcia");
+      } catch (err) {
+        onToast(err.response?.data?.detail || "Błąd aktualizacji");
+      }
+    });
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditTitle("");
+    setEditLocation("");
+    setEditLecturer("");
+    setEditStartTime("");
+    setEditEndTime("");
   };
 
   const handleExport = async () => {
@@ -406,35 +457,64 @@ export default function SchedulePanel({
           </div>
         </div>
         {sortedDayEntries.length === 0 && <p className="empty">Brak zajęć w tym dniu.</p>}
-        {sortedDayEntries.map((entry) => (
-          <div key={entry.id} className="task-card medium schedule-card">
-            <div className="task-info">
-              <h4>{entry.title}</h4>
-              <div className="task-meta">
-                <span className="badge category">🕐 {entry.start_time}–{entry.end_time}</span>
-                {entry.is_recurring && <span className="badge category">🔁 {WEEKDAYS_LONG[entry.day_of_week]}</span>}
-                {entry.location && <span className="badge category">📍 {entry.location}</span>}
-                {entry.lecturer && <span className="badge category">👤 {entry.lecturer}</span>}
-              </div>
+        {sortedDayEntries.map((entry) => {
+          const editing = editingId === entry.id;
+          
+          return (
+            <div key={entry.id} className="task-card medium schedule-card">
+              {editing ? (
+                <div className="edit-mode">
+                  <input 
+                    value={editTitle} 
+                    onChange={(e) => setEditTitle(e.target.value)} 
+                    placeholder="Nazwa zajęć" 
+                  />
+                  <input 
+                    value={editLocation} 
+                    onChange={(e) => setEditLocation(e.target.value)} 
+                    placeholder="Sala / budynek" 
+                  />
+                  <input 
+                    value={editLecturer} 
+                    onChange={(e) => setEditLecturer(e.target.value)} 
+                    placeholder="Prowadzący" 
+                  />
+                  <div className="add-task-meta">
+                    <TimePicker value={editStartTime} onChange={setEditStartTime} label="Od:" />
+                    <TimePicker value={editEndTime} onChange={setEditEndTime} label="Do:" />
+                  </div>
+                  <button type="button" className="save-mini" onClick={saveEdit}>✓</button>
+                  <button type="button" className="cancel-mini" onClick={cancelEdit}>✗</button>
+                </div>
+              ) : (
+                <>
+                  <div className="task-info">
+                    <h4 className={entry.completed ? "done" : ""}>{entry.title}</h4>
+                    <div className="task-meta">
+                      <span className="badge category">🕐 {entry.start_time}–{entry.end_time}</span>
+                      {entry.is_recurring && <span className="badge category">🔁 {WEEKDAYS_LONG[entry.day_of_week]}</span>}
+                      {entry.location && <span className="badge category">📍 {entry.location}</span>}
+                      {entry.lecturer && <span className="badge category">👤 {entry.lecturer}</span>}
+                      {entry.completed && <span className="badge exp">✅ Ukończone</span>}
+                    </div>
+                  </div>
+                  <div className="task-actions">
+                    <button 
+                      type="button" 
+                      className="icon-btn" 
+                      onClick={() => startEdit(entry)}
+                      title="Edytuj"
+                    >
+                      ✏️
+                    </button>
+                    <button type="button" className="icon-btn" onClick={() => setCopyModal({ entryId: entry.id, targetDate: toDateStr(new Date()) })} title="Kopiuj">📋</button>
+                    <button type="button" className="icon-btn delete" onClick={() => deleteEntry(entry)}>🗑️</button>
+                  </div>
+                </>
+              )}
             </div>
-            <div className="task-actions">
-              {/* ✏️ ZAWSZE – nawet dla ukończonych */}
-              <button 
-                type="button" 
-                className="icon-btn" 
-                onClick={() => {
-                  // TODO: Implement edit functionality
-                  onToast("Edycja zajęć - funkcjonalność w przygotowaniu");
-                }}
-                title="Edytuj"
-              >
-                ✏️
-              </button>
-              <button type="button" className="icon-btn" onClick={() => setCopyModal({ entryId: entry.id, targetDate: toDateStr(new Date()) })} title="Kopiuj">📋</button>
-              <button type="button" className="icon-btn delete" onClick={() => deleteEntry(entry)}>🗑️</button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {showImport && (
