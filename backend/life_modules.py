@@ -69,6 +69,7 @@ def work_rate(entry: models.WorkEntry) -> float:
     try:
         return max(0.0, float(raw.replace(",", ".")))
     except ValueError:
+        print(f"[work_rate] Error for entry {entry.id}: raw='{raw}'")
         return 0.0
 
 

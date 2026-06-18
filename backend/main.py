@@ -3080,6 +3080,69 @@ def work_summary(
     return result
 
 
+@app.get("/work/debug")
+def debug_work(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    entries = db.query(models.WorkEntry).filter(
+        models.WorkEntry.owner_id == current_user.id
+    ).all()
+    
+    result = []
+    total_net = 0.0
+    total_gross = 0.0
+    
+    for entry in entries:
+        try:
+            e = lm.work_earnings(entry)
+            result.append({
+                "id": entry.id,
+                "work_date": str(entry.work_date),
+                "completed": entry.completed,
+                "hours": e.get("hours", 0),
+                "gross": e.get("gross", 0),
+                "tax": e.get("tax", 0),
+                "net": e.get("net", 0),
+                "hourly_rate": lm.work_rate(entry),
+                "tax_enabled": entry.tax_enabled,
+                "tax_percent": entry.tax_percent,
+                "notes": decrypt_field(entry.notes),
+            })
+            if entry.completed:
+                total_net += e.get("net", 0)
+                total_gross += e.get("gross", 0)
+        except Exception as e:
+            print(f"[debug_work] Error for entry {entry.id}: {e}")
+    
+    return {
+        "total_entries": len(entries),
+        "completed_entries": len([e for e in entries if e.completed]),
+        "total_net": round(total_net, 2),
+        "total_gross": round(total_gross, 2),
+        "entries": result
+    }
+
+
+@app.post("/work/fix-completed")
+def fix_work_completed(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    today = date.today()
+    entries = db.query(models.WorkEntry).filter(
+        models.WorkEntry.owner_id == current_user.id,
+        models.WorkEntry.completed == False,
+        models.WorkEntry.work_date < today
+    ).all()
+    
+    count = 0
+    for entry in entries:
+        entry.completed = True
+        count += 1
+    
+    db.commit()
+    
+    return {
+        "message": f"Oznaczono {count} wpisów jako ukończone",
+        "fixed_count": count
+    }
+
+
 @app.post("/work")
 def create_work(entry: WorkCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     if entry.hourly_rate < 0:
