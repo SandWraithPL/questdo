@@ -206,6 +206,34 @@ export default function SchedulePanel({
       onToast("Podaj datę zajęć");
       return;
     }
+
+    // ✅ OPTIMISTIC UPDATE – dodaj zajęcia natychmiast
+    const tempId = `temp-${Date.now()}`;
+    const tempEntry = {
+      id: tempId,
+      title,
+      location,
+      lecturer,
+      start_time: startTime,
+      end_time: endTime,
+      entry_date: isRecurring ? null : manualEntryDate,
+      is_recurring: isRecurring,
+      day_of_week: isRecurring ? dayOfWeek : null,
+      start_date: isRecurring ? startDate : null,
+      end_date: isRecurring && endDate ? endDate : null,
+      completed: false,
+      isOptimistic: true,
+    };
+    setEntries(prev => [...prev, tempEntry]);
+
+    setTitle("");
+    setLocation("");
+    setLecturer("");
+    setStartDate("");
+    setEndDate("");
+    setManualEntryDate(selectedStr);
+    setShowAdd(false);
+
     enqueueRequest(async () => {
       try {
         const payload = {
@@ -222,16 +250,17 @@ export default function SchedulePanel({
         };
         const res = await axios.post(`${api}/schedule`, payload, { headers });
         const newEntries = Array.isArray(res.data) ? res.data : [res.data];
-        setEntries((prev) => [...prev, ...newEntries]);
-        setTitle("");
-        setLocation("");
-        setLecturer("");
-        setStartDate("");
-        setEndDate("");
-        setManualEntryDate(selectedStr);
-        setShowAdd(false);
+        
+        // ✅ ZASTĄP tymczasowe wpisy prawdziwymi
+        setEntries(prev => {
+          const filtered = prev.filter(e => e.id !== tempId);
+          return [...filtered, ...newEntries];
+        });
+        
         onToast(`✅ Dodano ${newEntries.length} ${newEntries.length === 1 ? 'zajęcia' : 'zajęć'} do planu`);
       } catch (err) {
+        // ❌ ROLLBACK – usuń tymczasowe wpisy
+        setEntries(prev => prev.filter(e => e.id !== tempId));
         onToast(err.response?.data?.detail || "Błąd dodawania");
       }
     });

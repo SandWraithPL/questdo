@@ -326,6 +326,36 @@ export default function EarningsPanel({
       onToast("Podaj datę pracy");
       return;
     }
+
+    // ✅ OPTIMISTIC UPDATE – dodaj pracę natychmiast
+    const tempId = `temp-${Date.now()}`;
+    const tempEntry = {
+      id: tempId,
+      work_date: isRecurring ? selectedStr : workDate,
+      start_time: startTime,
+      end_time: endTime,
+      hourly_rate: rate,
+      notes,
+      tax_enabled: taxEnabled,
+      tax_percent: parseFloat(taxPercent) || 0,
+      is_recurring: isRecurring,
+      day_of_week: isRecurring ? dayOfWeek : null,
+      start_date: isRecurring ? startDate : null,
+      end_date: isRecurring && endDate ? endDate : null,
+      completed: false,
+      isOptimistic: true,
+    };
+    setEntries(prev => [tempEntry, ...prev]);
+
+    setShowAdd(false);
+    setHourlyRate(defaultHourlyRate || "");
+    setNotes("");
+    setIsRecurring(false);
+    setDayOfWeek(0);
+    setStartDate("");
+    setEndDate("");
+    setWorkDate(selectedStr);
+
     enqueueRequest(async () => {
       try {
         const payload = {
@@ -342,18 +372,14 @@ export default function EarningsPanel({
           end_date: isRecurring && endDate ? endDate : null,
         };
         const res = await axios.post(`${api}/work`, payload, { headers });
-        setEntries((prev) => [res.data, ...prev]);
+        
+        // ✅ ZASTĄP tymczasowy wpis prawdziwym
+        setEntries(prev => prev.map(e => e.id === tempId ? res.data : e));
         await refreshSummary();
-        setShowAdd(false);
-        setHourlyRate(defaultHourlyRate || "");
-        setNotes("");
-        setIsRecurring(false);
-        setDayOfWeek(0);
-        setStartDate("");
-        setEndDate("");
-        setWorkDate(selectedStr);
         onToast("✅ Dodano wpis pracy");
       } catch (err) {
+        // ❌ ROLLBACK – usuń tymczasowy wpis
+        setEntries(prev => prev.filter(e => e.id !== tempId));
         onToast(err.response?.data?.detail || "Błąd dodawania");
       }
     });

@@ -2188,6 +2188,18 @@ export default function App() {
       recurring_end_date: taskType === "event" ? recurringEndDate || null : null,
     };
 
+    // ✅ OPTIMISTIC UPDATE – dodaj zadanie natychmiast (z tymczasowym ID)
+    const tempId = `temp-${Date.now()}`;
+    const tempTask = {
+      id: tempId,
+      ...apiPayload,
+      completed: false,
+      exp_awarded: false,
+      created_at: new Date().toISOString(),
+      isOptimistic: true,
+    };
+    setTasks(prev => [tempTask, ...prev]);
+
     setTitle("");
     setDesc("");
     setDifficulty("easy");
@@ -2201,10 +2213,18 @@ export default function App() {
 
     enqueueRequest(async () => {
       try {
-        await axios.post(`${API}/tasks`, apiPayload, { headers });
-        await fetchData();
+        const response = await axios.post(`${API}/tasks`, apiPayload, { headers });
+        const data = response.data;
+        
+        // ✅ ZASTĄP tymczasowe zadanie prawdziwym
+        setTasks(prev => prev.map(t => 
+          t.id === tempId ? data : t
+        ));
+        
         showToast("✅ Zadanie dodane");
       } catch (err) {
+        // ❌ ROLLBACK – usuń tymczasowe zadanie
+        setTasks(prev => prev.filter(t => t.id !== tempId));
         showToast(err.response?.data?.detail || "Błąd dodawania – spróbuj ponownie");
       } finally {
         setIsAddingTask(false);
