@@ -2043,7 +2043,7 @@ export default function App() {
       // 🔥 KROK 2 – RESZTA W TLE (nie blokuje)
       setTimeout(async () => {
         try {
-          const [chRes, achRes, scheduleRes, shoppingRes, workRes, freeDaysRes, recurringRes, historyRes] = await Promise.all([
+          const [chRes, achRes, scheduleRes, shoppingRes, workRes, freeDaysRes, recurringRes, historyRes, rareDropsRes] = await Promise.all([
             axios.get(`${API}/challenges`, { headers: noCacheHeaders }).catch(() => null),
             axios.get(`${API}/achievements`, { headers: noCacheHeaders }).catch(() => null),
             axios.get(`${API}/schedule`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
@@ -2052,6 +2052,7 @@ export default function App() {
             axios.get(`${API}/free-days`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
             axios.get(`${API}/recurring-events`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
             axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
+            axios.get(`${API}/rare-drops/inventory`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
           ]);
           
           if (chRes) setChallenges(chRes.data);
@@ -2062,6 +2063,7 @@ export default function App() {
           setFreeDays(Array.isArray(freeDaysRes?.data) ? freeDaysRes.data : []);
           setRecurringEvents(Array.isArray(recurringRes?.data) ? recurringRes.data : []);
           setHistory(historyRes?.data || []);
+          if (rareDropsRes?.data) setRareDrops(rareDropsRes.data);
           
           // Auto-generate holidays for years 2020-2030
           try {
@@ -2196,7 +2198,17 @@ export default function App() {
     const tempId = `temp-${Date.now()}`;
     const tempTask = {
       id: tempId,
-      ...apiPayload,
+      title: title || "Nowe zadanie",
+      description: desc || "",
+      difficulty: taskType === "quest" ? difficulty : "easy",
+      category: category || "Inne",
+      due_date: taskDate,
+      important: important || false,
+      reminder_offset_days: parseReminderValue(reminderOffset),
+      task_type: taskType,
+      event_category: taskType === "event" ? eventCategory || null : null,
+      recurring_pattern: taskType === "event" ? recurringPattern || null : null,
+      recurring_end_date: taskType === "event" ? recurringEndDate || null : null,
       completed: false,
       exp_awarded: false,
       created_at: new Date().toISOString(),
