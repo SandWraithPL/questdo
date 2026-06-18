@@ -591,6 +591,7 @@ def process_scheduled_reminders():
 def reminder_scheduler_loop():
     while True:
         try:
+            print(f"[scheduler] 🔥 Running auto-completion check at {datetime.now(REMINDER_TZ)}")
             process_work_auto_completion()
             process_schedule_auto_completion()
             process_scheduled_reminders()
@@ -3778,7 +3779,8 @@ def shopping_summary(family_id: Optional[int] = None, current_user: models.User 
         year_totals[y] = year_totals.get(y, 0.0) + h.total_spent
     
     # Calculate current list total
-    current_list_total = sum((float(item.quantity or 0) * (item.price or 0.0)) for item in items if item.bought)
+    current_list_total = sum((float(lm.decrypt_field(item.quantity) or 0) * (item.price or 0.0)) for item in items if item.bought)
+    print(f"[SHOPPING] current_list_total: {current_list_total}, bought items: {len([i for i in items if i.bought])}")
     
     all_time_total = sum(h.total_spent for h in history)
     

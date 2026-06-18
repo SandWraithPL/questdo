@@ -245,11 +245,8 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
 
           {selectedFamily && (
             <div className="family-details">
-              <div className="family-header" style={{ cursor: 'pointer' }} onClick={() => setCollapsed(!collapsed)}>
-                <h4>{selectedFamily.name}</h4>
-                <span className="family-role">
-                  {selectedFamily.role === "admin" ? "👑 Admin" : "👤 Członek"}
-                </span>
+              <div className="calendar-section-bar" style={{ cursor: 'pointer' }} onClick={() => setCollapsed(!collapsed)}>
+                <span className="calendar-section-title">👨‍👩‍👧‍👦 {selectedFamily.name}</span>
                 <span className="calendar-section-chevron">{collapsed ? "▼" : "▲"}</span>
               </div>
               {!collapsed && (
@@ -271,6 +268,9 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
                           >
                             🗑️
                           </button>
+                        )}
+                        {selectedFamily.role === "admin" && !currentUserId && (
+                          <span style={{fontSize: '10px', color: '#f44336'}}>⚠️ Brak currentUserId</span>
                         )}
                       </div>
                     ))}
@@ -306,16 +306,17 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
               )}
                 </>
               )}
+              
+              <div style={{ marginTop: 16, borderTop: '1px solid #333', paddingTop: 16 }}>
+                <h5 style={{ marginBottom: 8 }}>📦 Artykuły domyślne rodziny</h5>
+                <CategoriesPanel
+                  api={api}
+                  headers={headers}
+                  onToast={onToast}
+                  familyId={selectedFamily.id}
+                />
+              </div>
             </div>
-          )}
-          
-          {selectedFamily && (
-            <CategoriesPanel
-              api={api}
-              headers={headers}
-              onToast={onToast}
-              familyId={selectedFamily.id}
-            />
           )}
         </div>
       )}

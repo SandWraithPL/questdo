@@ -197,7 +197,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
             onKeyDown={(e) => e.key === "Enter" && addArticle()} 
           />
           <input className="input-small" placeholder="Ilość" value={qty} onChange={(e) => setQty(e.target.value)} />
-          <select className="input-tiny" value={unit} onChange={(e) => setUnit(e.target.value)}>
+          <select className="input-small" style={{ width: '80px', flex: '0 0 auto' }} value={unit} onChange={(e) => setUnit(e.target.value)}>
             <option value="szt">szt</option>
             <option value="kg">kg</option>
             <option value="l">l</option>
@@ -228,7 +228,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
                 <div className="edit-mode">
                   <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nazwa" />
                   <input className="input-small" value={editQty} onChange={(e) => setEditQty(e.target.value)} placeholder="Ilość" />
-                  <select className="input-tiny" value={editUnit} onChange={(e) => setEditUnit(e.target.value)}>
+                  <select className="input-small" style={{ width: '80px', flex: '0 0 auto' }} value={editUnit} onChange={(e) => setEditUnit(e.target.value)}>
                     <option value="szt">szt</option>
                     <option value="kg">kg</option>
                     <option value="l">l</option>
