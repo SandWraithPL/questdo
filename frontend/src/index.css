@@ -1217,6 +1217,19 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   transform: translate(-50%, -50%) !important;
 }
 
+/* 🔥 ZWIĘKSZ Z-INDEX DATEPICKERA W ZAROBKACH */
+.earnings-panel .date-picker-wrap {
+  z-index: 999999 !important;
+}
+
+.earnings-panel .date-picker-popup {
+  z-index: 999999 !important;
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
+
 .module-panel { margin-bottom: 24px; }
 
 .form-row-inline {

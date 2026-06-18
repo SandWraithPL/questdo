@@ -1612,37 +1612,95 @@ def delete_account(
         if not verify_password(body.password, current_user.hashed_password):
             print(f"[delete_account] Invalid password for user {current_user.id}")
             raise HTTPException(status_code=400, detail="Nieprawidłowe hasło")
-
-        db.query(models.Task).filter(models.Task.owner_id == current_user.id).delete()
-        db.query(models.ScheduleEntry).filter(models.ScheduleEntry.owner_id == current_user.id).delete()
-        db.query(models.ShoppingItem).filter(models.ShoppingItem.owner_id == current_user.id).delete()
-        db.query(models.WorkEntry).filter(models.WorkEntry.owner_id == current_user.id).delete()
-        db.query(models.UserAchievement).filter(
-            models.UserAchievement.user_id == current_user.id
+        
+        user_id = current_user.id
+        
+        # 🔥 NAJPIERW USUŃ POWIĄZANIA Z RODZINĄ
+        
+        # 1. Usuń członkostwo w rodzinie (family_members)
+        db.query(models.FamilyMember).filter(
+            models.FamilyMember.user_id == user_id
         ).delete()
+        
+        # 2. Usuń zaproszenia (family_invitations)
+        db.query(models.FamilyInvitation).filter(
+            models.FamilyInvitation.invited_username == current_user.username
+        ).delete()
+        
+        # 3. Jeśli użytkownik jest twórcą rodziny – usuń rodzinę
+        families = db.query(models.Family).filter(
+            models.Family.created_by == user_id
+        ).all()
+        for family in families:
+            # Usuń członków rodziny
+            db.query(models.FamilyMember).filter(
+                models.FamilyMember.family_id == family.id
+            ).delete()
+            # Usuń zaproszenia rodziny
+            db.query(models.FamilyInvitation).filter(
+                models.FamilyInvitation.family_id == family.id
+            ).delete()
+            # Usuń produkty rodziny (shopping_items)
+            db.query(models.ShoppingItem).filter(
+                models.ShoppingItem.family_id == family.id
+            ).delete()
+            # Usuń historię zakupów rodziny
+            db.query(models.ShoppingHistory).filter(
+                models.ShoppingHistory.family_id == family.id
+            ).delete()
+            # Usuń artykuły domyślne rodziny
+            db.query(models.DefaultArticle).filter(
+                models.DefaultArticle.family_id == family.id
+            ).delete()
+            # Usuń rodzinę
+            db.delete(family)
+        
+        # 4. Usuń wszystkie inne dane użytkownika
+        db.query(models.Task).filter(models.Task.owner_id == user_id).delete()
+        db.query(models.ScheduleEntry).filter(models.ScheduleEntry.owner_id == user_id).delete()
+        db.query(models.ShoppingItem).filter(
+            models.ShoppingItem.owner_id == user_id,
+            models.ShoppingItem.family_id.is_(None)  # TYLKO INDYWIDUALNE
+        ).delete()
+        db.query(models.WorkEntry).filter(models.WorkEntry.owner_id == user_id).delete()
+        db.query(models.UserAchievement).filter(models.UserAchievement.user_id == user_id).delete()
         db.query(models.DailyQuestAssignment).filter(
-            models.DailyQuestAssignment.user_id == current_user.id
+            models.DailyQuestAssignment.user_id == user_id
         ).delete()
         db.query(models.PlayerRareDrop).filter(
-            models.PlayerRareDrop.user_id == current_user.id
+            models.PlayerRareDrop.user_id == user_id
         ).delete()
         db.query(models.PlayerExclusiveAchievement).filter(
-            models.PlayerExclusiveAchievement.user_id == current_user.id
+            models.PlayerExclusiveAchievement.user_id == user_id
         ).delete()
         db.query(models.PlayerBadge).filter(
-            models.PlayerBadge.user_id == current_user.id
+            models.PlayerBadge.user_id == user_id
         ).delete()
         db.query(models.PlayerHistory).filter(
-            models.PlayerHistory.user_id == current_user.id
+            models.PlayerHistory.user_id == user_id
         ).delete()
+        db.query(models.PushSubscription).filter(
+            models.PushSubscription.user_id == user_id
+        ).delete()
+        db.query(models.HourlyRate).filter(
+            models.HourlyRate.owner_id == user_id
+        ).delete()
+        db.query(models.DefaultArticle).filter(
+            models.DefaultArticle.owner_id == user_id,
+            models.DefaultArticle.family_id.is_(None)
+        ).delete()
+        
+        # 5. Na końcu usuń użytkownika
         db.delete(current_user)
         db.commit()
-        print(f"[delete_account] Successfully deleted account for user {current_user.id}")
+        
+        print(f"[delete_account] ✅ Konto {current_user.username} (id={user_id}) usunięte")
         return {"message": "Konto zostało usunięte"}
+        
     except HTTPException:
         raise
     except Exception as e:
-        print(f"[delete_account] ERROR: {e}")
+        print(f"[delete_account] ❌ ERROR: {e}")
         db.rollback()
         raise HTTPException(status_code=500, detail=str(e))
 
