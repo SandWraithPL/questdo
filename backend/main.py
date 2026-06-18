@@ -767,12 +767,61 @@ def calculate_exp_reward(difficulty: str, due_date: date, completed_on: datetime
 
 
 def normalize_streak(user: models.User) -> bool:
-    today = date.today()
+    poland_tz = ZoneInfo("Europe/Warsaw")
+    today = datetime.now(poland_tz).date()
     if user.streak and user.last_streak_date and user.last_streak_date < today - timedelta(days=1):
         user.streak = 0
         user.last_streak_date = None
         return True
     return False
+
+
+def update_streak(user: models.User, db: Session, completed_task: models.Task) -> int:
+    """
+    Aktualizuje serię użytkownika.
+    Zasady:
+    - 1 punkt dziennie (maksymalnie 1)
+    - Reset do 0 jeśli dzień bez questu
+    - Reset o północy czasu polskiego (GMT+2)
+    """
+    poland_tz = ZoneInfo("Europe/Warsaw")
+    today = datetime.now(poland_tz).date()
+    task_date = completed_task.completed_at.astimezone(poland_tz).date()
+    
+    # Jeśli zadanie ukończone innego dnia niż dzisiaj – nie aktualizuj serii
+    if task_date != today:
+        return user.streak or 0
+    
+    # Jeśli ostatnia seria była wczoraj → +1
+    if user.last_streak_date == today - timedelta(days=1):
+        user.streak = (user.streak or 0) + 1
+        user.last_streak_date = today
+        db.commit()
+        return user.streak
+    
+    # Jeśli ostatnia seria była dzisiaj → nic nie rób (już +1 dzisiaj)
+    if user.last_streak_date == today:
+        return user.streak or 0
+    
+    # Jeśli ostatnia seria była wcześniej niż wczoraj → RESET do 0
+    if user.last_streak_date and user.last_streak_date < today - timedelta(days=1):
+        user.streak = 0
+        user.last_streak_date = None
+        db.commit()
+        return 0
+    
+    # Pierwszy quest ever lub pierwszy po długiej przerwie
+    if user.streak is None or user.streak == 0:
+        user.streak = 1
+        user.last_streak_date = today
+        db.commit()
+        return 1
+    
+    # Domyślnie – reset do 0 (bezpieczeństwo)
+    user.streak = 0
+    user.last_streak_date = None
+    db.commit()
+    return 0
 
 
 def task_display_title(task: models.Task) -> str:
@@ -1450,7 +1499,8 @@ def unlock_exclusive_with_history(user: models.User, ea_def: dict, task: models.
 
 def grant_completion_rewards(user: models.User, task: models.Task, db: Session) -> dict:
     result = reconcile_standard_achievements(user, db, task=task)
-    return {"achievements": result["newly_unlocked"], "revoked_achievements": result["revoked"], "exclusive_achievements": [], "earned_drop": None}
+    earned_drop = award_rare_drop_on_completion(user, task, db)
+    return {"achievements": result["newly_unlocked"], "revoked_achievements": result["revoked"], "exclusive_achievements": [], "earned_drop": earned_drop}
 
 
 def refresh_player_rewards(user: models.User, db: Session, task: Optional[models.Task] = None) -> dict:
@@ -1476,7 +1526,8 @@ def achievement_display(ach: models.Achievement) -> str:
     return ach.name.replace("_", " ").title()
 
 def award_rare_drop_on_completion(user: models.User, task: models.Task, db: Session) -> Optional[dict]:
-    today = date.today()
+    poland_tz = ZoneInfo("Europe/Warsaw")
+    today = datetime.now(poland_tz).date()
     rng = random.Random(f"{user.id}-{today.isoformat()}-{task.id}")
 
     for drop_def in gc.RARE_DROPS:
@@ -1979,12 +2030,13 @@ def update_task(task_id: int, task_update: TaskUpdate,
             completed_tasks = [t for t in all_tasks if t.completed and t.completed_at]
             completed_tasks.sort(key=lambda t: t.completed_at, reverse=True)
 
-            today = date.today()
+            poland_tz = ZoneInfo("Europe/Warsaw")
+            today = datetime.now(poland_tz).date()
             streak = 0
             last_date = None
 
             for t in completed_tasks:
-                task_date = t.completed_at.date()
+                task_date = t.completed_at.astimezone(poland_tz).date()
                 if last_date is None:
                     if task_date == today or task_date == today - timedelta(days=1):
                         streak = 1
@@ -2048,14 +2100,7 @@ def update_task(task_id: int, task_update: TaskUpdate,
                 level_ups.extend(record_level_ups(current_user, old_exp, db))
 
                 # Seria (streak) zwiększa się TYLKO za questy (nie wydarzenia)
-                today = date.today()
-                if current_user.last_streak_date != today:
-                    if current_user.last_streak_date == today - timedelta(days=1):
-                        current_user.streak += 1
-                    elif current_user.last_streak_date is None or current_user.last_streak_date < today - timedelta(days=1):
-                        # Przerwa więcej niż jednego dnia - reset do 0, potem +1
-                        current_user.streak = 1
-                    current_user.last_streak_date = today
+                update_streak(current_user, db, task)
 
                 db.flush()
 
