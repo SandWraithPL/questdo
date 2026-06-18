@@ -451,6 +451,26 @@ export default function EarningsPanel({
           onToast("Podaj stawkę godzinową");
           return;
         }
+        
+        // Check if time changed
+        const original = entries.find(e => e.id === entry.id);
+        const timeChanged = original && (editStartTime !== original.start_time || editEndTime !== original.end_time || editDate !== original.work_date);
+        
+        // If time changed, reset completed if new end time is in the future
+        let newCompleted = original?.completed || false;
+        if (timeChanged) {
+          const now = new Date();
+          const today = now.toISOString().slice(0, 10);
+          const nowMinutes = now.getHours() * 60 + now.getMinutes();
+          const [h, m] = editEndTime.split(":").map(Number);
+          const endMinutes = h * 60 + m;
+          
+          // If date is in the future OR today and time hasn't passed yet → not completed
+          if (editDate > today || (editDate === today && endMinutes > nowMinutes)) {
+            newCompleted = false;
+          }
+        }
+        
         const res = await axios.patch(`${api}/work/${entry.id}`, {
           work_date: editDate,
           start_time: editStartTime,
@@ -461,6 +481,7 @@ export default function EarningsPanel({
           day_of_week: editIsRecurring ? editDayOfWeek : null,
           start_date: editIsRecurring ? editStartDate : null,
           end_date: editIsRecurring && editEndDate ? editEndDate : null,
+          completed: newCompleted
         }, { headers });
         setEntries((prev) => prev.map((e) => (e.id === entry.id ? res.data.entry : e)));
         await refreshSummary();

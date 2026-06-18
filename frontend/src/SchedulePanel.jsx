@@ -264,6 +264,25 @@ export default function SchedulePanel({
       return;
     }
     
+    // Check if time changed
+    const original = entries.find(e => e.id === editingId);
+    const timeChanged = original && (editStartTime !== original.start_time || editEndTime !== original.end_time);
+    
+    // If time changed, reset completed if new end time is in the future
+    let newCompleted = original?.completed || false;
+    if (timeChanged) {
+      const now = new Date();
+      const today = now.toISOString().slice(0, 10);
+      const nowMinutes = now.getHours() * 60 + now.getMinutes();
+      const [h, m] = editEndTime.split(":").map(Number);
+      const endMinutes = h * 60 + m;
+      
+      // If date is in the future OR today and time hasn't passed yet → not completed
+      if (original.entry_date > today || (original.entry_date === today && endMinutes > nowMinutes)) {
+        newCompleted = false;
+      }
+    }
+    
     enqueueRequest(async () => {
       try {
         await axios.patch(`${api}/schedule/${editingId}`, {
@@ -272,6 +291,7 @@ export default function SchedulePanel({
           lecturer: editLecturer,
           start_time: editStartTime,
           end_time: editEndTime,
+          completed: newCompleted
         }, { headers });
         
         // Odśwież listę
@@ -419,12 +439,14 @@ export default function SchedulePanel({
         onDateSelect={onDateSelect}
         matchItemToDate={(item, dateStr) => item.entry_date === dateStr}
         getItemLabel={(item) => item.title}
-        isItemCompleted={() => false}
+        isItemCompleted={(item) => item.completed === true}
         renderItemMeta={(item) => (
           <div className="task-meta">
             <span className="badge category">🕐 {item.start_time}–{item.end_time}</span>
+            {item.is_recurring && <span className="badge category">🔁 {WEEKDAYS_LONG[item.day_of_week]}</span>}
             {item.location && <span className="badge category">📍 {item.location}</span>}
             {item.lecturer && <span className="badge category">👤 {item.lecturer}</span>}
+            {item.completed && <span className="badge exp">✅ Ukończone</span>}
           </div>
         )}
         onItemDelete={deleteEntry}
