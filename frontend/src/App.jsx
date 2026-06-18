@@ -1310,6 +1310,13 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
       const q = search.toLowerCase();
       list = list.filter((t) => t.title.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q) || (t.category || "").toLowerCase().includes(q));
     }
+    list = list.map(task => ({
+      ...task,
+      difficulty: task.difficulty || "easy",
+      category: task.category || "Inne",
+      description: task.description || "",
+      important: task.important || false,
+    }));
     return list;
   }, [allTasksForDay, filter, search, typeFilter]);
 
@@ -2181,24 +2188,7 @@ export default function App() {
     setIsAddingTask(true);
 
     const apiPayload = {
-      title,
-      description: desc,
-      difficulty: taskType === "quest" ? difficulty : "easy",
-      category,
-      due_date: taskDate,
-      important,
-      reminder_offset_days: parseReminderValue(reminderOffset),
-      task_type: taskType,
-      event_category: taskType === "event" ? eventCategory || null : null,
-      recurring_pattern: taskType === "event" ? recurringPattern || null : null,
-      recurring_end_date: taskType === "event" ? recurringEndDate || null : null,
-    };
-
-    // ✅ OPTIMISTIC UPDATE – dodaj zadanie natychmiast (z tymczasowym ID)
-    const tempId = `temp-${Date.now()}`;
-    const tempTask = {
-      id: tempId,
-      title: title || "Nowe zadanie",
+      title: title.trim(),
       description: desc || "",
       difficulty: taskType === "quest" ? difficulty : "easy",
       category: category || "Inne",
@@ -2209,12 +2199,7 @@ export default function App() {
       event_category: taskType === "event" ? eventCategory || null : null,
       recurring_pattern: taskType === "event" ? recurringPattern || null : null,
       recurring_end_date: taskType === "event" ? recurringEndDate || null : null,
-      completed: false,
-      exp_awarded: false,
-      created_at: new Date().toISOString(),
-      isOptimistic: true,
     };
-    setTasks(prev => [tempTask, ...prev]);
 
     setTitle("");
     setDesc("");
@@ -2227,25 +2212,18 @@ export default function App() {
     setRecurringEndDate("");
     setShowAddTask(false);
 
-    enqueueRequest(async () => {
-      try {
-        const response = await axios.post(`${API}/tasks`, apiPayload, { headers });
-        const data = response.data;
-        
-        // ✅ ZASTĄP tymczasowe zadanie prawdziwym
-        setTasks(prev => prev.map(t => 
-          t.id === tempId ? data : t
-        ));
-        
-        showToast("✅ Zadanie dodane");
-      } catch (err) {
-        // ❌ ROLLBACK – usuń tymczasowe zadanie
-        setTasks(prev => prev.filter(t => t.id !== tempId));
-        showToast(err.response?.data?.detail || "Błąd dodawania – spróbuj ponownie");
-      } finally {
-        setIsAddingTask(false);
-      }
-    });
+    try {
+      const response = await axios.post(`${API}/tasks`, apiPayload, { headers });
+      const data = response.data;
+      
+      await loadTasksOnly();
+      
+      showToast("✅ Zadanie dodane");
+    } catch (err) {
+      showToast(err.response?.data?.detail || "Błąd dodawania – spróbuj ponownie");
+    } finally {
+      setIsAddingTask(false);
+    }
   };
 
   const toggleTask = async (task) => {
