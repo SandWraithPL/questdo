@@ -4972,6 +4972,7 @@ def delete_user_admin(user_id: int, current_user: models.User = Depends(get_curr
     db.query(models.ScheduleEntry).filter(models.ScheduleEntry.owner_id == user_id).delete()
     db.query(models.ShoppingItem).filter(models.ShoppingItem.owner_id == user_id).delete()
     db.query(models.WorkEntry).filter(models.WorkEntry.owner_id == user_id).delete()
+    db.query(models.FreeDay).filter(models.FreeDay.owner_id == user_id).delete()
     db.query(models.UserAchievement).filter(models.UserAchievement.user_id == user_id).delete()
     db.query(models.DailyQuestAssignment).filter(models.DailyQuestAssignment.user_id == user_id).delete()
     db.query(models.PlayerRareDrop).filter(models.PlayerRareDrop.user_id == user_id).delete()
