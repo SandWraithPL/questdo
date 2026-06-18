@@ -230,19 +230,7 @@ export default function ShoppingPanel({
     }
   };
 
-  // Poll for real-time synchronization when family mode is active
-  useEffect(() => {
-    if (!familyId) return;
-    
-    const interval = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        loadShoppingItems();
-        loadSummary();
-      }
-    }, 5000); // 5 seconds to reduce conflict with WebSocket
-
-    return () => clearInterval(interval);
-  }, [familyId]);
+  // Polling removed - WebSocket handles real-time updates
 
   const addItem = () => {
     if (!name.trim()) {

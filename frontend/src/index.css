@@ -321,12 +321,24 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   margin-bottom: 8px;
 }
 
+.member-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
 .member-name {
   color: #fff;
+  font-size: 0.95rem;
 }
 
 .member-role {
-  font-size: 1.2rem;
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+.member-item .icon-btn.delete {
+  flex-shrink: 0;
 }
 
 .family-actions {

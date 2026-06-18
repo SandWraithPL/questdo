@@ -1421,9 +1421,11 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
               </div>
               {!isVirtual && (
               <div className="task-actions">
-                <button className="icon-btn" onClick={() => startEditItem(task)} disabled={loadingTaskIds.has(task.id)}>✏️</button>
+                {!task.completed && (
+                  <button className="icon-btn" onClick={() => startEditItem(task)} disabled={loadingTaskIds.has(task.id)}>✏️</button>
+                )}
                 <button className="icon-btn" onClick={() => setCopyModal({ taskId: task.id, targetDate: toDateStr(new Date()) })} title="Kopiuj">📋</button>
-                <button className="icon-btn" onClick={() => onDelete(task)} disabled={deletingTaskIds.has(task.id)} title="Usuń">{deletingTaskIds.has(task.id) ? "⏳" : "🗑"}</button>
+                <button className="icon-btn delete" onClick={() => onDelete(task)} disabled={deletingTaskIds.has(task.id)} title="Usuń">{deletingTaskIds.has(task.id) ? "⏳" : "🗑️"}</button>
               </div>
               )}
             </>

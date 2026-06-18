@@ -593,7 +593,9 @@ export default function EarningsPanel({
                     </div>
                   </div>
                   <div className="task-actions">
-                    <button type="button" className="icon-btn" onClick={() => startEdit(entry)} title="Edytuj">✏️</button>
+                    {!entry.completed && (
+                      <button type="button" className="icon-btn" onClick={() => startEdit(entry)} title="Edytuj">✏️</button>
+                    )}
                     <button type="button" className="icon-btn" onClick={() => setCopyModal({ entryId: entry.id, targetDate: getWarsawDateStr() })} title="Kopiuj">📋</button>
                     <button type="button" className="icon-btn delete" onClick={() => deleteEntry(entry)}>🗑️</button>
                   </div>

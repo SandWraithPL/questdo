@@ -258,10 +258,12 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
                 <h5>Członkowie ({selectedFamily.members.length})</h5>
                 {selectedFamily.members.map((member) => (
                   <div key={member.id} className="member-item">
-                    <span className="member-role">
-                      {member.role === "admin" ? "👑" : "👤"}
-                    </span>
-                    <span className="member-name">{member.username}</span>
+                    <div className="member-left">
+                      <span className="member-role">
+                        {member.role === "admin" ? "👑" : "👤"}
+                      </span>
+                      <span className="member-name">{member.username}</span>
+                    </div>
                     {selectedFamily.role === "admin" && currentUserId && member.id !== currentUserId && (
                       <button 
                         type="button" 

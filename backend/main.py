@@ -2622,6 +2622,9 @@ def create_schedule(entry: ScheduleCreate, current_user: models.User = Depends(g
         for row in created_entries:
             db.refresh(row)
         
+        # Manual auto-completion call for immediate effect
+        process_schedule_auto_completion()
+        
         return [lm.schedule_to_dict(row) for row in created_entries]
     
     # Normalny wpis (niecykliczny)
@@ -2653,6 +2656,9 @@ def create_schedule(entry: ScheduleCreate, current_user: models.User = Depends(g
     db.add(row)
     db.commit()
     db.refresh(row)
+    
+    # Manual auto-completion call for immediate effect
+    process_schedule_auto_completion()
     
     # Broadcast WebSocket message
     safe_broadcast({
@@ -3042,6 +3048,9 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
         for row in created_entries:
             db.refresh(row)
         
+        # Manual auto-completion call for immediate effect
+        process_work_auto_completion()
+        
         # Broadcast WebSocket message
         safe_broadcast({
             "type": "work_updated",
@@ -3095,6 +3104,9 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
     db.add(row)
     db.commit()
     db.refresh(row)
+    
+    # Manual auto-completion call for immediate effect
+    process_work_auto_completion()
     
     # Broadcast WebSocket message
     safe_broadcast({
