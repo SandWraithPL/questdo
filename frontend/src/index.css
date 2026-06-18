@@ -671,6 +671,67 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .profile-dropdown { position: relative; }
 .profile-trigger { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 12px; background: #1a1a2e; border-radius: 24px; }
 .avatar-small { width: 32px; height: 32px; border-radius: 50%; background: #ff8906; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #0f0e17; }
+
+.change-password-btn {
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  background: transparent;
+  border: 1px solid #ff8906;
+  color: #ff8906;
+  border-radius: 8px;
+  cursor: pointer;
+  font-size: 0.9rem;
+}
+
+.change-password-form {
+  margin-top: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.change-password-form input {
+  padding: 8px;
+  border-radius: 8px;
+  border: 1px solid #333;
+  background: #0f0e17;
+  color: #fff;
+}
+
+.change-password-confirm {
+  padding: 8px;
+  background: #ff8906;
+  color: #0f0e17;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  font-weight: bold;
+}
+
+.change-password-cancel {
+  padding: 8px;
+  background: #333;
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+}
+
+.family-name-header {
+  display: flex;
+  align-items: center;
+  padding: 8px 12px;
+  background: #1a1a2e;
+  border-radius: 8px;
+  margin-bottom: 12px;
+}
+
+.family-name-header .calendar-section-title {
+  font-size: 1rem;
+  color: #ff8906;
+  font-weight: bold;
+}
 .profile-menu { position: absolute; top: 100%; right: 0; margin-top: 8px; background: #1a1a2e; border-radius: 12px; padding: 16px; min-width: 250px; z-index: 100; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
 .profile-info-dropdown { padding-bottom: 12px; margin-bottom: 12px; border-bottom: 1px solid #333; }
 .profile-tabs { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 12px; }

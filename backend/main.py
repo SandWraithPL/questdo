@@ -424,43 +424,51 @@ def process_work_auto_completion():
         now = datetime.now(REMINDER_TZ)
         today = now.date()
         current_minutes = now.hour * 60 + now.minute
-        print(f"[work-auto] Checking at {now}, today={today}, current_minutes={current_minutes}")
-        entries = (
-            db.query(models.WorkEntry)
-            .filter(models.WorkEntry.completed.is_(False))
-            .all()
-        )
+        print(f"[work-auto] 🔥 Checking at {now}, today={today}")
+        
+        # Pobierz WSZYSTKIE nieukończone wpisy
+        entries = db.query(models.WorkEntry).filter(
+            models.WorkEntry.completed.is_(False)
+        ).all()
+        
         print(f"[work-auto] Found {len(entries)} incomplete entries")
+        
         changed = False
         completed_count = 0
+        
         for entry in entries:
-            # Auto-complete if work_date is in the past
+            print(f"[work-auto] Entry {entry.id}: date={entry.work_date}, end={entry.end_time}")
+            
+            # ✅ SPRAWDŹ CZY DATA JEST WCZEŚNIEJSZA NIŻ DZISIAJ
             if entry.work_date < today:
                 entry.completed = True
                 changed = True
                 completed_count += 1
-                print(f"[work-auto] Auto-completed entry {entry.id} from {entry.work_date} (past date)")
+                print(f"[work-auto] ✅ Completed past work {entry.id} from {entry.work_date}")
                 continue
-            # Auto-complete if work_date is today and end_time has passed
+            
+            # ✅ SPRAWDŹ CZY DATA TO DZISIAJ I CZAS MINĄŁ
             if entry.work_date == today:
                 try:
                     eh, em = lm.parse_time_hm(entry.end_time)
+                    end_minutes = eh * 60 + em
+                    if current_minutes >= end_minutes:
+                        entry.completed = True
+                        changed = True
+                        completed_count += 1
+                        print(f"[work-auto] ✅ Completed today's work {entry.id} at {entry.end_time}")
                 except ValueError:
-                    print(f"[work-auto] Invalid end_time for entry {entry.id}: {entry.end_time}")
                     continue
-                if current_minutes >= eh * 60 + em:
-                    entry.completed = True
-                    changed = True
-                    completed_count += 1
-                    print(f"[work-auto] Auto-completed entry {entry.id} at {entry.end_time} (time passed)")
+        
         if changed:
             db.commit()
-            print(f"[work-auto] Auto-completed {completed_count} work entries at {now}")
+            print(f"[work-auto] ✅ Auto-completed {completed_count} work entries")
         else:
-            print(f"[work-auto] No entries to auto-complete")
+            print("[work-auto] ⏳ No entries to complete")
+            
     except Exception as exc:
         db.rollback()
-        print(f"[work-auto] scheduler error: {exc}")
+        print(f"[work-auto] ❌ ERROR: {exc}")
     finally:
         db.close()
 
@@ -471,43 +479,51 @@ def process_schedule_auto_completion():
         now = datetime.now(REMINDER_TZ)
         today = now.date()
         current_minutes = now.hour * 60 + now.minute
-        print(f"[schedule-auto] Checking at {now}, today={today}, current_minutes={current_minutes}")
-        entries = (
-            db.query(models.ScheduleEntry)
-            .filter(models.ScheduleEntry.completed.is_(False))
-            .all()
-        )
+        print(f"[schedule-auto] 🔥 Checking at {now}, today={today}")
+        
+        # Pobierz WSZYSTKIE nieukończone wpisy
+        entries = db.query(models.ScheduleEntry).filter(
+            models.ScheduleEntry.completed.is_(False)
+        ).all()
+        
         print(f"[schedule-auto] Found {len(entries)} incomplete entries")
+        
         changed = False
         completed_count = 0
+        
         for entry in entries:
-            # Auto-complete if entry_date is in the past
+            print(f"[schedule-auto] Entry {entry.id}: date={entry.entry_date}, end={entry.end_time}")
+            
+            # ✅ SPRAWDŹ CZY DATA JEST WCZEŚNIEJSZA NIŻ DZISIAJ
             if entry.entry_date < today:
                 entry.completed = True
                 changed = True
                 completed_count += 1
-                print(f"[schedule-auto] Auto-completed entry {entry.id} from {entry.entry_date} (past date)")
+                print(f"[schedule-auto] ✅ Completed past schedule {entry.id} from {entry.entry_date}")
                 continue
-            # Auto-complete if entry_date is today and end_time has passed
+            
+            # ✅ SPRAWDŹ CZY DATA TO DZISIAJ I CZAS MINĄŁ
             if entry.entry_date == today:
                 try:
                     eh, em = lm.parse_time_hm(entry.end_time)
+                    end_minutes = eh * 60 + em
+                    if current_minutes >= end_minutes:
+                        entry.completed = True
+                        changed = True
+                        completed_count += 1
+                        print(f"[schedule-auto] ✅ Completed today's schedule {entry.id} at {entry.end_time}")
                 except ValueError:
-                    print(f"[schedule-auto] Invalid end_time for entry {entry.id}: {entry.end_time}")
                     continue
-                if current_minutes >= eh * 60 + em:
-                    entry.completed = True
-                    changed = True
-                    completed_count += 1
-                    print(f"[schedule-auto] Auto-completed entry {entry.id} at {entry.end_time} (time passed)")
+        
         if changed:
             db.commit()
-            print(f"[schedule-auto] Auto-completed {completed_count} schedule entries at {now}")
+            print(f"[schedule-auto] ✅ Auto-completed {completed_count} schedule entries")
         else:
-            print(f"[schedule-auto] No entries to auto-complete")
+            print("[schedule-auto] ⏳ No entries to complete")
+            
     except Exception as exc:
         db.rollback()
-        print(f"[schedule-auto] scheduler error: {exc}")
+        print(f"[schedule-auto] ❌ ERROR: {exc}")
     finally:
         db.close()
 
@@ -1083,6 +1099,9 @@ class Token(BaseModel):
 class AccountDelete(BaseModel):
     password: str
 
+class ChangePassword(BaseModel):
+    new_password: str
+
 
 class PushKeysIn(BaseModel):
     p256dh: str
@@ -1585,6 +1604,19 @@ def delete_account(
     db.delete(current_user)
     db.commit()
     return {"message": "Konto zostało usunięte"}
+
+@app.post("/change-password")
+def change_password(
+    body: ChangePassword,
+    current_user: models.User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    if len(body.new_password) < 3:
+        raise HTTPException(status_code=400, detail="Hasło musi mieć min. 3 znaki")
+    
+    current_user.hashed_password = pwd_context.hash(body.new_password)
+    db.commit()
+    return {"message": "Hasło zostało zmienione"}
 
 @app.get("/tasks")
 def get_tasks(
@@ -2760,6 +2792,7 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
     print(f"[SHOPPING] Created item with family_id: {row.family_id}")  # ← DODAJ
     
     # Broadcast WebSocket message
+    print(f"[WS] Broadcasting shopping_updated: added, id={row.id}, family_id={row.family_id}")
     safe_broadcast({
         "type": "shopping_updated",
         "data": {
@@ -2804,6 +2837,7 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
     db.refresh(row)
     
     # Broadcast WebSocket message
+    print(f"[WS] Broadcasting shopping_updated: updated, id={row.id}, bought={row.bought}, family_id={row.family_id}")
     safe_broadcast({
         "type": "shopping_updated",
         "data": {
@@ -2888,9 +2922,10 @@ def clear_bought_shopping(family_id: Optional[int] = None, current_user: models.
     db.commit()
     
     # Broadcast WebSocket message
+    print(f"[WS] Broadcasting shopping_updated: cleared_bought, family_id={family_id}")
     safe_broadcast({
         "type": "shopping_updated",
-        "data": {"action": "cleared_bought"}
+        "data": {"action": "cleared_bought", "family_id": family_id}
     })
     
     return {"message": f"Usunięto {len(bought)} kupionych produktów"}

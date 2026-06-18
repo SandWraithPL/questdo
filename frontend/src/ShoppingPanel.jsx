@@ -239,7 +239,7 @@ export default function ShoppingPanel({
         loadShoppingItems();
         loadSummary();
       }
-    }, 1000); // 1 second for immediate family sync
+    }, 5000); // 5 seconds to reduce conflict with WebSocket
 
     return () => clearInterval(interval);
   }, [familyId]);

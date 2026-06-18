@@ -251,67 +251,62 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
 
           {selectedFamily && (
             <div className="family-details">
-              <div className="calendar-section-bar" style={{ cursor: 'pointer' }} onClick={() => setCollapsed(!collapsed)}>
+              <div className="family-name-header">
                 <span className="calendar-section-title">👨‍👩‍👧‍👦 {selectedFamily.name}</span>
-                <span className="calendar-section-chevron">{collapsed ? "▼" : "▲"}</span>
               </div>
-              {!collapsed && (
-                <>
-                  <div className="family-members">
-                    <h5>Członkowie ({selectedFamily.members.length})</h5>
-                    {selectedFamily.members.map((member) => (
-                      <div key={member.id} className="member-item">
-                        <span className="member-role">
-                          {member.role === "admin" ? "👑" : "👤"}
-                        </span>
-                        <span className="member-name">{member.username}</span>
-                        {selectedFamily.role === "admin" && currentUserId && member.id !== currentUserId && (
-                          <button 
-                            type="button" 
-                            className="icon-btn delete" 
-                            onClick={() => removeMember(member.id)}
-                            title="Usuń członka"
-                          >
-                            🗑️
-                          </button>
-                        )}
-                        {selectedFamily.role === "admin" && !currentUserId && (
-                          <span style={{fontSize: '10px', color: '#f44336'}}>⚠️ Brak currentUserId</span>
-                        )}
-                      </div>
-                    ))}
+              <div className="family-members">
+                <h5>Członkowie ({selectedFamily.members.length})</h5>
+                {selectedFamily.members.map((member) => (
+                  <div key={member.id} className="member-item">
+                    <span className="member-role">
+                      {member.role === "admin" ? "👑" : "👤"}
+                    </span>
+                    <span className="member-name">{member.username}</span>
+                    {selectedFamily.role === "admin" && currentUserId && member.id !== currentUserId && (
+                      <button 
+                        type="button" 
+                        className="icon-btn delete" 
+                        onClick={() => removeMember(member.id)}
+                        title="Usuń członka"
+                      >
+                        🗑️
+                      </button>
+                    )}
+                    {selectedFamily.role === "admin" && !currentUserId && (
+                      <span style={{fontSize: '10px', color: '#f44336'}}>⚠️ Brak currentUserId</span>
+                    )}
                   </div>
-
-                  <div className="family-actions">
-                    {selectedFamily.role === "admin" && (
-                  <button type="button" className="add-task-btn" onClick={() => setShowInvite(!showInvite)} style={{ marginBottom: 8 }}>
-                    📧 Zaproś członka
-                  </button>
-                )}
-                <button type="button" className="danger-btn" onClick={() => leaveFamily(selectedFamily.id)}>
-                  👋 Opuść rodzinę
-                </button>
+                ))}
               </div>
 
-              {showInvite && selectedFamily.role === "admin" && (
-                <div className="add-task" style={{ marginTop: 12, padding: 16 }}>
-                  <h3>📧 Zaproś użytkownika</h3>
-                  <input 
-                    type="text"
-                    className="search-input"
-                    placeholder="Nazwa użytkownika" 
-                    value={inviteUsername} 
-                    onChange={(e) => setInviteUsername(e.target.value)} 
-                    onKeyDown={(e) => e.key === "Enter" && inviteUser()}
-                  />
-                  <div className="row" style={{ marginTop: 12 }}>
-                    <button type="button" className="add-task-btn" onClick={inviteUser}>Wyślij zaproszenie</button>
-                    <button type="button" className="cancel-btn" onClick={() => setShowInvite(false)}>Anuluj</button>
-                  </div>
-                </div>
-              )}
-                </>
-              )}
+              <div className="family-actions">
+                {selectedFamily.role === "admin" && (
+              <button type="button" className="add-task-btn" onClick={() => setShowInvite(!showInvite)} style={{ marginBottom: 8 }}>
+                📧 Zaproś członka
+              </button>
+            )}
+            <button type="button" className="danger-btn" onClick={() => leaveFamily(selectedFamily.id)}>
+              👋 Opuść rodzinę
+            </button>
+          </div>
+
+          {showInvite && selectedFamily.role === "admin" && (
+            <div className="add-task" style={{ marginTop: 12, padding: 16 }}>
+              <h3>📧 Zaproś użytkownika</h3>
+              <input 
+                type="text"
+                className="search-input"
+                placeholder="Nazwa użytkownika" 
+                value={inviteUsername} 
+                onChange={(e) => setInviteUsername(e.target.value)} 
+                onKeyDown={(e) => e.key === "Enter" && inviteUser()}
+              />
+              <div className="row" style={{ marginTop: 12 }}>
+                <button type="button" className="add-task-btn" onClick={inviteUser}>Wyślij zaproszenie</button>
+                <button type="button" className="cancel-btn" onClick={() => setShowInvite(false)}>Anuluj</button>
+              </div>
+            </div>
+          )}
               
               <div style={{ marginTop: 16, borderTop: '1px solid #333', paddingTop: 16 }}>
                 <h5 style={{ marginBottom: 8 }}>📦 Artykuły domyślne rodziny</h5>

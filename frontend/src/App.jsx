@@ -1637,11 +1637,43 @@ function Profile({
   const [activeTab, setActiveTab] = useState("achievements");
   const [deleteMode, setDeleteMode] = useState(false);
   const [deletePassword, setDeletePassword] = useState("");
+  const [changePasswordMode, setChangePasswordMode] = useState(false);
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const unlocked = achievements?.unlocked ?? [];
   const nextAch = achievements?.next;
   const isAdmin = user.username === "Igor";
 
   const submitDelete = () => { if (!deletePassword.trim()) return; onDeleteAccount(deletePassword, () => { setDeleteMode(false); setDeletePassword(""); }); };
+
+  const changePassword = async () => {
+    if (!newPassword.trim()) {
+      alert("Podaj nowe hasło");
+      return;
+    }
+    if (newPassword.length < 3) {
+      alert("Hasło musi mieć min. 3 znaki");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      alert("Hasła nie są identyczne");
+      return;
+    }
+    
+    try {
+      const token = localStorage.getItem("token");
+      await axios.post(`${API}/change-password`, { 
+        new_password: newPassword 
+      }, { headers: { Authorization: `Bearer ${token}` } });
+      
+      alert("✅ Hasło zmienione");
+      setChangePasswordMode(false);
+      setNewPassword("");
+      setConfirmPassword("");
+    } catch (err) {
+      alert(err.response?.data?.detail || "Błąd zmiany hasła");
+    }
+  };
 
   return (
     <div className="profile-dropdown">
@@ -1690,6 +1722,33 @@ function Profile({
           )}
           {isAdmin && <button type="button" onClick={onOpenAdmin} className="admin-btn">🔧 Panel Admina</button>}
           <button type="button" onClick={onLogout} className="logout-btn">Wyloguj</button>
+          <button type="button" onClick={() => setChangePasswordMode(!changePasswordMode)} className="change-password-btn">
+            🔑 Zmień hasło
+          </button>
+
+          {changePasswordMode && (
+            <div className="change-password-form">
+              <input 
+                type="password" 
+                placeholder="Nowe hasło (min. 3 znaki)" 
+                value={newPassword} 
+                onChange={(e) => setNewPassword(e.target.value)} 
+              />
+              <input 
+                type="password" 
+                placeholder="Potwierdź hasło" 
+                value={confirmPassword} 
+                onChange={(e) => setConfirmPassword(e.target.value)} 
+              />
+              <button className="change-password-confirm" onClick={changePassword}>
+                Zapisz nowe hasło
+              </button>
+              <button className="change-password-cancel" onClick={() => setChangePasswordMode(false)}>
+                Anuluj
+              </button>
+            </div>
+          )}
+
           {!deleteMode ? <button className="delete-account-btn" onClick={() => setDeleteMode(true)}>Usuń konto</button> : (
             <div className="delete-account-form"><input type="password" placeholder="Hasło do potwierdzenia" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} /><button className="delete-account-confirm" onClick={submitDelete}>Potwierdź usunięcie</button><button className="delete-account-cancel" onClick={() => setDeleteMode(false)}>Anuluj</button></div>
           )}
@@ -1760,6 +1819,7 @@ export default function App() {
           break;
         case 'shopping_updated':
           const { id, action, bought, family_id: wsFamilyId } = data.data;
+          console.log('[WS] Shopping update:', action, id, bought, 'familyId:', wsFamilyId, 'current familyId:', familyId);
           // Only update if it affects current view (same family or individual)
           if (wsFamilyId === familyId || (!wsFamilyId && !familyId)) {
             if (action === 'toggled' || action === 'updated') {
