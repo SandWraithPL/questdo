@@ -1175,7 +1175,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   border-radius: 14px;
   position: sticky;
   top: 8px;
-  z-index: 20;
+  z-index: 10;
 }
 
 .app-tab {
@@ -1203,6 +1203,19 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 
 .app-tab-icon { font-size: 1.2rem; line-height: 1; }
 .app-tab-label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
+
+/* 🔥 ZWIĘKSZ Z-INDEX DATEPICKERA W PLANIE */
+.schedule-panel .date-picker-wrap {
+  z-index: 999999 !important;
+}
+
+.schedule-panel .date-picker-popup {
+  z-index: 999999 !important;
+  position: fixed !important;
+  top: 50% !important;
+  left: 50% !important;
+  transform: translate(-50%, -50%) !important;
+}
 
 .module-panel { margin-bottom: 24px; }
 

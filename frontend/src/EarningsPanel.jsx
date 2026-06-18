@@ -372,9 +372,12 @@ export default function EarningsPanel({
           start_date: isRecurring ? startDate : null,
           end_date: isRecurring && endDate ? endDate : null,
         };
+        
+        console.log("[Earnings] Sending payload:", payload);
+        
         const res = await axios.post(`${api}/work`, payload, { headers });
         
-        console.log("[Earnings] Add work response:", res.data);
+        console.log("[Earnings] Response:", res.data);
         
         // 🔥 OBSŁUGA RÓŻNYCH ODPOWIEDZI
         let newEntry;
@@ -401,8 +404,15 @@ export default function EarningsPanel({
       } catch (err) {
         // ❌ ROLLBACK – usuń tymczasowy wpis
         setEntries(prev => prev.filter(e => e.id !== tempId));
-        console.error("[Earnings] Add work error:", err.response?.data);
-        onToast(err.response?.data?.detail || "Błąd dodawania");
+        
+        // 🔥 LEPIEJSZA OBSŁUGA BŁĘDÓW
+        console.error("[Earnings] Add work error:", err);
+        console.error("[Earnings] Response:", err.response?.data);
+        console.error("[Earnings] Status:", err.response?.status);
+        
+        // Pokaż szczegółowy komunikat
+        const detail = err.response?.data?.detail || "Błąd dodawania";
+        onToast(`❌ ${detail}`);
       }
     }, true);
   };

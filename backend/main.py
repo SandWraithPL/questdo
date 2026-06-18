@@ -1606,34 +1606,45 @@ def delete_account(
     current_user: models.User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    if not verify_password(body.password, current_user.hashed_password):
-        raise HTTPException(status_code=400, detail="Nieprawidłowe hasło")
+    try:
+        print(f"[delete_account] Attempting to delete account for user {current_user.id}")
+        
+        if not verify_password(body.password, current_user.hashed_password):
+            print(f"[delete_account] Invalid password for user {current_user.id}")
+            raise HTTPException(status_code=400, detail="Nieprawidłowe hasło")
 
-    db.query(models.Task).filter(models.Task.owner_id == current_user.id).delete()
-    db.query(models.ScheduleEntry).filter(models.ScheduleEntry.owner_id == current_user.id).delete()
-    db.query(models.ShoppingItem).filter(models.ShoppingItem.owner_id == current_user.id).delete()
-    db.query(models.WorkEntry).filter(models.WorkEntry.owner_id == current_user.id).delete()
-    db.query(models.UserAchievement).filter(
-        models.UserAchievement.user_id == current_user.id
-    ).delete()
-    db.query(models.DailyQuestAssignment).filter(
-        models.DailyQuestAssignment.user_id == current_user.id
-    ).delete()
-    db.query(models.PlayerRareDrop).filter(
-        models.PlayerRareDrop.user_id == current_user.id
-    ).delete()
-    db.query(models.PlayerExclusiveAchievement).filter(
-        models.PlayerExclusiveAchievement.user_id == current_user.id
-    ).delete()
-    db.query(models.PlayerBadge).filter(
-        models.PlayerBadge.user_id == current_user.id
-    ).delete()
-    db.query(models.PlayerHistory).filter(
-        models.PlayerHistory.user_id == current_user.id
-    ).delete()
-    db.delete(current_user)
-    db.commit()
-    return {"message": "Konto zostało usunięte"}
+        db.query(models.Task).filter(models.Task.owner_id == current_user.id).delete()
+        db.query(models.ScheduleEntry).filter(models.ScheduleEntry.owner_id == current_user.id).delete()
+        db.query(models.ShoppingItem).filter(models.ShoppingItem.owner_id == current_user.id).delete()
+        db.query(models.WorkEntry).filter(models.WorkEntry.owner_id == current_user.id).delete()
+        db.query(models.UserAchievement).filter(
+            models.UserAchievement.user_id == current_user.id
+        ).delete()
+        db.query(models.DailyQuestAssignment).filter(
+            models.DailyQuestAssignment.user_id == current_user.id
+        ).delete()
+        db.query(models.PlayerRareDrop).filter(
+            models.PlayerRareDrop.user_id == current_user.id
+        ).delete()
+        db.query(models.PlayerExclusiveAchievement).filter(
+            models.PlayerExclusiveAchievement.user_id == current_user.id
+        ).delete()
+        db.query(models.PlayerBadge).filter(
+            models.PlayerBadge.user_id == current_user.id
+        ).delete()
+        db.query(models.PlayerHistory).filter(
+            models.PlayerHistory.user_id == current_user.id
+        ).delete()
+        db.delete(current_user)
+        db.commit()
+        print(f"[delete_account] Successfully deleted account for user {current_user.id}")
+        return {"message": "Konto zostało usunięte"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[delete_account] ERROR: {e}")
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/change-password")
 def change_password(
