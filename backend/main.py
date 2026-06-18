@@ -1660,7 +1660,7 @@ def delete_account(
         db.query(models.ScheduleEntry).filter(models.ScheduleEntry.owner_id == user_id).delete()
         db.query(models.ShoppingItem).filter(
             models.ShoppingItem.owner_id == user_id,
-            models.ShoppingItem.family_id.is_(None)  # TYLKO INDYWIDUALNE
+            models.ShoppingItem.family_id.is_(None)
         ).delete()
         db.query(models.WorkEntry).filter(models.WorkEntry.owner_id == user_id).delete()
         db.query(models.UserAchievement).filter(models.UserAchievement.user_id == user_id).delete()
@@ -1688,6 +1688,16 @@ def delete_account(
         db.query(models.DefaultArticle).filter(
             models.DefaultArticle.owner_id == user_id,
             models.DefaultArticle.family_id.is_(None)
+        ).delete()
+
+        # 🔥 DODAJ TO – usuń dni wolne (free_days)
+        db.query(models.FreeDay).filter(
+            models.FreeDay.owner_id == user_id
+        ).delete()
+
+        # 🔥 DODAJ TO – usuń wydarzenia cykliczne (recurring_events)
+        db.query(models.RecurringEvent).filter(
+            models.RecurringEvent.owner_id == user_id
         ).delete()
         
         # 5. Na końcu usuń użytkownika
