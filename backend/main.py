@@ -4956,6 +4956,8 @@ def list_all_users(current_user: models.User = Depends(get_current_admin_user), 
 
 @app.delete("/admin/users/{user_id}")
 def delete_user_admin(user_id: int, current_user: models.User = Depends(get_current_admin_user), db: Session = Depends(get_db)):
+    print(f"[admin] DELETE /admin/users/{user_id} - by {current_user.username}")
+    
     target_user = db.query(models.User).filter(models.User.id == user_id).first()
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
@@ -4964,6 +4966,7 @@ def delete_user_admin(user_id: int, current_user: models.User = Depends(get_curr
         raise HTTPException(status_code=403, detail="Cannot delete admin account")
 
     username = target_user.username
+    print(f"[admin] Deleting user: {username} (id={user_id})")
 
     db.query(models.Task).filter(models.Task.owner_id == user_id).delete()
     db.query(models.ScheduleEntry).filter(models.ScheduleEntry.owner_id == user_id).delete()
@@ -4977,7 +4980,8 @@ def delete_user_admin(user_id: int, current_user: models.User = Depends(get_curr
     db.query(models.PlayerHistory).filter(models.PlayerHistory.user_id == user_id).delete()
     db.delete(target_user)
     db.commit()
-
+    
+    print(f"[admin] ✅ User {username} deleted")
     return {"message": f"User '{username}' deleted successfully"}
 
 

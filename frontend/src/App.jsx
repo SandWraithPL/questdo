@@ -1976,15 +1976,12 @@ export default function App() {
     return () => window.matchMedia("(display-mode: standalone)").removeEventListener("change", onDisplayMode);
   }, []);
 
-  // Temporarily disable service worker
-  /*
   useEffect(() => {
     const cleanup = registerServiceWorkerForUpdates();
     return () => {
       if (cleanup) cleanup();
     };
   }, []);
-  */
 
   useEffect(() => {
     if (!notificationsEnabled || !tasks.length) return undefined;
@@ -2086,15 +2083,6 @@ export default function App() {
       setToken(null);
     }
   };
-
-  // Temporarily disable service worker to prevent caching issues
-  /*
-  useEffect(() => {
-    let cleanup;
-    registerServiceWorkerForUpdates().then((fn) => { cleanup = fn; });
-    return () => { cleanup?.(); };
-  }, []);
-  */
 
   useEffect(() => { if (token) fetchData(); }, [token]);
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
