@@ -5067,6 +5067,40 @@ def reset_all_progress(current_user: models.User = Depends(get_current_admin_use
     }
 
 
+@app.post("/admin/fix-achievements/{user_id}")
+def fix_achievements(
+    user_id: int,
+    current_user: models.User = Depends(get_current_admin_user),
+    db: Session = Depends(get_db)
+):
+    # Remove duplicate exclusive achievements from database
+    db.execute(text("""
+        DELETE FROM exclusive_achievements
+        WHERE id NOT IN (
+            SELECT MIN(id)
+            FROM exclusive_achievements
+            GROUP BY slug
+        )
+    """))
+    db.commit()
+    
+    # Remove all player achievements for the user
+    db.query(models.PlayerExclusiveAchievement).filter(
+        models.PlayerExclusiveAchievement.user_id == user_id
+    ).delete()
+    db.commit()
+    
+    # Revalidate and recalculate achievements
+    user = db.query(models.User).filter(models.User.id == user_id).first()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    
+    gc.check_exclusive_achievements(user, db, models, revalidate=True)
+    db.commit()
+    
+    return {"message": "Achievementy odświeżone", "user_id": user_id}
+
+
 @app.get("/health")
 async def health_check():
     return {"status": "ok", "database": "connected"}

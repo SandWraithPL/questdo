@@ -361,24 +361,26 @@ EXCLUSIVE_ACHIEVEMENTS: list[dict] = [
 EXCLUSIVE_ACHIEVEMENT_BY_SLUG = {ea["slug"]: ea for ea in EXCLUSIVE_ACHIEVEMENTS}
 
 
-def check_exclusive_achievements(user, db, models) -> list[dict]:
+def check_exclusive_achievements(user, db, models, revalidate=False) -> list[dict]:
     from datetime import datetime, timedelta, date, time
 
     reset_at = getattr(user, "progress_reset_at", None)
     stats = gather_user_stats(user, db, models)
+    
+    # Get all player achievements with their achievement slugs
+    player_achievements = db.query(models.PlayerExclusiveAchievement).filter(
+        models.PlayerExclusiveAchievement.user_id == user.id
+    ).all()
+    
     unlocked_slugs = {
         ua.exclusive_achievement.slug
-        for ua in db.query(models.PlayerExclusiveAchievement).filter(
-            models.PlayerExclusiveAchievement.user_id == user.id
-        ).all()
+        for ua in player_achievements
     }
 
     newly_unlocked = []
+    revoked_achievements = []
 
     for ea_def in EXCLUSIVE_ACHIEVEMENTS:
-        if ea_def["slug"] in unlocked_slugs:
-            continue
-
         ea_type = ea_def["type"]
         value = ea_def["value"]
         met = False
@@ -516,8 +518,24 @@ def check_exclusive_achievements(user, db, models) -> list[dict]:
                 )
                 db.add(player_ach)
                 newly_unlocked.append(ea_def)
+            else:
+                # Achievement already unlocked, skip to prevent duplicates
+                continue
+        elif revalidate and ea_def["slug"] in unlocked_slugs:
+            # Revoke achievement if it no longer meets criteria
+            ach = db.query(models.ExclusiveAchievement).filter(
+                models.ExclusiveAchievement.slug == ea_def["slug"]
+            ).first()
+            if ach:
+                player_ach = db.query(models.PlayerExclusiveAchievement).filter(
+                    models.PlayerExclusiveAchievement.user_id == user.id,
+                    models.PlayerExclusiveAchievement.exclusive_achievement_id == ach.id
+                ).first()
+                if player_ach:
+                    db.delete(player_ach)
+                    revoked_achievements.append(ea_def)
 
-    if newly_unlocked:
+    if newly_unlocked or revoked_achievements:
         db.commit()
 
     return newly_unlocked
