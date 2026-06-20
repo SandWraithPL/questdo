@@ -4,6 +4,22 @@ import SharedCalendar, { weekdayIndex, WEEKDAYS_LONG } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
 import { applyUserFromResponse } from "./helpers";
+import { toVirtualRecurringTasks } from "./recurringHelpers";
+
+const EVENT_CATEGORIES = [
+  { value: "birthday", emoji: "🎂", label: "Urodziny" },
+  { value: "anniversary", emoji: "💍", label: "Rocznica" },
+  { value: "holiday", emoji: "🎉", label: "Święto" },
+  { value: "reminder", emoji: "🔔", label: "Przypomnienie" },
+];
+
+function getEventCategoryEmoji(cat) {
+  return EVENT_CATEGORIES.find((c) => c.value === cat)?.emoji || "📅";
+}
+
+function getEventCategoryLabel(cat) {
+  return EVENT_CATEGORIES.find((c) => c.value === cat)?.label || "Inne";
+}
 
 // Komponent FreeDayManager - zarządzanie dniami wolnymi
 function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onToast, enqueueRequest }) {
@@ -221,8 +237,17 @@ export default function EarningsPanel({
     : String(selectedDate).slice(0, 10);
 
   const dayEntries = useMemo(
-    () => entries.filter((e) => e.work_date === selectedStr).sort((a, b) => a.start_time.localeCompare(b.start_time)),
-    [entries, selectedStr],
+    () => {
+      const dayEntries = entries.filter((e) => e.work_date === selectedStr);
+      const virtual = toVirtualRecurringTasks(recurringEvents, selectedStr, dayEntries);
+      return [...dayEntries, ...virtual].sort((a, b) => {
+        if (a.isRecurringVirtual && !b.isRecurringVirtual) return -1;
+        if (!a.isRecurringVirtual && b.isRecurringVirtual) return 1;
+        if (a.isRecurringVirtual && b.isRecurringVirtual) return 0;
+        return a.start_time.localeCompare(b.start_time);
+      });
+    },
+    [entries, selectedStr, recurringEvents],
   );
 
   useEffect(() => {
@@ -647,6 +672,22 @@ export default function EarningsPanel({
         )}
         {dayEntries.map((entry) => {
           const editing = editingId === entry.id;
+          const isVirtual = entry.isRecurringVirtual;
+          
+          if (isVirtual) {
+            return (
+              <div key={entry.id} className="task-card medium virtual-event">
+                <div className="task-info">
+                  <h4>{entry.title}</h4>
+                  <div className="task-meta">
+                    <span className="badge category">{getEventCategoryEmoji(entry.event_category)} {getEventCategoryLabel(entry.event_category)}</span>
+                    <span className="badge timing-early">🔁 Cykliczne</span>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          
           return (
             <div key={entry.id} className={`task-card ${entry.completed ? "done" : "medium"}`}>
               {editing ? (

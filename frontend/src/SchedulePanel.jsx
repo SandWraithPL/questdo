@@ -3,6 +3,22 @@ import axios from "axios";
 import SharedCalendar, { weekdayIndex, WEEKDAYS_LONG } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
+import { toVirtualRecurringTasks } from "./recurringHelpers";
+
+const EVENT_CATEGORIES = [
+  { value: "birthday", emoji: "🎂", label: "Urodziny" },
+  { value: "anniversary", emoji: "💍", label: "Rocznica" },
+  { value: "holiday", emoji: "🎉", label: "Święto" },
+  { value: "reminder", emoji: "🔔", label: "Przypomnienie" },
+];
+
+function getEventCategoryEmoji(cat) {
+  return EVENT_CATEGORIES.find((c) => c.value === cat)?.emoji || "📅";
+}
+
+function getEventCategoryLabel(cat) {
+  return EVENT_CATEGORIES.find((c) => c.value === cat)?.label || "Inne";
+}
 
 function toDateStr(d) {
   if (!d) return new Date().toISOString().slice(0, 10);
@@ -187,8 +203,13 @@ export default function SchedulePanel({
   }, [selectedStr]);
 
   const dayEntries = useMemo(
-    () => entries.filter((e) => e.entry_date === (selectedDate instanceof Date ? selectedDate.toISOString().slice(0, 10) : String(selectedDate).slice(0, 10))),
-    [entries, selectedDate],
+    () => {
+      const dateStr = selectedDate instanceof Date ? selectedDate.toISOString().slice(0, 10) : String(selectedDate).slice(0, 10);
+      const dayEntries = entries.filter((e) => e.entry_date === dateStr);
+      const virtual = toVirtualRecurringTasks(recurringEvents, dateStr, dayEntries);
+      return [...dayEntries, ...virtual];
+    },
+    [entries, selectedDate, recurringEvents],
   );
 
   const sortedDayEntries = [...dayEntries].sort((a, b) => a.start_time.localeCompare(b.start_time));
@@ -541,6 +562,21 @@ export default function SchedulePanel({
         {sortedDayEntries.length === 0 && <p className="empty">Brak zajęć w tym dniu.</p>}
         {sortedDayEntries.map((entry) => {
           const editing = editingId === entry.id;
+          const isVirtual = entry.isRecurringVirtual;
+          
+          if (isVirtual) {
+            return (
+              <div key={entry.id} className="task-card medium schedule-card virtual-event">
+                <div className="task-info">
+                  <h4>{entry.title}</h4>
+                  <div className="task-meta">
+                    <span className="badge category">{getEventCategoryEmoji(entry.event_category)} {getEventCategoryLabel(entry.event_category)}</span>
+                    <span className="badge timing-early">🔁 Cykliczne</span>
+                  </div>
+                </div>
+              </div>
+            );
+          }
           
           return (
             <div key={entry.id} className={`task-card medium schedule-card ${entry.completed ? "done" : ""}`}>
