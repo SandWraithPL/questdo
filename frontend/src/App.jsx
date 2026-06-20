@@ -2106,8 +2106,13 @@ export default function App() {
       
     } catch (err) {
       console.error("Fetch error:", err);
-      localStorage.removeItem("token");
-      setToken(null);
+      if (err.response?.status === 401) {
+        localStorage.removeItem("token");
+        setToken(null);
+        setUser(null);
+        showToast("Sesja wygasła – zaloguj się ponownie");
+        return;
+      }
     }
   };
 
@@ -2136,6 +2141,13 @@ export default function App() {
       setHistory(historyRes.data || []);
     } catch (err) {
       console.error("loadTasksOnly error:", err);
+      if (err.response?.status === 401) {
+        localStorage.removeItem("token");
+        setToken(null);
+        setUser(null);
+        showToast("Sesja wygasła – zaloguj się ponownie");
+        return;
+      }
     }
   };
 
@@ -2146,6 +2158,13 @@ export default function App() {
       setFamilyInvitations(res.data);
     } catch (err) {
       console.error("Błąd ładowania zaproszeń:", err);
+      if (err.response?.status === 401) {
+        localStorage.removeItem("token");
+        setToken(null);
+        setUser(null);
+        showToast("Sesja wygasła – zaloguj się ponownie");
+        return;
+      }
     }
   };
 
