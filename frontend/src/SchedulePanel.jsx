@@ -537,6 +537,7 @@ export default function SchedulePanel({
         collapsedStorageKey="questdo-schedule-calendar-collapsed"
         defaultCollapsed={false}
         freeDays={freeDays}
+        recurringEvents={recurringEvents}
         freeDayManager={setFreeDays && (
           <FreeDayManager
             freeDays={freeDays}
@@ -563,15 +564,16 @@ export default function SchedulePanel({
         {sortedDayEntries.map((entry) => {
           const editing = editingId === entry.id;
           const isVirtual = entry.isRecurringVirtual;
+          const isEvent = entry.task_type === 'event' || isVirtual;
           
           if (isVirtual) {
             return (
-              <div key={entry.id} className="task-card medium schedule-card virtual-event">
+              <div key={entry.id} className="task-card event schedule-card virtual-event">
+                <div className="task-check event-indicator">{getEventCategoryEmoji(entry.event_category || 'reminder')}</div>
                 <div className="task-info">
-                  <h4>{entry.title}</h4>
+                  <h4><span className="event-mark">{getEventCategoryEmoji(entry.event_category || 'reminder')} </span>{entry.title}</h4>
                   <div className="task-meta">
-                    <span className="badge category">{getEventCategoryEmoji(entry.event_category)} {getEventCategoryLabel(entry.event_category)}</span>
-                    <span className="badge timing-early">🔁 Cykliczne</span>
+                    <span className="badge event-type">{getEventCategoryLabel(entry.event_category || 'reminder')}</span>
                   </div>
                 </div>
               </div>
