@@ -118,7 +118,7 @@ function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onT
                 {existingFreeDay.day_type === "holiday" ? "Święto" :
                  existingFreeDay.day_type === "deans_day" ? "Dzień dziekański" : "Dzień rektorski"}
               </strong>
-              {existingFreeDay.notes && <span> — {existingFreeDay.notes}</span>}</p>
+              {existingFreeDay.notes && <span> - {existingFreeDay.notes}</span>}</p>
               <div className="row" style={{ marginTop: 12, gap: "8px" }}>
                 <button type="button" className="danger-btn" onClick={handleDeleteFreeDay}>🗑️ Usuń oznaczenie</button>
                 <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
@@ -656,7 +656,18 @@ export default function EarningsPanel({
       {/* Lista wpisów */}
       <div className="day-tasks-panel">
         <div className="tasks-header">
-          <h3>Praca — {new Date(`${selectedStr}T12:00:00`).toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" })}</h3>
+          <h3>
+            Praca - {new Date(`${selectedStr}T12:00:00`).toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" })}
+            {(() => {
+              const freeDay = freeDays.find(fd => fd.date === selectedStr);
+              const holidayName = freeDay?.notes || null;
+              return holidayName && (
+                <span style={{ fontWeight: 'normal', color: '#aaa' }}>
+                  {' '}- <strong style={{ color: '#ff8906' }}>{holidayName}</strong>
+                </span>
+              );
+            })()}
+          </h3>
           <span className="earnings-day-total">{formatMoney(dayTotal)}</span>
         </div>
         {dayEntries.length === 0 && <p className="empty">Brak wpisów pracy na ten dzień.</p>}

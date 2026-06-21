@@ -221,7 +221,7 @@ function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onT
                 {existingFreeDay.day_type === "holiday" ? "Święto" :
                  existingFreeDay.day_type === "deans_day" ? "Dzień dziekański" : "Dzień rektorski"}
               </strong>
-              {existingFreeDay.notes && <span> — {existingFreeDay.notes}</span>}</p>
+              {existingFreeDay.notes && <span> - {existingFreeDay.notes}</span>}</p>
               <div className="row" style={{ marginTop: 12, gap: "8px" }}>
                 <button type="button" className="danger-btn" onClick={handleDeleteFreeDay}>🗑️ Usuń oznaczenie</button>
                 <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
@@ -1216,7 +1216,7 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
-function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, onDelete, onSave, onToast, onUncheck, loadingTaskIds, deletingTaskIds, api, headers, onRefresh }) {
+function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, onDelete, onSave, onToast, onUncheck, loadingTaskIds, deletingTaskIds, api, headers, onRefresh, freeDays = [] }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
@@ -1336,7 +1336,20 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
 
   return (
     <div className="day-tasks-panel">
-      <div className="tasks-header"><h3>Questy · {dateLabel}</h3></div>
+      <div className="tasks-header">
+        <h3>
+          Questy - {dateLabel}
+          {(() => {
+            const freeDay = freeDays.find(fd => fd.date === dateStr);
+            const holidayName = freeDay?.notes || null;
+            return holidayName && (
+              <span style={{ fontWeight: 'normal', color: '#aaa' }}>
+                {' '}- <strong style={{ color: '#ff8906' }}>{holidayName}</strong>
+              </span>
+            );
+          })()}
+        </h3>
+      </div>
       {/* RZĄD 1 – filtry stanu */}
       <div className="filter-group">
         {["all", "active", "done"].map(f => <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "all" ? "Wszystkie" : f === "active" ? "Aktywne" : "Ukończone"}</button>)}
@@ -2633,7 +2646,7 @@ export default function App() {
         <>
       <ChallengesBar challenges={challenges} />
       <Calendar tasks={tasks} recurringEvents={recurringEvents} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} freeDays={freeDays} onFreeDayChange={setFreeDays} headers={headers} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} recurringEvents={recurringEvents} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} api={API} headers={headers} onRefresh={fetchData} />
+      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} recurringEvents={recurringEvents} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} api={API} headers={headers} onRefresh={fetchData} freeDays={freeDays} />
       {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
         <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
           <div className="add-task-meta">

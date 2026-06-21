@@ -244,12 +244,19 @@ export default function SharedCalendar({
   const renderDayView = () => {
     const dayItems = getItemsForDate(selectedStr);
     const freeDayType = getFreeDayType(selectedStr);
+    const freeDay = freeDays.find(fd => fd.date === selectedStr);
+    const holidayName = freeDay?.notes || null;
     const recurringCategories = getRecurringCategoriesForDate(recurringEvents, selectedStr);
     return (
       <div className="day-view">
         <h3>
           {selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-          {freeDayType === "holiday" && <span className="day-free-indicator"> 🎉 Święto</span>}
+          {holidayName && (
+            <span style={{ fontWeight: 'normal', color: '#aaa' }}>
+              {' '}- <strong style={{ color: '#ff8906' }}>{holidayName}</strong>
+            </span>
+          )}
+          {freeDayType === "holiday" && !holidayName && <span className="day-free-indicator"> 🎉 Święto</span>}
           {freeDayType === "deans_day" && <span className="day-free-indicator"> 🎓 Dzień dziekański</span>}
           {freeDayType === "rector_day" && <span className="day-free-indicator"> 🏛️ Dzień rektorski</span>}
           {recurringCategories.length > 0 && (
