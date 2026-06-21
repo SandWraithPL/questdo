@@ -28,13 +28,11 @@ function getCategory(cat) {
 export default function CategoriesPanel({ api, headers, onToast, familyId }) {
   const [articles, setArticles] = useState([]);
   const [name, setName] = useState("");
-  const [qty, setQty] = useState("");
   const [unit, setUnit] = useState("szt");
   const [category, setCategory] = useState("other");
   const [price, setPrice] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
-  const [editQty, setEditQty] = useState("");
   const [editUnit, setEditUnit] = useState("szt");
   const [editCat, setEditCat] = useState("other");
   const [editPrice, setEditPrice] = useState("");
@@ -61,14 +59,12 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
     try {
       await axios.post(`${api}/default-articles`, {
         name,
-        quantity: qty,
         unit,
         category,
         default_price: parseFloat(parseRateInput(price)) || 0,
         family_id: familyId || null
       }, { headers });
       setName("");
-      setQty("");
       setUnit("szt");
       setCategory("other");
       setPrice("");
@@ -82,7 +78,6 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
   const startEdit = (article) => {
     setEditingId(article.id);
     setEditName(article.name);
-    setEditQty(article.quantity || "");
     setEditUnit(article.unit || "szt");
     setEditCat(article.category || "other");
     setEditPrice(article.default_price ? article.default_price.toFixed(2).replace(".", ",") : "");
@@ -93,14 +88,12 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
     try {
       await axios.patch(`${api}/default-articles/${editingId}`, {
         name: editName,
-        quantity: editQty,
         unit: editUnit,
         category: editCat,
         default_price: parseFloat(parseRateInput(editPrice)) || 0
       }, { headers });
       setEditingId(null);
       setEditName("");
-      setEditQty("");
       setEditUnit("szt");
       setEditCat("other");
       setEditPrice("");
@@ -132,8 +125,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
             onChange={(e) => setName(e.target.value)} 
             onKeyDown={(e) => e.key === "Enter" && addArticle()} 
           />
-          <input className="input-small" placeholder="Ilość" value={qty} onChange={(e) => setQty(e.target.value)} />
-          <select className="input-small" style={{ width: '80px', flex: '0 0 auto' }} value={unit} onChange={(e) => setUnit(e.target.value)}>
+          <select className="input-small" style={{ width: '100px', flex: '0 0 auto' }} value={unit} onChange={(e) => setUnit(e.target.value)}>
             <option value="szt">szt</option>
             <option value="kg">kg</option>
             <option value="l">l</option>
@@ -163,8 +155,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
               {editing ? (
                 <div className="edit-mode">
                   <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nazwa" />
-                  <input className="input-small" value={editQty} onChange={(e) => setEditQty(e.target.value)} placeholder="Ilość" />
-                  <select className="input-small" style={{ width: '80px', flex: '0 0 auto' }} value={editUnit} onChange={(e) => setEditUnit(e.target.value)}>
+                  <select className="input-small" style={{ width: '100px', flex: '0 0 auto' }} value={editUnit} onChange={(e) => setEditUnit(e.target.value)}>
                     <option value="szt">szt</option>
                     <option value="kg">kg</option>
                     <option value="l">l</option>
@@ -176,14 +167,14 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
                     ))}
                   </select>
                   <button type="button" className="save-mini" onClick={saveEdit}>✓</button>
-                  <button type="button" className="cancel-mini" onClick={() => { setEditingId(null); setEditName(""); setEditQty(""); setEditUnit("szt"); setEditCat("other"); setEditPrice(""); }}>✗</button>
+                  <button type="button" className="cancel-mini" onClick={() => { setEditingId(null); setEditName(""); setEditUnit("szt"); setEditCat("other"); setEditPrice(""); }}>✗</button>
                 </div>
               ) : (
                 <>
                   <div className="task-info">
                     <h4>{article.name}</h4>
                     <div className="task-meta">
-                      {article.quantity && <span className="badge category">{formatQuantity(article.quantity)} {article.unit || "szt"}</span>}
+                      <span className="badge category">{article.unit || "szt"}</span>
                       <span className="badge category">{cat.emoji} {cat.label}</span>
                       {article.default_price > 0 && <span className="badge category">💰 {formatMoney(article.default_price)}</span>}
                     </div>

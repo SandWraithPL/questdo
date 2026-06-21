@@ -590,7 +590,32 @@ export default function ShoppingPanel({
               </div>
             )}
           </div>
-          <input className="input-small" placeholder="Ilość" value={qty} onChange={(e) => setQty(e.target.value)} />
+          <input 
+            className="input-small" 
+            placeholder="Ilość" 
+            value={qty} 
+            onChange={(e) => {
+              const value = e.target.value;
+              
+              // Dla sztuk – tylko cyfry (bez kropki i przecinka)
+              if (unit === "szt") {
+                if (value === "" || /^\d+$/.test(value)) {
+                  setQty(value);
+                }
+                return;
+              }
+              
+              // Dla kg/l – cyfry, kropka i przecinek
+              if (unit === "kg" || unit === "l") {
+                if (value === "" || /^[\d,.]*$/.test(value)) {
+                  const dots = (value.match(/[.,]/g) || []).length;
+                  if (dots <= 1) {
+                    setQty(value);
+                  }
+                }
+              }
+            }} 
+          />
           <select value={unit} onChange={(e) => setUnit(e.target.value)}>
             <option value="szt">szt.</option>
             <option value="kg">kg</option>
@@ -653,7 +678,33 @@ export default function ShoppingPanel({
               {editing ? (
                 <div className="edit-mode">
                   <input value={editForm.name || ""} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nazwa" />
-                  <input className="input-small" value={editForm.qty || ""} onChange={(e) => setEditForm({ ...editForm, qty: e.target.value })} placeholder="Ilość" />
+                  <input 
+                    className="input-small" 
+                    value={editForm.qty || ""} 
+                    onChange={(e) => {
+                      const value = e.target.value;
+                      const currentUnit = editForm.unit || "szt";
+                      
+                      // Dla sztuk – tylko cyfry (bez kropki i przecinka)
+                      if (currentUnit === "szt") {
+                        if (value === "" || /^\d+$/.test(value)) {
+                          setEditForm({ ...editForm, qty: value });
+                        }
+                        return;
+                      }
+                      
+                      // Dla kg/l – cyfry, kropka i przecinek
+                      if (currentUnit === "kg" || currentUnit === "l") {
+                        if (value === "" || /^[\d,.]*$/.test(value)) {
+                          const dots = (value.match(/[.,]/g) || []).length;
+                          if (dots <= 1) {
+                            setEditForm({ ...editForm, qty: value });
+                          }
+                        }
+                      }
+                    }} 
+                    placeholder="Ilość" 
+                  />
                   <select value={editForm.unit || "szt"} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}>
                     <option value="szt">szt.</option>
                     <option value="kg">kg</option>
