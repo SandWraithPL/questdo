@@ -242,6 +242,7 @@ class DefaultArticle(Base):
     family_id = Column(Integer, ForeignKey("families.id"), nullable=True, index=True)
     name = Column(String)
     quantity = Column(String, default="")
+    unit = Column(String, default="szt")
     category = Column(String, default="other")
     default_price = Column(Float, default=0.0)
     created_at = Column(DateTime, default=datetime.utcnow)

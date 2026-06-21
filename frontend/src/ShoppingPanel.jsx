@@ -40,6 +40,12 @@ function formatMoney(value) {
   return `${formatted} zł`;
 }
 
+// Funkcja formatująca ilość z przecinkiem
+function formatQuantity(value) {
+  if (!value) return "";
+  return value.replace(".", ",");
+}
+
 const SHOPPING_CATEGORIES = [
   { value: "veggies", emoji: "🥦", label: "Warzywa" },
   { value: "fruits", emoji: "🍎", label: "Owoce" },
@@ -102,11 +108,33 @@ export default function ShoppingPanel({
 
   const saveItem = async (id, form) => {
     if (!form.name?.trim()) return;
+
+    // Walidacja ilości w zależności od jednostki
+    if (form.qty) {
+      const qtyValue = parseFloat(form.qty.replace(",", "."));
+      if (isNaN(qtyValue)) {
+        onToast("Nieprawidłowa ilość");
+        return;
+      }
+      if (form.unit === "szt") {
+        if (!Number.isInteger(qtyValue)) {
+          onToast("Dla sztuk podaj liczbę całkowitą");
+          return;
+        }
+      } else if (form.unit === "kg" || form.unit === "l") {
+        const decimalPlaces = (form.qty.replace(",", ".").split(".")[1] || "").length;
+        if (decimalPlaces > 3) {
+          onToast("Dla kg/l podaj max 3 miejsca po przecinku");
+          return;
+        }
+      }
+    }
+
     enqueueRequest(async () => {
       try {
         const res = await axios.patch(`${api}/shopping/${id}`, {
           name: form.name,
-          quantity: form.qty,
+          quantity: form.qty.replace(",", "."),
           unit: form.unit,
           category: form.cat,
           price: parseFloat(form.price) || 0,
@@ -207,24 +235,45 @@ export default function ShoppingPanel({
       onToast("Podaj nazwę produktu");
       return;
     }
-    
+
+    // Walidacja ilości w zależności od jednostki
+    if (qty) {
+      const qtyValue = parseFloat(qty.replace(",", "."));
+      if (isNaN(qtyValue)) {
+        onToast("Nieprawidłowa ilość");
+        return;
+      }
+      if (unit === "szt") {
+        if (!Number.isInteger(qtyValue)) {
+          onToast("Dla sztuk podaj liczbę całkowitą");
+          return;
+        }
+      } else if (unit === "kg" || unit === "l") {
+        const decimalPlaces = (qty.replace(",", ".").split(".")[1] || "").length;
+        if (decimalPlaces > 3) {
+          onToast("Dla kg/l podaj max 3 miejsca po przecinku");
+          return;
+        }
+      }
+    }
+
     enqueueRequest(async () => {
       try {
-        const payload = { 
-          name, 
-          quantity: qty, 
+        const payload = {
+          name,
+          quantity: qty.replace(",", "."),
           unit,
-          category, 
+          category,
           price: parseFloat(editPrice) || 0,
           family_id: selectedMode === "family" && familyId ? familyId : undefined
         };
-        
+
         console.log("[SHOPPING] Adding item:", payload);
         await axios.post(`${api}/shopping`, payload, { headers });
-        
+
         // 🔥 ODŚWIEŻ LISTĘ PO DODANIU
         await loadShoppingItems();
-        
+
         setName("");
         setQty("");
         setUnit("szt");
@@ -232,7 +281,7 @@ export default function ShoppingPanel({
         setEditPrice("");
         setShowSuggestions(false);
         setSuggestions([]);
-        
+
         onToast("✅ Dodano do listy zakupów");
       } catch (err) {
         console.error("[SHOPPING] Error:", err.response?.data);
@@ -384,7 +433,8 @@ export default function ShoppingPanel({
 
   const selectSuggestion = (suggestion) => {
     setName(suggestion.name);
-    setQty(suggestion.quantity || "");
+    setQty("");
+    setUnit(suggestion.unit || "szt");
     setCategory(suggestion.category || "other");
     setEditPrice(suggestion.default_price ? String(suggestion.default_price) : "");
     setShowSuggestions(false);
@@ -623,11 +673,11 @@ export default function ShoppingPanel({
                   <div className="task-info">
                     <h4 className={item.bought ? "done" : ""}>{item.name}</h4>
                     <div className="task-meta">
-                      {item.quantity && <span className="badge category">{item.quantity} {item.unit || "szt"}</span>}
+                      {item.quantity && <span className="badge category">{formatQuantity(item.quantity)} {item.unit || "szt"}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
                       {item.price > 0 && (
                         <span className="badge category">
-                          💰 {item.quantity ? `${item.quantity} ${item.unit || "szt"} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
+                          💰 {item.quantity ? `${formatQuantity(item.quantity)} ${item.unit || "szt"} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
                         </span>
                       )}
                     </div>
@@ -725,11 +775,11 @@ export default function ShoppingPanel({
                   <div className="task-info">
                     <h4 className="done">{item.name}</h4>
                     <div className="task-meta">
-                      {item.quantity && <span className="badge category">{item.quantity} {item.unit || "szt"}</span>}
+                      {item.quantity && <span className="badge category">{formatQuantity(item.quantity)} {item.unit || "szt"}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
                       {item.price > 0 && (
                         <span className="badge category">
-                          💰 {item.quantity ? `${item.quantity} ${item.unit || "szt"} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
+                          💰 {item.quantity ? `${formatQuantity(item.quantity)} ${item.unit || "szt"} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
                         </span>
                       )}
                     </div>

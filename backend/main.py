@@ -246,6 +246,10 @@ def migrate_schema():
             with engine.begin() as conn:
                 conn.execute(text("ALTER TABLE default_articles ADD COLUMN family_id INTEGER REFERENCES families(id)"))
             print("Migracja: dodano kolumnę default_articles.family_id")
+        if "unit" not in article_cols:
+            with engine.begin() as conn:
+                conn.execute(text("ALTER TABLE default_articles ADD COLUMN unit VARCHAR DEFAULT 'szt'"))
+            print("Migracja: dodano kolumnę default_articles.unit")
 
     if "shopping_items" in insp.get_table_names():
         shopping_cols = {c["name"] for c in insp.get_columns("shopping_items")}
@@ -3701,6 +3705,7 @@ class ShoppingHistoryCreate(BaseModel):
 class DefaultArticleCreate(BaseModel):
     name: str
     quantity: Optional[str] = ""
+    unit: Optional[str] = "szt"
     category: Optional[str] = "other"
     default_price: float = 0.0
     family_id: Optional[int] = None
@@ -3709,6 +3714,7 @@ class DefaultArticleCreate(BaseModel):
 class DefaultArticleUpdate(BaseModel):
     name: Optional[str] = None
     quantity: Optional[str] = None
+    unit: Optional[str] = None
     category: Optional[str] = None
     default_price: Optional[float] = None
 
@@ -3920,6 +3926,7 @@ def get_default_articles(family_id: Optional[int] = None, current_user: models.U
         "id": a.id,
         "name": a.name,
         "quantity": a.quantity,
+        "unit": a.unit,
         "category": a.category,
         "default_price": a.default_price,
         "family_id": a.family_id,
@@ -3942,6 +3949,7 @@ def search_default_articles(q: str, current_user: models.User = Depends(get_curr
         "id": a.id,
         "name": a.name,
         "quantity": a.quantity,
+        "unit": a.unit,
         "category": a.category,
         "default_price": a.default_price
     } for a in articles]
@@ -3967,6 +3975,7 @@ def create_default_article(data: DefaultArticleCreate, current_user: models.User
         family_id=data.family_id,
         name=name,
         quantity=data.quantity or "",
+        unit=data.unit or "szt",
         category=validate_shopping_category(data.category or "other"),
         default_price=max(0.0, float(data.default_price or 0.0))
     )
@@ -3978,6 +3987,7 @@ def create_default_article(data: DefaultArticleCreate, current_user: models.User
         "id": article.id,
         "name": article.name,
         "quantity": article.quantity,
+        "unit": article.unit,
         "category": article.category,
         "default_price": article.default_price,
         "family_id": article.family_id,
@@ -4013,6 +4023,8 @@ def update_default_article(article_id: int, data: DefaultArticleUpdate, current_
         article.name = data.name.strip()
     if data.quantity is not None:
         article.quantity = data.quantity
+    if data.unit is not None:
+        article.unit = data.unit
     if data.category is not None:
         article.category = validate_shopping_category(data.category)
     if data.default_price is not None:
@@ -4025,6 +4037,7 @@ def update_default_article(article_id: int, data: DefaultArticleUpdate, current_
         "id": article.id,
         "name": article.name,
         "quantity": article.quantity,
+        "unit": article.unit,
         "category": article.category,
         "default_price": article.default_price,
         "family_id": article.family_id,

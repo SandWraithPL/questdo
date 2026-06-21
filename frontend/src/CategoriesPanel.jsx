@@ -9,6 +9,12 @@ function formatMoney(value) {
   return `${formatted} zł`;
 }
 
+// Funkcja formatująca ilość z przecinkiem
+function formatQuantity(value) {
+  if (!value) return "";
+  return value.replace(".", ",");
+}
+
 // Funkcja konwertująca przecinek na kropkę dla API
 function parseRateInput(value) {
   if (!value) return "";
@@ -177,7 +183,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
                   <div className="task-info">
                     <h4>{article.name}</h4>
                     <div className="task-meta">
-                      {article.quantity && <span className="badge category">{article.quantity}</span>}
+                      {article.quantity && <span className="badge category">{formatQuantity(article.quantity)} {article.unit || "szt"}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
                       {article.default_price > 0 && <span className="badge category">💰 {formatMoney(article.default_price)}</span>}
                     </div>
