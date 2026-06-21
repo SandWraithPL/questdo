@@ -1223,6 +1223,7 @@ class ScheduleUpdate(BaseModel):
 class ShoppingCreate(BaseModel):
     name: str
     quantity: Optional[str] = ""
+    unit: Optional[str] = "szt"
     category: Optional[str] = "other"
     family_id: Optional[int] = None
     price: Optional[float] = 0.0
@@ -1231,6 +1232,7 @@ class ShoppingCreate(BaseModel):
 class ShoppingUpdate(BaseModel):
     name: Optional[str] = None
     quantity: Optional[str] = None
+    unit: Optional[str] = None
     category: Optional[str] = None
     bought: Optional[bool] = None
     price: Optional[float] = None
@@ -2962,6 +2964,7 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
         family_id=family_id,
         name=enc["name"],
         quantity=enc["quantity"],
+        unit=item.unit or "szt",
         category=validate_shopping_category(item.category or "other"),
         price=max(0.0, float(item.price or 0.0))
     )
@@ -3005,6 +3008,8 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
         row.name = encrypt_field(body.name.strip())
     if body.quantity is not None:
         row.quantity = encrypt_field(body.quantity.strip())
+    if body.unit is not None:
+        row.unit = body.unit
     if body.category is not None:
         row.category = validate_shopping_category(body.category)
     if body.price is not None:

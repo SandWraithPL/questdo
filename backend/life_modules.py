@@ -56,6 +56,7 @@ def shopping_to_dict(item: models.ShoppingItem) -> dict:
         "id": item.id,
         "name": decrypt_field(item.name),
         "quantity": decrypt_field(item.quantity),
+        "unit": item.unit or "szt",
         "category": item.category,
         "bought": item.bought,
         "exp_awarded": item.exp_awarded,
