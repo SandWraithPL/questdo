@@ -1,6 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 
-const API_WS = "wss://questdo-backend-https.azurewebsites.net/ws"
+const API_WS = (import.meta.env.VITE_API_URL || "http://localhost:8000")
+  .replace("https://", "wss://")
+  .replace("http://", "ws://") + "/ws"
 
 export function useWebSocket() {
   const [isConnected, setIsConnected] = useState(false)

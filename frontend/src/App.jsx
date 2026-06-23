@@ -15,7 +15,10 @@ import { getRecurringCategoriesForDate, toVirtualRecurringTasks } from "./recurr
 import { useEditItem } from "./hooks/useEditItem";
 import { useWebSocket } from "./hooks/useWebSocket";
 
-const API = "https://questdo-backend-https.azurewebsites.net";
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+const WS_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000")
+  .replace("https://", "wss://")
+  .replace("http://", "ws://") + "/ws";
 
 const DEFAULT_LEVEL_THRESHOLDS = [
   0, 80, 180, 320, 480, 660, 860, 1080, 1320, 1600, 1900, 2250, 2650, 3100, 3600,
@@ -1930,7 +1933,7 @@ export default function App() {
       }
     };
 
-    const ws = new WebSocket('wss://questdo-backend-https.azurewebsites.net/ws');
+    const ws = new WebSocket(WS_URL);
     ws.onmessage = handleMessage;
     
     return () => ws.close();

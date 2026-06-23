@@ -1,7 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import axios from 'axios'
 
-const API = "https://questdo-backend-https.azurewebsites.net"
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
 const fetchTasks = async (date) => {
   const token = localStorage.getItem('token')
