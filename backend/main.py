@@ -673,6 +673,9 @@ app.add_middleware(
         "http://questdo-frontend.azurewebsites.net",
         "https://questdo-backend.azurewebsites.net",
         "https://questdo-backend-https.azurewebsites.net",
+        "https://questdo-frontend.onrender.com",
+        "http://questdo-frontend.onrender.com",
+        "https://questdo-backend.onrender.com",
         "http://localhost:5173",  # dla dev
         "http://localhost:3000",
     ],
