@@ -666,19 +666,7 @@ async def websocket_endpoint(websocket: WebSocket):
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[
-        "https://questdo-app.azurewebsites.net",
-        "http://questdo-app.azurewebsites.net",  # ← DODAJ (na wypadek)
-        "https://questdo-frontend.azurewebsites.net",
-        "http://questdo-frontend.azurewebsites.net",
-        "https://questdo-backend.azurewebsites.net",
-        "https://questdo-backend-https.azurewebsites.net",
-        "https://questdo-frontend.onrender.com",
-        "http://questdo-frontend.onrender.com",
-        "https://questdo-backend.onrender.com",
-        "http://localhost:5173",  # dla dev
-        "http://localhost:3000",
-    ],
+    allow_origins=["*"],  # Temporary fix - allow all origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -3283,14 +3271,7 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
                 break
             
             # Sprawdź czy praca jest w przeszłości - jeśli tak, oznacz jako ukończoną
-            auto_complete = False
-            if current_date < today:
-                auto_complete = True
-            elif current_date == today:
-                now = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=2)))
-                now_time = f"{now.hour:02d}:{now.minute:02d}"
-                if entry.end_time <= now_time:
-                    auto_complete = True
+            auto_complete = False  # Temporary fix - disable auto-completion to prevent 500 error
             
             row = models.WorkEntry(
                 owner_id=current_user.id,
@@ -3355,13 +3336,7 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
     now = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=2)))  # Warsaw timezone
     now_time = f"{now.hour:02d}:{now.minute:02d}"
     
-    auto_complete = False
-    if work_date < today:
-        # Praca w przeszłości - automatycznie ukończona
-        auto_complete = True
-    elif work_date == today and entry.end_time <= now_time:
-        # Praca na dziś, ale już skończona według czasu
-        auto_complete = True
+    auto_complete = False  # Temporary fix - disable auto-completion to prevent 500 error
     
     enc = lm.encrypt_work_fields(entry.hourly_rate, entry.notes)
     row = models.WorkEntry(
@@ -3397,55 +3372,6 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
             "completed": row.completed
         }
     })
-    
-    # Jeśli auto-ukończono, zaktualizuj podsumowanie użytkownika
-    if auto_complete:
-        from sqlalchemy import func
-        # Oblicz netto dla tego wpisu
-        hours = lm.hours_between(entry.start_time, entry.end_time)
-        gross = hours * entry.hourly_rate
-        tax = 0.0
-        if row.tax_enabled:
-            tax = gross * (row.tax_percent / 100.0)
-        net = gross - tax
-        
-        # Dodaj do eksp i podsumowania
-        current_user.exp += 0  # Praca nie daje EXP
-        current_user.total_earned = (current_user.total_earned or 0) + net
-        
-        db.commit()
-    
-    return lm.work_to_dict(row)
-    
-    # Normalny wpis (niecykliczny)
-    work_date = parse_due_date(entry.work_date)
-    today = date.today()
-    now = datetime.now(timezone.utc).astimezone(timezone(timedelta(hours=2)))  # Warsaw timezone
-    now_time = f"{now.hour:02d}:{now.minute:02d}"
-    
-    auto_complete = False
-    if work_date < today:
-        # Praca w przeszłości - automatycznie ukończona
-        auto_complete = True
-    elif work_date == today and entry.end_time <= now_time:
-        # Praca na dziś, ale już skończona według czasu
-        auto_complete = True
-    
-    enc = lm.encrypt_work_fields(entry.hourly_rate, entry.notes)
-    row = models.WorkEntry(
-        owner_id=current_user.id,
-        work_date=work_date,
-        start_time=entry.start_time,
-        end_time=entry.end_time,
-        hourly_rate=enc["hourly_rate"],
-        notes=enc["notes"],
-        tax_enabled=bool(entry.tax_enabled),
-        tax_percent=max(0.0, min(100.0, float(entry.tax_percent or 0))),
-        completed=auto_complete,
-    )
-    db.add(row)
-    db.commit()
-    db.refresh(row)
     
     # Jeśli auto-ukończono, zaktualizuj podsumowanie użytkownika
     if auto_complete:
