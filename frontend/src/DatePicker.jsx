@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/set-state-in-effect */
+
 import { useState, useEffect, useRef } from "react";
 
 const WEEKDAYS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
@@ -128,16 +128,16 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
       </button>
 
       {open && (
-        <div 
-          className="date-picker-popup" 
-          style={{ 
+        <div
+          className="date-picker-popup"
+          style={{
             zIndex: 999999,
             position: 'fixed',
             top: '50%',
             left: '50%',
             transform: 'translate(-50%, -50%)'
           }}
-          role="dialog" 
+          role="dialog"
           aria-label="Wybierz datę"
         >
           <div className="dp-header">

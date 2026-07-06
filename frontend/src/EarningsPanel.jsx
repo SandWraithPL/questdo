@@ -1,8 +1,9 @@
 import { useMemo, useState, useEffect, useRef } from "react";
 import axios from "axios";
-import SharedCalendar, { weekdayIndex, WEEKDAYS_LONG } from "./SharedCalendar";
+import SharedCalendar, { WEEKDAYS_LONG } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
+import FreeDayManager from "./FreeDayManager";
 import { applyUserFromResponse } from "./helpers";
 import { toVirtualRecurringTasks } from "./recurringHelpers";
 
@@ -21,148 +22,18 @@ function getEventCategoryLabel(cat) {
   return EVENT_CATEGORIES.find((c) => c.value === cat)?.label || "Inne";
 }
 
-// Komponent FreeDayManager - zarządzanie dniami wolnymi
-function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onToast, enqueueRequest }) {
-  const [showFreeDayManager, setShowFreeDayManager] = useState(false);
-  const [freeDayType, setFreeDayType] = useState("holiday");
-  const [freeDayName, setFreeDayName] = useState("");
-
-  const selectedStr = selectedDate instanceof Date
-    ? selectedDate.toISOString().slice(0, 10)
-    : String(selectedDate).slice(0, 10);
-
-  const handleCreateFreeDay = () => {
-    if (enqueueRequest) {
-      enqueueRequest(async () => {
-        try {
-          const res = await axios.post(`${api}/free-days`, {
-            date: selectedStr,
-            day_type: freeDayType,
-            notes: freeDayName
-          }, { headers });
-          if (setFreeDays) {
-            setFreeDays(prev => [...prev, res.data]);
-          }
-          setFreeDayName("");
-          setShowFreeDayManager(false);
-          onToast("✅ Oznaczono dzień jako wolny");
-        } catch (err) {
-          onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
-        }
-      });
-    } else {
-      axios.post(`${api}/free-days`, {
-        date: selectedStr,
-        day_type: freeDayType,
-        notes: freeDayName
-      }, { headers }).then(res => {
-        if (setFreeDays) {
-          setFreeDays(prev => [...prev, res.data]);
-        }
-        setFreeDayName("");
-        setShowFreeDayManager(false);
-        onToast("✅ Oznaczono dzień jako wolny");
-      }).catch(err => {
-        onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
-      });
-    }
-  };
-
-  const handleDeleteFreeDay = () => {
-    const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
-    if (!existingFreeDay) return;
-
-    if (enqueueRequest) {
-      enqueueRequest(async () => {
-        try {
-          await axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers });
-          if (setFreeDays) {
-            setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
-          }
-          onToast("🗑️ Usunięto oznaczenie dnia wolnego");
-        } catch (err) {
-          onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
-        }
-      });
-    } else {
-      axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers }).then(() => {
-        if (setFreeDays) {
-          setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
-        }
-        onToast("🗑️ Usunięto oznaczenie dnia wolnego");
-      }).catch(err => {
-        onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
-      });
-    }
-  };
-
-  const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
-
-  return (
-    <>
-      <button
-        type="button"
-        className="icon-btn free-day-btn"
-        onClick={() => setShowFreeDayManager(!showFreeDayManager)}
-        title="Zarządzaj dniami wolnymi"
-        aria-label="Zarządzaj dniami wolnymi"
-      >
-        🎓
-      </button>
-      {showFreeDayManager && (
-        <div className="add-task free-day-manager">
-          <h3>🎓 Zarządzaj dniami wolnymi</h3>
-          {existingFreeDay ? (
-            <div>
-              <p>Ten dzień jest oznaczony jako: <strong>
-                {existingFreeDay.day_type === "holiday" ? "Święto" :
-                 existingFreeDay.day_type === "deans_day" ? "Dzień dziekański" : "Dzień rektorski"}
-              </strong>
-              {existingFreeDay.notes && <span> - {existingFreeDay.notes}</span>}</p>
-              <div className="row" style={{ marginTop: 12, gap: "8px" }}>
-                <button type="button" className="danger-btn" onClick={handleDeleteFreeDay}>🗑️ Usuń oznaczenie</button>
-                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <select value={freeDayType} onChange={(e) => setFreeDayType(e.target.value)}>
-                <option value="holiday">🎉 Święto</option>
-                <option value="deans_day">🎓 Dzień dziekański</option>
-                <option value="rector_day">🏛️ Dzień rektorski</option>
-              </select>
-              <input
-                placeholder="Nazwa święta (opcjonalne)"
-                value={freeDayName}
-                onChange={(e) => setFreeDayName(e.target.value)}
-              />
-              <div className="row" style={{ marginTop: 12 }}>
-                <button type="button" className="add-task-btn" onClick={handleCreateFreeDay}>Oznacz dzień</button>
-                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
-// Funkcja formatująca pieniądze z przecinkiem i 2 miejscami po przecinku
 function formatMoney(value) {
   const num = Number(value || 0);
   const formatted = num.toFixed(2).replace(".", ",");
   return `${formatted} zł`;
 }
 
-// Funkcja formatująca stawkę z przecinkiem i 2 miejscami po przecinku (do wyświetlania)
 function formatRate(value) {
   const num = Number(value || 0);
   const formatted = num.toFixed(2).replace(".", ",");
   return `${formatted} zł/h`;
 }
 
-// Funkcja konwertująca przecinek na kropkę dla API
 function parseRateInput(value) {
   if (!value) return "";
   return value.replace(",", ".");
@@ -229,7 +100,7 @@ export default function EarningsPanel({
   const [editEndDate, setEditEndDate] = useState("");
   const [isSavingDefault, setIsSavingDefault] = useState(false);
   const [workDate, setWorkDate] = useState("");
-  const [copyModal, setCopyModal] = useState(null); // { entryId, targetDate }
+  const [copyModal, setCopyModal] = useState(null);
   const autoCompletedIds = useRef(new Set());
 
   const selectedStr = selectedDate instanceof Date
@@ -293,7 +164,7 @@ export default function EarningsPanel({
       const rate = res.data.rate ? parseFloat(res.data.rate).toFixed(2).replace(".", ",") : "";
       setDefaultHourlyRate(rate);
     } catch {
-      /* ignore */
+
     }
   };
 
@@ -308,7 +179,7 @@ export default function EarningsPanel({
       const res = await axios.get(`${api}/work/summary`, { headers });
       setSummary(res.data);
     } catch {
-      /* ignore */
+
     }
   };
 
@@ -333,10 +204,6 @@ export default function EarningsPanel({
     }
   };
 
-  const handleRateChange = (value) => {
-    setHourlyRate(value);
-  };
-
   const addEntry = () => {
     const rateValue = parseRateInput(hourlyRate);
     const rate = parseFloat(rateValue);
@@ -353,7 +220,6 @@ export default function EarningsPanel({
       return;
     }
 
-    // ✅ OPTIMISTIC UPDATE – dodaj pracę natychmiast
     const tempId = `temp-${Date.now()}`;
     const tempEntry = {
       id: tempId,
@@ -397,47 +263,16 @@ export default function EarningsPanel({
           start_date: isRecurring ? startDate : null,
           end_date: isRecurring && endDate ? endDate : null,
         };
-        
-        console.log("[Earnings] Sending payload:", payload);
-        
+
+
         const res = await axios.post(`${api}/work`, payload, { headers });
-        
-        console.log("[Earnings] Response:", res.data);
-        
-        // 🔥 OBSŁUGA RÓŻNYCH ODPOWIEDZI
-        let newEntry;
-        if (res.data.entries && Array.isArray(res.data.entries)) {
-          // Cykliczne – bierz pierwszy wpis
-          newEntry = res.data.entries[0];
-        } else if (res.data.id) {
-          // Pojedynczy wpis
-          newEntry = res.data;
-        } else if (res.data.entry) {
-          // Backend zwraca { entry: {...} }
-          newEntry = res.data.entry;
-        } else {
-          // Nieznany format – bierz całą odpowiedź
-          newEntry = res.data;
-        }
-        
-        console.log("[Earnings] New entry from backend:", newEntry);
-        
-        // ✅ ZASTĄP tymczasowy wpis prawdziwym
+        const newEntry = res.data.entries?.[0] || res.data.entry || res.data;
         setEntries(prev => prev.map(e => e.id === tempId ? newEntry : e));
         await refreshSummary();
         onToast("✅ Dodano wpis pracy");
       } catch (err) {
-        // ❌ ROLLBACK – usuń tymczasowy wpis
         setEntries(prev => prev.filter(e => e.id !== tempId));
-        
-        // 🔥 LEPIEJSZA OBSŁUGA BŁĘDÓW
-        console.error("[Earnings] Add work error:", err);
-        console.error("[Earnings] Response:", err.response?.data);
-        console.error("[Earnings] Status:", err.response?.status);
-        
-        // Pokaż szczegółowy komunikat
-        const detail = err.response?.data?.detail || "Błąd dodawania";
-        onToast(`❌ ${detail}`);
+        onToast(`❌ ${err.response?.data?.detail || "Błąd dodawania"}`);
       }
     }, true);
   };
@@ -481,7 +316,7 @@ export default function EarningsPanel({
   const copyWork = async (entryId, targetDate) => {
     const original = entries.find(e => e.id === entryId);
     if (!original) return;
-    
+
     enqueueRequest(async () => {
       try {
         const payload = {
@@ -494,10 +329,10 @@ export default function EarningsPanel({
           tax_percent: original.tax_percent || 0,
           is_recurring: false,
         };
-        
+
         await axios.post(`${api}/work`, payload, { headers });
         await refreshSummary();
-        
+
         const res = await axios.get(`${api}/work`, { headers });
         setEntries(res.data);
         setCopyModal(null);
@@ -534,43 +369,39 @@ export default function EarningsPanel({
           onToast("Podaj stawkę godzinową");
           return;
         }
-        
-        // Find original entry
+
         const original = entries.find(e => e.id === entry.id);
         if (!original) return;
-        
-        // Check if time changed
+
         const timeChanged = (editStartTime !== original.start_time) || (editEndTime !== original.end_time) || (editDate !== original.work_date);
-        
-        // Calculate new completed status
+
         let newCompleted = original.completed;
-        
+
         if (timeChanged) {
           const today = new Date().toISOString().slice(0, 10);
           const now = new Date();
           const nowMinutes = now.getHours() * 60 + now.getMinutes();
-          
+
           const [h, m] = editEndTime.split(":").map(Number);
           const endMinutes = h * 60 + m;
-          
-          // If date is in the past → completed = true
+
           if (editDate < today) {
             newCompleted = true;
           }
-          // If date is today and time has passed → completed = true
+
           else if (editDate === today && endMinutes <= nowMinutes) {
             newCompleted = true;
           }
-          // If date is today and time hasn't passed → completed = false
+
           else if (editDate === today && endMinutes > nowMinutes) {
             newCompleted = false;
           }
-          // If date is in the future → completed = false
+
           else if (editDate > today) {
             newCompleted = false;
           }
         }
-        
+
         const res = await axios.patch(`${api}/work/${entry.id}`, {
           work_date: editDate,
           start_time: editStartTime,
@@ -595,7 +426,7 @@ export default function EarningsPanel({
 
   return (
     <div className="module-panel earnings-panel">
-      {/* Summary - bez zmian */}
+
       <div className="earnings-summary">
         <div className="earnings-stat">
           <span className="earnings-stat-label">Dzień</span>
@@ -615,7 +446,6 @@ export default function EarningsPanel({
         </div>
       </div>
 
-      {/* Kalendarz */}
       <SharedCalendar
         items={entries}
         selectedDate={selectedDate}
@@ -653,7 +483,6 @@ export default function EarningsPanel({
         )}
       />
 
-      {/* Lista wpisów */}
       <div className="day-tasks-panel">
         <div className="tasks-header">
           <h3>
@@ -684,8 +513,7 @@ export default function EarningsPanel({
         {dayEntries.map((entry) => {
           const editing = editingId === entry.id;
           const isVirtual = entry.isRecurringVirtual;
-          const isEvent = entry.task_type === 'event' || isVirtual;
-          
+
           if (isVirtual) {
             return (
               <div key={entry.id} className="task-card event virtual-event">
@@ -699,7 +527,7 @@ export default function EarningsPanel({
               </div>
             );
           }
-          
+
           return (
             <div key={entry.id} className={`task-card ${entry.completed ? "done" : "medium"}`}>
               {editing ? (
@@ -755,7 +583,6 @@ export default function EarningsPanel({
         })}
       </div>
 
-      {/* Przyciski akcji */}
       {!showAdd ? (
         <div className="row panel-actions-row">
           <button type="button" className="add-task-btn" onClick={() => {
@@ -775,16 +602,16 @@ export default function EarningsPanel({
           </div>
 
           <div className="rate-input-group">
-            <input 
-              type="text" 
-              placeholder="Stawka za godzinę (zł) *" 
-              value={hourlyRate} 
-              onChange={(e) => handleRateChange(e.target.value)} 
+            <input
+              type="text"
+              placeholder="Stawka za godzinę (zł) *"
+              value={hourlyRate}
+              onChange={(e) => setHourlyRate(e.target.value)}
             />
-            <button 
-              type="button" 
-              className="save-default-btn" 
-              onClick={saveAsDefaultRate} 
+            <button
+              type="button"
+              className="save-default-btn"
+              onClick={saveAsDefaultRate}
               disabled={isSavingDefault}
               title="Zapisz jako domyślną stawkę"
             >
@@ -793,7 +620,7 @@ export default function EarningsPanel({
           </div>
 
           <input placeholder="Notatka / miejsce pracy (opcjonalnie)" value={notes} onChange={(e) => setNotes(e.target.value)} />
-          
+
           <label className="important-toggle">
             <input type="checkbox" checked={taxEnabled} onChange={(e) => setTaxEnabled(e.target.checked)} />
             <span>Odlicz podatek</span>
@@ -801,7 +628,7 @@ export default function EarningsPanel({
           {taxEnabled && (
             <input type="number" min="0" max="100" step="0.1" placeholder="Procent podatku" value={taxPercent} onChange={(e) => setTaxPercent(e.target.value)} />
           )}
-          
+
           <label className="important-toggle">
             <input type="checkbox" checked={isRecurring} onChange={(e) => setIsRecurring(e.target.checked)} />
             <span>Cykliczne (co tydzień)</span>
@@ -819,7 +646,7 @@ export default function EarningsPanel({
           ) : (
             <DatePicker value={workDate} onChange={setWorkDate} label="Data" />
           )}
-          
+
           <div className="row">
             <button type="button" className="add-task-btn" onClick={addEntry}>Zapisz wpis</button>
             <button type="button" className="cancel-btn" onClick={() => setShowAdd(false)}>Anuluj</button>

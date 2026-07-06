@@ -1,8 +1,9 @@
 import { useMemo, useState, useEffect } from "react";
 import axios from "axios";
-import SharedCalendar, { weekdayIndex, WEEKDAYS_LONG } from "./SharedCalendar";
+import SharedCalendar, { WEEKDAYS_LONG } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
+import FreeDayManager from "./FreeDayManager";
 import { toVirtualRecurringTasks } from "./recurringHelpers";
 
 const EVENT_CATEGORIES = [
@@ -29,143 +30,16 @@ function toDateStr(d) {
   return `${y}-${m}-${day}`;
 }
 
-// Komponent FreeDayManager - zarządzanie dniami wolnymi
-function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onToast, enqueueRequest }) {
-  const [showFreeDayManager, setShowFreeDayManager] = useState(false);
-  const [freeDayType, setFreeDayType] = useState("holiday");
-  const [freeDayName, setFreeDayName] = useState("");
-
-  const selectedStr = selectedDate instanceof Date
-    ? selectedDate.toISOString().slice(0, 10)
-    : String(selectedDate).slice(0, 10);
-
-  const handleCreateFreeDay = () => {
-    if (enqueueRequest) {
-      enqueueRequest(async () => {
-        try {
-          const res = await axios.post(`${api}/free-days`, {
-            date: selectedStr,
-            day_type: freeDayType,
-            notes: freeDayName
-          }, { headers });
-          if (setFreeDays) {
-            setFreeDays(prev => [...prev, res.data]);
-          }
-          setFreeDayName("");
-          setShowFreeDayManager(false);
-          onToast("✅ Oznaczono dzień jako wolny");
-        } catch (err) {
-          onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
-        }
-      });
-    } else {
-      axios.post(`${api}/free-days`, {
-        date: selectedStr,
-        day_type: freeDayType,
-        notes: freeDayName
-      }, { headers }).then(res => {
-        if (setFreeDays) {
-          setFreeDays(prev => [...prev, res.data]);
-        }
-        setFreeDayName("");
-        setShowFreeDayManager(false);
-        onToast("✅ Oznaczono dzień jako wolny");
-      }).catch(err => {
-        onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
-      });
-    }
-  };
-
-  const handleDeleteFreeDay = () => {
-    const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
-    if (!existingFreeDay) return;
-
-    if (enqueueRequest) {
-      enqueueRequest(async () => {
-        try {
-          await axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers });
-          if (setFreeDays) {
-            setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
-          }
-          onToast("🗑️ Usunięto oznaczenie dnia wolnego");
-        } catch (err) {
-          onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
-        }
-      });
-    } else {
-      axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers }).then(() => {
-        if (setFreeDays) {
-          setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
-        }
-        onToast("🗑️ Usunięto oznaczenie dnia wolnego");
-      }).catch(err => {
-        onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
-      });
-    }
-  };
-
-  const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
-
-  return (
-    <>
-      <button
-        type="button"
-        className="icon-btn free-day-btn"
-        onClick={() => setShowFreeDayManager(!showFreeDayManager)}
-        title="Zarządzaj dniami wolnymi"
-        aria-label="Zarządzaj dniami wolnymi"
-      >
-        🎓
-      </button>
-      {showFreeDayManager && (
-        <div className="add-task free-day-manager">
-          <h3>🎓 Zarządzaj dniami wolnymi</h3>
-          {existingFreeDay ? (
-            <div>
-              <p>Ten dzień jest oznaczony jako: <strong>
-                {existingFreeDay.day_type === "holiday" ? "Święto" :
-                 existingFreeDay.day_type === "deans_day" ? "Dzień dziekański" : "Dzień rektorski"}
-              </strong>
-              {existingFreeDay.notes && <span> - {existingFreeDay.notes}</span>}</p>
-              <div className="row" style={{ marginTop: 12, gap: "8px" }}>
-                <button type="button" className="danger-btn" onClick={handleDeleteFreeDay}>🗑️ Usuń oznaczenie</button>
-                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <select value={freeDayType} onChange={(e) => setFreeDayType(e.target.value)}>
-                <option value="holiday">🎉 Święto</option>
-                <option value="deans_day">🎓 Dzień dziekański</option>
-                <option value="rector_day">🏛️ Dzień rektorski</option>
-              </select>
-              <input
-                placeholder="Nazwa święta (opcjonalne)"
-                value={freeDayName}
-                onChange={(e) => setFreeDayName(e.target.value)}
-              />
-              <div className="row" style={{ marginTop: 12 }}>
-                <button type="button" className="add-task-btn" onClick={handleCreateFreeDay}>Oznacz dzień</button>
-                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
-
-export default function SchedulePanel({ 
-  api, 
-  headers, 
-  entries, 
-  setEntries, 
-  selectedDate, 
-  onDateSelect, 
-  onToast, 
-  enqueueRequest, 
-  freeDays = [], 
+export default function SchedulePanel({
+  api,
+  headers,
+  entries,
+  setEntries,
+  selectedDate,
+  onDateSelect,
+  onToast,
+  enqueueRequest,
+  freeDays = [],
   setFreeDays,
   recurringEvents = [],
 }) {
@@ -176,17 +50,13 @@ export default function SchedulePanel({
   const [endTime, setEndTime] = useState("09:30");
   const [isRecurring, setIsRecurring] = useState(true);
   const [dayOfWeek, setDayOfWeek] = useState(0);
-  const [entryDate, setEntryDate] = useState(() => {
-    const d = selectedDate instanceof Date ? selectedDate : new Date();
-    return d.toISOString().slice(0, 10);
-  });
   const [startDate, setStartDate] = useState("");
   const [endDate, setEndDate] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
   const [manualEntryDate, setManualEntryDate] = useState("");
-  const [copyModal, setCopyModal] = useState(null); // { entryId, targetDate }
+  const [copyModal, setCopyModal] = useState(null);
   const [editingId, setEditingId] = useState(null);
   const [editTitle, setEditTitle] = useState("");
   const [editLocation, setEditLocation] = useState("");
@@ -202,15 +72,11 @@ export default function SchedulePanel({
     setManualEntryDate(selectedStr);
   }, [selectedStr]);
 
-  const dayEntries = useMemo(
-    () => {
-      const dateStr = selectedDate instanceof Date ? selectedDate.toISOString().slice(0, 10) : String(selectedDate).slice(0, 10);
-      const dayEntries = entries.filter((e) => e.entry_date === dateStr);
-      const virtual = toVirtualRecurringTasks(recurringEvents, dateStr, dayEntries);
-      return [...dayEntries, ...virtual];
-    },
-    [entries, selectedDate, recurringEvents],
-  );
+  const dayEntries = useMemo(() => {
+    const dayEntries = entries.filter((e) => e.entry_date === selectedStr);
+    const virtual = toVirtualRecurringTasks(recurringEvents, selectedStr, dayEntries);
+    return [...dayEntries, ...virtual];
+  }, [entries, selectedStr, recurringEvents]);
 
   const sortedDayEntries = [...dayEntries].sort((a, b) => a.start_time.localeCompare(b.start_time));
 
@@ -228,7 +94,6 @@ export default function SchedulePanel({
       return;
     }
 
-    // ✅ OPTIMISTIC UPDATE – dodaj zajęcia natychmiast
     const tempId = `temp-${Date.now()}`;
     const tempEntry = {
       id: tempId,
@@ -271,16 +136,15 @@ export default function SchedulePanel({
         };
         const res = await axios.post(`${api}/schedule`, payload, { headers });
         const newEntries = Array.isArray(res.data) ? res.data : [res.data];
-        
-        // ✅ ZASTĄP tymczasowe wpisy prawdziwymi
+
         setEntries(prev => {
           const filtered = prev.filter(e => e.id !== tempId);
           return [...filtered, ...newEntries];
         });
-        
+
         onToast(`✅ Dodano ${newEntries.length} ${newEntries.length === 1 ? 'zajęcia' : 'zajęć'} do planu`);
       } catch (err) {
-        // ❌ ROLLBACK – usuń tymczasowe wpisy
+
         setEntries(prev => prev.filter(e => e.id !== tempId));
         onToast(err.response?.data?.detail || "Błąd dodawania");
       }
@@ -313,31 +177,22 @@ export default function SchedulePanel({
       onToast("Podaj nazwę zajęć");
       return;
     }
-    
-    // 🔥 Znajdź oryginalny wpis
+
     const original = entries.find(e => e.id === editingId);
     if (!original) return;
-    
-    // 🔥 Sprawdź czy zmieniono godzinę LUB datę
+
     const timeChanged = (editStartTime !== original.start_time) || (editEndTime !== original.end_time);
-    
-    // 🔥 Oblicz nowy status completed na podstawie NOWEJ godziny
+
     let newCompleted = original.completed;
-    
+
     if (timeChanged) {
       const today = new Date().toISOString().slice(0, 10);
       const now = new Date();
       const nowMinutes = now.getHours() * 60 + now.getMinutes();
-      
+
       const [h, m] = editEndTime.split(":").map(Number);
       const endMinutes = h * 60 + m;
-      
-      // 📋 LOGIKA:
-      // - Jeśli data w przeszłości → completed = true
-      // - Jeśli data dzisiaj i czas minął → completed = true
-      // - Jeśli data dzisiaj i czas nie minął → completed = false
-      // - Jeśli data w przyszłości → completed = false
-      
+
       if (original.entry_date < today) {
         newCompleted = true;
       } else if (original.entry_date === today) {
@@ -345,10 +200,9 @@ export default function SchedulePanel({
       } else if (original.entry_date > today) {
         newCompleted = false;
       }
-      
-      console.log(`[Schedule] Time changed: ${original.end_time} → ${editEndTime}, newCompleted: ${newCompleted}`);
+
     }
-    
+
     enqueueRequest(async () => {
       try {
         await axios.patch(`${api}/schedule/${editingId}`, {
@@ -357,9 +211,9 @@ export default function SchedulePanel({
           lecturer: editLecturer,
           start_time: editStartTime,
           end_time: editEndTime,
-          completed: newCompleted  // ← PRZEKAŻ POPRAWNIE OBLICZONY STATUS
+          completed: newCompleted
         }, { headers });
-        
+
         const res = await axios.get(`${api}/schedule`, { headers });
         setEntries(res.data);
         setEditingId(null);
@@ -377,22 +231,6 @@ export default function SchedulePanel({
     setEditLecturer("");
     setEditStartTime("");
     setEditEndTime("");
-  };
-
-  const toggleCompleted = (entry) => {
-    enqueueRequest(async () => {
-      try {
-        await axios.patch(`${api}/schedule/${entry.id}`, {
-          completed: !entry.completed
-        }, { headers });
-        
-        const res = await axios.get(`${api}/schedule`, { headers });
-        setEntries(res.data);
-        onToast(entry.completed ? "✅ Oznaczono jako ukończone" : "↩️ Oznaczono jako nieukończone");
-      } catch (err) {
-        onToast(err.response?.data?.detail || "Błąd aktualizacji");
-      }
-    });
   };
 
   const handleExport = async () => {
@@ -450,7 +288,7 @@ export default function SchedulePanel({
 
     try {
       const res = await axios.post(`${api}/schedule/import`, { entries: validEntries }, { headers });
-      setEntries((prev) => [...prev, ...Array(res.data.imported).fill({})]); // Reload needed
+      setEntries((prev) => [...prev, ...Array(res.data.imported).fill({})]);
       setShowImport(false);
       setImportText("");
       onToast(`📤 Zaimportowano ${res.data.imported} wpisów`);
@@ -473,14 +311,13 @@ export default function SchedulePanel({
     }
     enqueueRequest(async () => {
       try {
-        const deletePromises = unfinished.map((entry) => 
+        const deletePromises = unfinished.map((entry) =>
           axios.delete(`${api}/schedule/${entry.id}`, { headers })
         );
         await Promise.all(deletePromises);
         setEntries((prev) => prev.filter((e) => e.completed));
         onToast(`🗑️ Usunięto ${unfinished.length} nieukończonych zajęć`);
       } catch (err) {
-        console.error("Delete error:", err);
         onToast(err.response?.data?.detail || "Błąd usuwania planu");
       }
     });
@@ -489,7 +326,7 @@ export default function SchedulePanel({
   const copySchedule = async (entryId, targetDate) => {
     const original = entries.find(e => e.id === entryId);
     if (!original) return;
-    
+
     enqueueRequest(async () => {
       try {
         await axios.post(`${api}/schedule`, {
@@ -501,7 +338,7 @@ export default function SchedulePanel({
           entry_date: targetDate,
           is_recurring: false,
         }, { headers });
-        
+
         const res = await axios.get(`${api}/schedule`, { headers });
         setEntries(res.data);
         setCopyModal(null);
@@ -575,8 +412,7 @@ export default function SchedulePanel({
         {sortedDayEntries.map((entry) => {
           const editing = editingId === entry.id;
           const isVirtual = entry.isRecurringVirtual;
-          const isEvent = entry.task_type === 'event' || isVirtual;
-          
+
           if (isVirtual) {
             return (
               <div key={entry.id} className="task-card event schedule-card virtual-event">
@@ -590,25 +426,25 @@ export default function SchedulePanel({
               </div>
             );
           }
-          
+
           return (
             <div key={entry.id} className={`task-card medium schedule-card ${entry.completed ? "done" : ""}`}>
               {editing ? (
                 <div className="edit-mode">
-                  <input 
-                    value={editTitle} 
-                    onChange={(e) => setEditTitle(e.target.value)} 
-                    placeholder="Nazwa zajęć" 
+                  <input
+                    value={editTitle}
+                    onChange={(e) => setEditTitle(e.target.value)}
+                    placeholder="Nazwa zajęć"
                   />
-                  <input 
-                    value={editLocation} 
-                    onChange={(e) => setEditLocation(e.target.value)} 
-                    placeholder="Sala / budynek" 
+                  <input
+                    value={editLocation}
+                    onChange={(e) => setEditLocation(e.target.value)}
+                    placeholder="Sala / budynek"
                   />
-                  <input 
-                    value={editLecturer} 
-                    onChange={(e) => setEditLecturer(e.target.value)} 
-                    placeholder="Prowadzący" 
+                  <input
+                    value={editLecturer}
+                    onChange={(e) => setEditLecturer(e.target.value)}
+                    placeholder="Prowadzący"
                   />
                   <div className="add-task-meta">
                     <TimePicker value={editStartTime} onChange={setEditStartTime} label="Od:" />
@@ -630,9 +466,9 @@ export default function SchedulePanel({
                     </div>
                   </div>
                   <div className="task-actions">
-                    <button 
-                      type="button" 
-                      className="icon-btn" 
+                    <button
+                      type="button"
+                      className="icon-btn"
                       onClick={() => startEdit(entry)}
                       title="Edytuj"
                     >

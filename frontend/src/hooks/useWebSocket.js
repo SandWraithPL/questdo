@@ -1,8 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 
-const API_WS = (import.meta.env.VITE_API_URL || "http://localhost:8000")
-  .replace("https://", "wss://")
-  .replace("http://", "ws://") + "/ws"
+const API = import.meta.env.VITE_API_URL || "http://localhost:8000"
+const API_WS = API.replace("https://", "wss://").replace("http://", "ws://") + "/ws"
 
 export function useWebSocket() {
   const [isConnected, setIsConnected] = useState(false)
@@ -10,24 +9,20 @@ export function useWebSocket() {
 
   useEffect(() => {
     ws.current = new WebSocket(API_WS)
-    
+
     ws.current.onopen = () => {
-      console.log('[WS] Connected')
       setIsConnected(true)
     }
-    
+
     ws.current.onclose = () => {
-      console.log('[WS] Disconnected')
       setIsConnected(false)
-      // Reconnect after 3 seconds
+
       setTimeout(() => {
         ws.current = new WebSocket(API_WS)
       }, 3000)
     }
-    
-    ws.current.onerror = (error) => {
-      console.error('[WS] Error:', error)
-    }
+
+    ws.current.onerror = () => {}
 
     return () => {
       if (ws.current) {

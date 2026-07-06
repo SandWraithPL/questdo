@@ -390,7 +390,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .filter-btn { flex: 1; min-width: 100px; padding: 6px 12px; border-radius: 20px; border: 1px solid #444; background: transparent; color: #aaa; cursor: pointer; font-size: 0.85rem; text-align: center; }
 .filter-btn.active { background: #ff8906; color: #0f0e17; border-color: #ff8906; }
 
-/* Przycisk 🎓 – mały, z odstępami */
 .free-day-btn {
   font-size: 0.9rem;
   padding: 4px 8px;
@@ -398,13 +397,11 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   margin-bottom: 8px;
 }
 
-/* Odstęp między kalendarzem a przyciskami */
 .calendar-section + .day-tasks-panel,
 .calendar-container + .day-tasks-panel {
   margin-top: 12px;
 }
 
-/* Odstęp między przyciskami a napisem "Praca — ..." */
 .day-tasks-panel .tasks-header {
   margin-top: 12px;
 }
@@ -467,11 +464,10 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .icon-btn { background: #1a1a2e; border: 1px solid #333; cursor: pointer; font-size: 1rem; padding: 6px 8px; border-radius: 6px; transition: background 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3); min-height: 32px; min-width: 32px; display: inline-flex; align-items: center; justify-content: center; }
 .icon-btn:hover:not(:disabled) { background: #2a2a3e; transform: scale(1.08); border-color: #444; box-shadow: 0 4px 8px rgba(0, 0, 0, 0.4); }
 .icon-btn:disabled { opacity: 0.65; cursor: wait; }
-/* .task-delete removed - now uses .icon-btn for consistent 3D styling */
+
 .task-check:disabled { opacity: 0.65; cursor: wait; }
 .empty { text-align: center; color: #555; padding: 40px; font-size: 1rem; }
 
-/* Edit form */
 .task-edit-form { flex: 1; display: flex; flex-direction: column; gap: 8px; overflow: visible; }
 .input-edit { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; font-size: 0.9rem; min-height: 44px; }
 .edit-actions { display: flex; gap: 8px; }
@@ -514,7 +510,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .save-default-btn:hover:not(:disabled) { background: #2a2a3e; border-color: #ff8906; color: #ffa040; }
 .save-default-btn:disabled { opacity: 0.65; cursor: wait; }
 
-/* Toast */
 .toast-stack { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; }
 .toast { background: #ff8906; color: #0f0e17; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 0.95rem; animation: slideIn 0.3s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
 @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
@@ -559,7 +554,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .event-icon { font-size: 0.65rem; line-height: 1; }
 .event-icon-more { font-size: 0.6rem; color: #888; }
 
-/* Free days styling */
 .free-day-icon { font-size: 0.7rem; line-height: 1; }
 .calendar-day.free-day-holiday { background: #3d1414; border-color: #c62828; }
 .calendar-day.free-day-deans_day { background: #142a45; border-color: #42a5f5; }
@@ -574,7 +568,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .week-free-icon { font-size: 0.8rem; margin-left: 4px; }
 .day-free-indicator { font-size: 0.85rem; color: #ff8906; font-weight: normal; }
 
-/* Week view */
 .week-view { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
 .week-day { min-width: 0; background: #0f0e17; border: 1px solid #2a2a3e; border-radius: 9px; padding: 10px; cursor: pointer; color: #fff; text-align: left; min-height: 160px; display: flex; flex-direction: column; gap: 10px; }
 .week-day:hover { border-color: #ff8906; }
@@ -680,7 +673,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .leaderboard-empty { color: #777; font-size: 0.85rem; padding: 8px 0 2px; text-align: center; }
 .leaderboard-error { color: #f44336; font-size: 0.85rem; padding: 4px 0 8px; }
 
-/* Profile dropdown */
 .profile-dropdown { position: relative; }
 .profile-trigger { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 12px; background: #1a1a2e; border-radius: 24px; }
 .avatar-small { width: 32px; height: 32px; border-radius: 50%; background: #ff8906; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #0f0e17; }
@@ -780,7 +772,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .history-item strong { color: #ff8906; font-size: 0.75rem; }
 .history-item span { color: #ddd; line-height: 1.35; }
 
-/* Family Invitations Banner */
 .family-invitations-banner {
   background: #1a1a2e;
   border-radius: 12px;
@@ -947,7 +938,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .dp-today-btn { width: 100% !important; margin-top: 10px !important; padding: 8px !important; border: none !important; border-radius: 6px !important; background: #2a2a3e !important; color: #ff8906 !important; font-weight: bold !important; cursor: pointer !important; font-size: 0.85rem !important; }
 .dp-today-btn:hover { background: #333 !important; }
 
-/* ========== MEDIA QUERIES ========== */
 @media (max-width: 600px) {
   .app { padding: 12px; }
   
@@ -1076,7 +1066,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   .user-info { width: 100%; }
   .delete-user-btn { width: 100%; }
 
-  /* Rate input group - mobile */
+  
   .rate-input-group,
   .settings-rate-group {
     grid-template-columns: 1fr;
@@ -1204,7 +1194,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .app-tab-icon { font-size: 1.2rem; line-height: 1; }
 .app-tab-label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 
-/* 🔥 ZWIĘKSZ Z-INDEX DATEPICKERA W PLANIE */
 .schedule-panel .date-picker-wrap {
   z-index: 999999 !important;
 }
@@ -1217,7 +1206,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   transform: translate(-50%, -50%) !important;
 }
 
-/* 🔥 ZWIĘKSZ Z-INDEX DATEPICKERA W ZAROBKACH */
 .earnings-panel .date-picker-wrap {
   z-index: 999999 !important;
 }
@@ -1270,7 +1258,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   flex-shrink: 0;
 }
 
-/* Override icon-btn only for shopping and schedule cards to keep them flat */
 .shopping-card .icon-btn,
 .schedule-card .icon-btn {
   background: none;
@@ -1294,9 +1281,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   flex: 1;
 }
 
-/* ===== EDYCJA – SPÓJNA Z DODAWANIEM ===== */
-
-/* Kontener edycji – taki sam jak add-task */
 .task-card .edit-mode {
   display: flex;
   flex-direction: column;
@@ -1305,7 +1289,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   padding: 4px 0;
 }
 
-/* Wszystkie pola w edycji – identyczne jak w dodawaniu */
 .task-card .edit-mode input,
 .task-card .edit-mode textarea,
 .task-card .edit-mode select {
@@ -1321,7 +1304,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   font-family: inherit;
 }
 
-/* Textarea – TYLKO nieco większy, ale nie za bardzo */
 .task-card .edit-mode textarea {
   min-height: 60px;
   max-height: 120px;
@@ -1329,7 +1311,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   line-height: 1.4;
 }
 
-/* Checkbox "Ważne" – normalnych rozmiarów */
 .task-card .edit-mode .important-toggle {
   display: inline-flex;
   align-items: center;
@@ -1361,7 +1342,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   font-size: 0.9rem;
 }
 
-/* Przyciski zapisz/anuluj w edycji */
 .task-card .edit-mode .save-mini,
 .task-card .edit-mode .cancel-mini {
   min-height: 44px;
@@ -1400,7 +1380,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
 }
 
-/* Układ pól w edycji – jak w dodawaniu */
 .task-card .edit-mode .edit-row {
   display: flex;
   flex-direction: column;
@@ -1413,7 +1392,6 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   gap: 8px;
 }
 
-/* Na telefonach – wszystkie pola w kolumnie */
 @media (max-width: 600px) {
   .task-card .edit-mode .edit-row-inline {
     grid-template-columns: 1fr;
@@ -1913,9 +1891,8 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   gap: 8px;
 }
 
-/* Mobile CSS improvements for shopping and settings forms */
 @media (max-width: 600px) {
-  /* ShoppingPanel – formularz dodawania */
+  
   .shopping-panel .form-row-inline {
     flex-direction: column;
     gap: 6px;
@@ -1940,7 +1917,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
     padding: 10px;
   }
 
-  /* CategoriesPanel – formularz dodawania artykułów */
+  
   .settings-panel .form-row-inline {
     flex-direction: column;
     gap: 6px;
@@ -1965,7 +1942,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
     padding: 10px;
   }
 
-  /* Edit mode w produktach */
+  
   .shopping-card .edit-mode {
     flex-direction: column;
     gap: 6px;
@@ -1986,17 +1963,11 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   }
 }
 
-/* ============================================
-   NAPRAWA MINI KALENDARZA - ZAWSZE NA WIERZCHU
-   ============================================ */
-
-/* Wszystkie kontenery DatePicker */
 .date-picker-wrap {
   position: relative !important;
   z-index: 999999 !important;
 }
 
-/* Wszystkie popupy DatePicker */
 .date-picker-popup {
   position: fixed !important;
   z-index: 999999 !important;
@@ -2014,25 +1985,21 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   overflow-y: auto !important;
 }
 
-/* Kalendarz w edycji task-card */
 .task-card .edit-mode .date-picker-wrap {
   z-index: 999999 !important;
   position: relative !important;
 }
 
-/* Kalendarz w formularzach dodawania */
 .add-task .date-picker-wrap {
   z-index: 999999 !important;
   position: relative !important;
 }
 
-/* Kalendarz w modułach */
 .module-panel .date-picker-wrap {
   z-index: 999999 !important;
   position: relative !important;
 }
 
-/* Kalendarz w RecurringPanel */
 .recurring-panel .date-picker-wrap {
   z-index: 999999 !important;
   position: relative !important;

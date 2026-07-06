@@ -70,7 +70,6 @@ def work_rate(entry: models.WorkEntry) -> float:
     try:
         return max(0.0, float(raw.replace(",", ".")))
     except ValueError:
-        print(f"[work_rate] Error for entry {entry.id}: raw='{raw}'")
         return 0.0
 
 
@@ -83,7 +82,6 @@ def work_earnings(entry: models.WorkEntry) -> dict:
         net = round(gross - tax, 2)
         return {"hours": hours, "gross": gross, "tax": tax, "net": net}
     except Exception as e:
-        print(f"[work_earnings] Error for entry {entry.id}: {e}")
         return {"hours": 0, "gross": 0, "tax": 0, "net": 0}
 
 
@@ -172,9 +170,7 @@ def sum_work_earnings(entries: list[models.WorkEntry], completed_only: bool = Tr
             total_hours += e["hours"]
             count += 1
         except Exception as e:
-            print(f"[sum_work_earnings] Error for entry {entry.id}: {e}")
-    
-    print(f"[sum_work_earnings] Processed {count} entries, Net: {total_net}")
+            pass
     
     return {
         "gross": round(total_gross, 2),

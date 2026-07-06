@@ -1,5 +1,3 @@
-/** Mirrors backend recurring_event_occurs_on for calendar display. */
-
 function parseDateStr(dateStr) {
   const [y, m, d] = dateStr.split("-").map(Number);
   return new Date(y, m - 1, d, 12, 0, 0);
@@ -57,27 +55,18 @@ export function getRecurringCategoriesForDate(events, dateStr, tasksOnDate = [])
     .map((t) => t.event_category);
   const fromRecurring = getRecurringEventsForDate(events, dateStr).map((e) => e.category);
   const seen = new Set();
-  const merged = [];
-  for (const cat of [...fromTasks, ...fromRecurring]) {
-    if (cat && !seen.has(cat)) {
-      seen.add(cat);
-      merged.push(cat);
-    }
-  }
-  return merged;
+  return [...fromTasks, ...fromRecurring].filter(cat => cat && !seen.has(cat) && !seen.add(cat));
 }
 
 export function toVirtualRecurringTasks(events, dateStr, tasksOnDate = []) {
-  // Pobierz TYLKO wydarzenia z RecurringEvent (nie z Task)
   const recurringEvents = events.filter(e => e.source === 'recurring_event' || !e.recurring_pattern);
-  
-  // Sprawdź, czy na dany dzień istnieje już instancja w bazie (z Task)
+
   const existingTitles = new Set(
     tasksOnDate
       .filter((t) => t.task_type === "event")
       .map((t) => t.title.toLowerCase()),
   );
-  
+
   return getRecurringEventsForDate(recurringEvents, dateStr)
     .filter((e) => !existingTitles.has(e.title.toLowerCase()))
     .map((e) => ({
@@ -85,11 +74,11 @@ export function toVirtualRecurringTasks(events, dateStr, tasksOnDate = []) {
       title: e.title,
       task_type: "event",
       event_category: e.category,
-      isRecurringVirtual: true,  // ← KLUCZOWE – oznacza, że to wirtualna instancja
+      isRecurringVirtual: true,
       due_date: dateStr,
       completed: false,
       category: "Inne",
       difficulty: "easy",
-      source: "recurring_event",  // ← OZNACZENIE ŹRÓDŁA
+      source: "recurring_event",
     }));
 }

@@ -2,6 +2,12 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import CategoriesPanel from "./CategoriesPanel";
 
+const FAMILY_COLLAPSED_KEY = "questdo-family-collapsed";
+
+const readCollapsed = () => {
+  try { return localStorage.getItem(FAMILY_COLLAPSED_KEY) === "true"; } catch { return true; }
+};
+
 export default function FamilyPanel({ api, headers, onToast, onFamilyChange, initialMode, currentUserId }) {
   const [families, setFamilies] = useState([]);
   const [invitations, setInvitations] = useState([]);
@@ -10,31 +16,22 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
   const [familyName, setFamilyName] = useState("");
   const [inviteUsername, setInviteUsername] = useState("");
   const [selectedFamily, setSelectedFamily] = useState(null);
-  
-  const FAMILY_COLLAPSED_KEY = "questdo-family-collapsed";
-  
-  // 🔥 DOMYŚLNIE ZWINIĘTY + ZAPAMIĘTYWANIE W localStorage
-  const [collapsed, setCollapsed] = useState(() => {
-    try {
-      return localStorage.getItem(FAMILY_COLLAPSED_KEY) === "true";
-    } catch {
-      return true; // domyślnie zwinięty
-    }
-  });
+  const [collapsed, setCollapsed] = useState(readCollapsed);
+
+  const applyFirstFamily = (list, force = false) => {
+    if (!list.length || (selectedFamily && !force)) return;
+    const first = list[0];
+    setSelectedFamily(first);
+    onFamilyChange?.(first.id);
+  };
 
   const loadFamilies = async () => {
     try {
       const res = await axios.get(`${api}/families`, { headers });
       setFamilies(res.data);
-      if (res.data.length > 0 && !selectedFamily && initialMode === "family") {
-        const firstFamily = res.data[0];
-        setSelectedFamily(firstFamily);
-        if (onFamilyChange) {
-          onFamilyChange(firstFamily.id);
-        }
-      }
+      if (initialMode === "family") applyFirstFamily(res.data);
     } catch (err) {
-      console.error("Błąd ładowania rodzin:", err);
+      onToast(err.response?.data?.detail || "Błąd ładowania rodzin");
     }
   };
 
@@ -42,34 +39,19 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     try {
       const res = await axios.get(`${api}/family/invitations`, { headers });
       setInvitations(res.data);
-    } catch (err) {
-      console.error("Błąd ładowania zaproszeń:", err);
-    }
+    } catch {}
   };
 
   useEffect(() => {
     loadFamilies();
     loadInvitations();
-  }, []);
-
-  // Ensure selectedFamily is set when families are loaded (fixes F5 refresh issue)
-  useEffect(() => {
-    if (families.length > 0 && !selectedFamily) {
-      const firstFamily = families[0];
-      setSelectedFamily(firstFamily);
-      if (onFamilyChange) {
-        onFamilyChange(firstFamily.id);
-      }
-    }
-  }, [families, selectedFamily, onFamilyChange]);
-
-  // Poll for new invitations every 60 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadInvitations();
-    }, 60000);
+    const interval = setInterval(loadInvitations, 60000);
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    applyFirstFamily(families);
+  }, [families]);
 
   const createFamily = async () => {
     if (!familyName.trim()) {
@@ -88,10 +70,6 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
   };
 
   const inviteUser = async () => {
-    console.log("[INVITE] Starting invite process");
-    console.log("[INVITE] Username:", inviteUsername);
-    console.log("[INVITE] Family ID:", selectedFamily?.id);
-    
     if (!inviteUsername.trim()) {
       onToast("Podaj nazwę użytkownika");
       return;
@@ -102,24 +80,17 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     }
     try {
       const usernameToSend = inviteUsername.trim().toLowerCase();
-      console.log("[INVITE] Sending to:", usernameToSend);
-      console.log("[INVITE] API URL:", `${api}/families/${selectedFamily.id}/invite`);
-      console.log("[INVITE] Headers:", headers);
-      
+
       const res = await axios.post(
         `${api}/families/${selectedFamily.id}/invite`,
         { username: usernameToSend },
         { headers }
       );
-      
-      console.log("[INVITE] Response:", res.data);
+
       setInviteUsername("");
       setShowInvite(false);
       onToast("📧 Wysłano zaproszenie");
     } catch (err) {
-      console.error("[INVITE] Error:", err);
-      console.error("[INVITE] Error response:", err.response?.data);
-      console.error("[INVITE] Error status:", err.response?.status);
       onToast(err.response?.data?.detail || "Błąd wysyłania zaproszenia");
     }
   };
@@ -128,20 +99,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     try {
       await axios.post(`${api}/family/invitations/${invitationId}/accept`, {}, { headers });
       await loadInvitations();
-      
-      // 🔥 PO AKCEPTACJI – POBIERZ FRESH DATA I WYWOŁAJ onFamilyChange
-      const res = await axios.get(`${api}/families`, { headers });
-      const freshFamilies = res.data;
-      setFamilies(freshFamilies);
-      
-      if (freshFamilies.length > 0) {
-        const firstFamily = freshFamilies[0];
-        setSelectedFamily(firstFamily);
-        if (onFamilyChange) {
-          onFamilyChange(firstFamily.id);
-        }
-      }
-      
+      await loadFamilies();
       onToast("✅ Dołączyłeś do rodziny");
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd akceptacji");
@@ -172,30 +130,26 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
   };
 
   const selectFamily = (family) => {
-    console.log("[FAMILY] selectFamily called with family:", family);
     setSelectedFamily(family);
-    console.log("[FAMILY] Calling onFamilyChange with family.id:", family.id);
-    onFamilyChange(family.id);
+    onFamilyChange?.(family.id);
   };
 
   const removeMember = async (memberId) => {
     if (!selectedFamily) return;
     try {
       await axios.delete(`${api}/families/${selectedFamily.id}/members/${memberId}`, { headers });
-      
-      // 🔥 AKTUALIZUJ LISTĘ CZŁONKÓW BEZ ODSWIEŻANIA
+
       setSelectedFamily(prev => ({
         ...prev,
         members: prev.members.filter(m => m.id !== memberId)
       }));
-      
+
       onToast("🗑️ Usunięto członka rodziny");
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd usuwania członka");
     }
   };
 
-  // 🔥 TOGGLE ZAPISUJE DO localStorage
   const toggleCollapsed = () => {
     setCollapsed(prev => {
       const next = !prev;
@@ -208,7 +162,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
 
   return (
     <div className="module-panel family-panel">
-      {/* Collapse header - collapses entire panel */}
+
       <div className="calendar-section-bar" style={{ cursor: 'pointer' }} onClick={toggleCollapsed}>
         <span className="calendar-section-title">👨‍👩‍👧‍👦 Rodzina</span>
         <span className="calendar-section-chevron">{collapsed ? "▼" : "▲"}</span>
@@ -216,7 +170,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
 
       {!collapsed && (
         <>
-          {/* Oczekujące zaproszenia */}
+
           {invitations.length > 0 && (
         <div className="invitations-section">
           <h4>📨 Oczekujące zaproszenia ({invitations.length})</h4>
@@ -227,16 +181,16 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
                 <span className="invitation-from">📩 od: {inv.invited_by}</span>
               </div>
               <div className="invitation-actions">
-                <button 
-                  type="button" 
-                  className="accept-btn" 
+                <button
+                  type="button"
+                  className="accept-btn"
                   onClick={() => acceptInvitation(inv.id)}
                 >
                   ✅ Akceptuj
                 </button>
-                <button 
-                  type="button" 
-                  className="decline-btn" 
+                <button
+                  type="button"
+                  className="decline-btn"
                   onClick={() => declineInvitation(inv.id)}
                 >
                   ❌ Odrzuć
@@ -255,12 +209,12 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
           ) : (
             <div className="add-task">
               <h3>➕ Utwórz nową rodzinę</h3>
-              <input 
+              <input
                 type="text"
                 className="search-input"
-                placeholder="Nazwa rodziny" 
-                value={familyName} 
-                onChange={(e) => setFamilyName(e.target.value)} 
+                placeholder="Nazwa rodziny"
+                value={familyName}
+                onChange={(e) => setFamilyName(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && createFamily()}
               />
               <div className="row" style={{ marginTop: 12 }}>
@@ -274,8 +228,8 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
         <div className="families-list">
           <div className="family-selector">
             <label>Wybierz rodzinę:</label>
-            <select 
-              value={selectedFamily?.id || ""} 
+            <select
+              value={selectedFamily?.id || ""}
               onChange={(e) => {
                 const family = families.find(f => f.id === parseInt(e.target.value));
                 if (family) selectFamily(family);
@@ -305,9 +259,9 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
                       <span className="member-name">{member.username}</span>
                     </div>
                     {selectedFamily.role === "admin" && currentUserId && member.id !== currentUserId && (
-                      <button 
-                        type="button" 
-                        className="icon-btn delete" 
+                      <button
+                        type="button"
+                        className="icon-btn delete"
                         onClick={() => removeMember(member.id)}
                         title="Usuń członka"
                       >
@@ -335,12 +289,12 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
           {showInvite && selectedFamily.role === "admin" && (
             <div className="add-task" style={{ marginTop: 12, padding: 16 }}>
               <h3>📧 Zaproś użytkownika</h3>
-              <input 
+              <input
                 type="text"
                 className="search-input"
-                placeholder="Nazwa użytkownika" 
-                value={inviteUsername} 
-                onChange={(e) => setInviteUsername(e.target.value)} 
+                placeholder="Nazwa użytkownika"
+                value={inviteUsername}
+                onChange={(e) => setInviteUsername(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && inviteUser()}
               />
               <div className="row" style={{ marginTop: 12 }}>
@@ -349,7 +303,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
               </div>
             </div>
           )}
-              
+
               <div style={{ marginTop: 16, borderTop: '1px solid #333', paddingTop: 16 }}>
                 <h5 style={{ marginBottom: 8 }}>📦 Artykuły domyślne rodziny</h5>
                 <CategoriesPanel

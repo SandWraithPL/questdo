@@ -65,7 +65,6 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
       const res = await axios.get(`${api}/recurring-events`, { headers });
       setRecurringEvents(res.data);
     } catch (err) {
-      console.error("Błąd ładowania wydarzeń cyklicznych:", err);
     }
   };
 
@@ -112,9 +111,8 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
 
   const deleteRecurringEvent = async (id) => {
     if (!window.confirm(`Czy na pewno chcesz usunąć to wydarzenie cykliczne?`)) return;
-    
+
     try {
-      // Usuń TYLKO definicję wydarzenia (nie instancje, bo są wirtualne)
       await axios.delete(`${api}/recurring-events/${id}`, { headers });
       onToast("🗑️ Usunięto wydarzenie cykliczne");
       loadRecurringEvents();
@@ -130,15 +128,10 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
       onToast("Brak wydarzeń do usunięcia");
       return;
     }
-    if (!window.confirm(`Czy na pewno chcesz usunąć WSZYSTKIE ${count} wydarzeń cyklicznych?`)) {
-      return;
-    }
-    
+    if (!window.confirm(`Czy na pewno chcesz usunąć WSZYSTKIE ${count} wydarzeń cyklicznych?`)) return;
+
     try {
-      // Usuń wszystkie definicje wydarzeń (nie instancje)
-      for (const event of recurringEvents) {
-        await axios.delete(`${api}/recurring-events/${event.id}`, { headers });
-      }
+      await Promise.all(recurringEvents.map(event => axios.delete(`${api}/recurring-events/${event.id}`, { headers })));
       onToast(`🗑️ Usunięto wszystkie ${count} wydarzeń cyklicznych`);
       loadRecurringEvents();
       onRefresh?.();
@@ -164,7 +157,6 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
       return;
     }
     try {
-      // Update the recurring event definition (nie usuwamy instancji, bo są wirtualne)
       await axios.patch(`${api}/recurring-events/${editingId}`, {
         title: editTitle,
         category: editCategory,
@@ -195,9 +187,9 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
       <div className="day-tasks-panel">
         <div className="tasks-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
           <h3>🔄 Wydarzenia cykliczne</h3>
-          <button 
-            type="button" 
-            className="danger-btn danger-btn--inline" 
+          <button
+            type="button"
+            className="danger-btn danger-btn--inline"
             onClick={deleteAllRecurringEvents}
           >
             🗑️ Usuń wszystkie

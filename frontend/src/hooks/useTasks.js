@@ -3,45 +3,35 @@ import axios from 'axios'
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000"
 
+const authHeaders = () => ({ Authorization: `Bearer ${localStorage.getItem('token')}` })
+
 const fetchTasks = async (date) => {
-  const token = localStorage.getItem('token')
-  const headers = { Authorization: `Bearer ${token}` }
-  const res = await axios.get(`${API}/tasks/by-date/${date}`, { headers })
+  const res = await axios.get(`${API}/tasks/by-date/${date}`, { headers: authHeaders() })
   return res.data
 }
 
 const fetchAllTasks = async () => {
-  const token = localStorage.getItem('token')
-  const headers = { Authorization: `Bearer ${token}` }
-  const res = await axios.get(`${API}/tasks`, { headers })
+  const res = await axios.get(`${API}/tasks`, { headers: authHeaders() })
   return res.data
 }
 
 const fetchTasksStats = async () => {
-  const token = localStorage.getItem('token')
-  const headers = { Authorization: `Bearer ${token}` }
-  const res = await axios.get(`${API}/tasks/stats`, { headers })
+  const res = await axios.get(`${API}/tasks/stats`, { headers: authHeaders() })
   return res.data
 }
 
 const toggleTask = async ({ id, completed }) => {
-  const token = localStorage.getItem('token')
-  const headers = { Authorization: `Bearer ${token}` }
-  const res = await axios.patch(`${API}/tasks/${id}`, { completed }, { headers })
+  const res = await axios.patch(`${API}/tasks/${id}`, { completed }, { headers: authHeaders() })
   return res.data
 }
 
 const createTask = async (taskData) => {
-  const token = localStorage.getItem('token')
-  const headers = { Authorization: `Bearer ${token}` }
-  const res = await axios.post(`${API}/tasks`, taskData, { headers })
+  const res = await axios.post(`${API}/tasks`, taskData, { headers: authHeaders() })
   return res.data
 }
 
 const deleteTask = async (id) => {
-  const token = localStorage.getItem('token')
-  const headers = { Authorization: `Bearer ${token}` }
-  const res = await axios.delete(`${API}/tasks/${id}`, { headers })
+  const res = await axios.delete(`${API}/tasks/${id}`, { headers: authHeaders() })
   return res.data
 }
 

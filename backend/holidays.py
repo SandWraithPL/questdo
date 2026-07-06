@@ -3,7 +3,6 @@ from typing import List
 
 
 def calculate_easter(year: int) -> date:
-    """Calculate Easter Sunday for a given year using the Meeus/Jones/Butcher algorithm."""
     a = year % 19
     b = year // 100
     c = year % 100
@@ -22,7 +21,6 @@ def calculate_easter(year: int) -> date:
 
 
 def get_fixed_holidays(year: int) -> List[dict]:
-    """Get fixed holidays for a given year."""
     return [
         {"date": date(year, 1, 1), "name": "Nowy Rok", "day_type": "holiday"},
         {"date": date(year, 1, 6), "name": "Trzech Króli", "day_type": "holiday"},
@@ -37,7 +35,6 @@ def get_fixed_holidays(year: int) -> List[dict]:
 
 
 def get_movable_holidays(year: int) -> List[dict]:
-    """Get movable holidays for a given year (based on Easter)."""
     easter = calculate_easter(year)
     return [
         {"date": easter, "name": "Wielkanoc (Niedziela)", "day_type": "holiday"},
@@ -48,13 +45,11 @@ def get_movable_holidays(year: int) -> List[dict]:
 
 
 def get_all_holidays(year: int) -> List[dict]:
-    """Get all holidays (fixed and movable) for a given year."""
     holidays = get_fixed_holidays(year) + get_movable_holidays(year)
     return sorted(holidays, key=lambda x: x["date"])
 
 
 def generate_holidays_for_year(year: int, user_id: int, db) -> int:
-    """Generate holidays for a given year and add them to the database."""
     import models
     
     holidays = get_all_holidays(year)

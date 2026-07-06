@@ -9,19 +9,12 @@ export default function FamilyInvitationsBanner({ api, headers, onToast, onFamil
       const res = await axios.get(`${api}/family/invitations`, { headers });
       setInvitations(res.data);
     } catch (err) {
-      console.error("Błąd ładowania zaproszeń:", err);
     }
   };
 
   useEffect(() => {
     loadInvitations();
-  }, [api, headers]);
-
-  // Poll for new invitations every 60 seconds
-  useEffect(() => {
-    const interval = setInterval(() => {
-      loadInvitations();
-    }, 60000);
+    const interval = setInterval(loadInvitations, 60000);
     return () => clearInterval(interval);
   }, [api, headers]);
 
@@ -30,9 +23,7 @@ export default function FamilyInvitationsBanner({ api, headers, onToast, onFamil
       await axios.post(`${api}/family/invitations/${invitationId}/accept`, {}, { headers });
       await loadInvitations();
       onToast("✅ Dołączyłeś do rodziny");
-      if (onFamilyChange) {
-        onFamilyChange();
-      }
+      onFamilyChange?.();
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd akceptacji");
     }
@@ -64,16 +55,16 @@ export default function FamilyInvitationsBanner({ api, headers, onToast, onFamil
               <span className="invitation-from-banner">od: {inv.invited_by}</span>
             </div>
             <div className="invitation-actions-banner">
-              <button 
-                type="button" 
-                className="accept-btn" 
+              <button
+                type="button"
+                className="accept-btn"
                 onClick={() => acceptInvitation(inv.id)}
               >
                 Akceptuj
               </button>
-              <button 
-                type="button" 
-                className="decline-btn" 
+              <button
+                type="button"
+                className="decline-btn"
                 onClick={() => declineInvitation(inv.id)}
               >
                 Odrzuć

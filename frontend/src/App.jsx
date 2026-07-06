@@ -1,4 +1,3 @@
-/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect, useMemo, useRef } from "react";
 import axios from "axios";
 import "./index.css";
@@ -8,17 +7,15 @@ import ShoppingPanel from "./ShoppingPanel";
 import SchedulePanel from "./SchedulePanel";
 import EarningsPanel from "./EarningsPanel";
 import CategoriesPanel from "./CategoriesPanel";
-import FamilyPanel from "./FamilyPanel";
 import RecurringPanel from "./RecurringPanel";
 import FamilyInvitationsBanner from "./FamilyInvitationsBanner";
+import FreeDayManager from "./FreeDayManager";
 import { getRecurringCategoriesForDate, toVirtualRecurringTasks } from "./recurringHelpers";
 import { useEditItem } from "./hooks/useEditItem";
 import { useWebSocket } from "./hooks/useWebSocket";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
-const WS_URL = (import.meta.env.VITE_API_URL || "http://localhost:8000")
-  .replace("https://", "wss://")
-  .replace("http://", "ws://") + "/ws";
+const WS_URL = API.replace("https://", "wss://").replace("http://", "ws://") + "/ws";
 
 const DEFAULT_LEVEL_THRESHOLDS = [
   0, 80, 180, 320, 480, 660, 860, 1080, 1320, 1600, 1900, 2250, 2650, 3100, 3600,
@@ -63,7 +60,6 @@ const REMINDER_OPTIONS = [
   { value: "7", label: "Tydzień wcześniej" },
 ];
 
-// Cache dla poziomów (optymalizacja)
 const LEVELS_CACHE_KEY = "questdo-levels-cache";
 const LEVELS_CACHE_DURATION = 24 * 60 * 60 * 1000;
 
@@ -76,7 +72,7 @@ const getCachedLevels = () => {
         return data;
       }
     }
-  } catch { /* ignore */ }
+  } catch {}
   return null;
 };
 
@@ -86,7 +82,7 @@ const setCachedLevels = (data) => {
       data,
       timestamp: Date.now()
     }));
-  } catch { /* ignore */ }
+  } catch {}
 };
 
 function getExpPreview(difficulty, dueDateStr) {
@@ -125,134 +121,6 @@ const EVENT_CATEGORIES = [
   { value: "holiday", emoji: "🎉", label: "Święto" },
   { value: "reminder", emoji: "🔔", label: "Przypomnienie" },
 ];
-
-// Komponent FreeDayManager - wspólny dla wszystkich kalendarzy
-function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onToast, enqueueRequest }) {
-  const [showFreeDayManager, setShowFreeDayManager] = useState(false);
-  const [freeDayType, setFreeDayType] = useState("holiday");
-  const [freeDayName, setFreeDayName] = useState("");
-
-  const selectedStr = selectedDate instanceof Date
-    ? selectedDate.toISOString().slice(0, 10)
-    : String(selectedDate).slice(0, 10);
-
-  const handleCreateFreeDay = () => {
-    if (enqueueRequest) {
-      enqueueRequest(async () => {
-        try {
-          const res = await axios.post(`${api}/free-days`, {
-            date: selectedStr,
-            day_type: freeDayType,
-            notes: freeDayName
-          }, { headers });
-          if (setFreeDays) {
-            setFreeDays(prev => [...prev, res.data]);
-          }
-          setFreeDayName("");
-          setShowFreeDayManager(false);
-          onToast("✅ Oznaczono dzień jako wolny");
-        } catch (err) {
-          onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
-        }
-      });
-    } else {
-      // Fallback bez queue
-      axios.post(`${api}/free-days`, {
-        date: selectedStr,
-        day_type: freeDayType,
-        notes: freeDayName
-      }, { headers }).then(res => {
-        if (setFreeDays) {
-          setFreeDays(prev => [...prev, res.data]);
-        }
-        setFreeDayName("");
-        setShowFreeDayManager(false);
-        onToast("✅ Oznaczono dzień jako wolny");
-      }).catch(err => {
-        onToast(err.response?.data?.detail || "Błąd oznaczania dnia");
-      });
-    }
-  };
-
-  const handleDeleteFreeDay = () => {
-    const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
-    if (!existingFreeDay) return;
-
-    if (enqueueRequest) {
-      enqueueRequest(async () => {
-        try {
-          await axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers });
-          if (setFreeDays) {
-            setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
-          }
-          onToast("🗑️ Usunięto oznaczenie dnia wolnego");
-        } catch (err) {
-          onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
-        }
-      });
-    } else {
-      axios.delete(`${api}/free-days/${existingFreeDay.id}`, { headers }).then(() => {
-        if (setFreeDays) {
-          setFreeDays(prev => prev.filter(fd => fd.id !== existingFreeDay.id));
-        }
-        onToast("🗑️ Usunięto oznaczenie dnia wolnego");
-      }).catch(err => {
-        onToast(err.response?.data?.detail || "Błąd usuwania oznaczenia");
-      });
-    }
-  };
-
-  const existingFreeDay = freeDays.find(fd => fd.date === selectedStr);
-
-  return (
-    <>
-      <button
-        type="button"
-        className="icon-btn free-day-btn"
-        onClick={() => setShowFreeDayManager(!showFreeDayManager)}
-        title="Zarządzaj dniami wolnymi"
-        aria-label="Zarządzaj dniami wolnymi"
-      >
-        🎓
-      </button>
-      {showFreeDayManager && (
-        <div className="add-task free-day-manager">
-          <h3>🎓 Zarządzaj dniami wolnymi</h3>
-          {existingFreeDay ? (
-            <div>
-              <p>Ten dzień jest oznaczony jako: <strong>
-                {existingFreeDay.day_type === "holiday" ? "Święto" :
-                 existingFreeDay.day_type === "deans_day" ? "Dzień dziekański" : "Dzień rektorski"}
-              </strong>
-              {existingFreeDay.notes && <span> - {existingFreeDay.notes}</span>}</p>
-              <div className="row" style={{ marginTop: 12, gap: "8px" }}>
-                <button type="button" className="danger-btn" onClick={handleDeleteFreeDay}>🗑️ Usuń oznaczenie</button>
-                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
-              </div>
-            </div>
-          ) : (
-            <>
-              <select value={freeDayType} onChange={(e) => setFreeDayType(e.target.value)}>
-                <option value="holiday">🎉 Święto</option>
-                <option value="deans_day">🎓 Dzień dziekański</option>
-                <option value="rector_day">🏛️ Dzień rektorski</option>
-              </select>
-              <input
-                placeholder="Nazwa święta (opcjonalne)"
-                value={freeDayName}
-                onChange={(e) => setFreeDayName(e.target.value)}
-              />
-              <div className="row" style={{ marginTop: 12 }}>
-                <button type="button" className="add-task-btn" onClick={handleCreateFreeDay}>Oznacz dzień</button>
-                <button type="button" className="cancel-btn" onClick={() => setShowFreeDayManager(false)}>Anuluj</button>
-              </div>
-            </>
-          )}
-        </div>
-      )}
-    </>
-  );
-}
 
 const RECURRING_PATTERNS = [
   { value: "", label: "Brak cyklu" },
@@ -299,18 +167,11 @@ function formatHistoryDate(value) {
   return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
 }
 
-function getExpProgress(exp, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
-  let current = 0;
-  let next = thresholds[1] || 100;
-  for (let i = thresholds.length - 1; i >= 0; i--) {
-    if (exp >= thresholds[i]) {
-      current = thresholds[i];
-      next = thresholds[i + 1] ?? thresholds[i];
-      break;
-    }
-  }
-  const progress = next === current ? 100 : (exp / next) * 100;
-  return { progress, current, next };
+function sortTasks(tasks) {
+  return [...tasks].sort((a, b) => {
+    if (a.completed !== b.completed) return a.completed ? 1 : -1;
+    return new Date(a.due_date) - new Date(b.due_date);
+  });
 }
 
 function getGamificationFromExp(exp, levelsMeta = DEFAULT_LEVELS_META, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
@@ -348,7 +209,7 @@ function readNotificationsPreference() {
   try {
     if (localStorage.getItem(NOTIFICATIONS_PREF_KEY) === "0") return false;
   } catch {
-    /* ignore */
+
   }
   return "Notification" in window && Notification.permission === "granted";
 }
@@ -357,11 +218,11 @@ function writeNotificationsPreference(enabled) {
   try {
     localStorage.setItem(NOTIFICATIONS_PREF_KEY, enabled ? "1" : "0");
   } catch {
-    /* ignore */
+
   }
 }
 
-function Toast({ toasts, onRemove }) {
+function Toast({ toasts }) {
   return (
     <div className="toast-stack">
       {toasts.map((toast) => (
@@ -519,7 +380,6 @@ async function subscribeToWebPush(authHeaders) {
     await axios.post(`${API}/push/subscribe`, sub.toJSON(), { headers: authHeaders });
     return { ok: true, reason: "subscribed" };
   } catch (err) {
-    console.error("[push] subscribe failed:", err);
     return { ok: false, reason: "error" };
   }
 }
@@ -528,7 +388,6 @@ async function unsubscribeFromWebPush(authHeaders) {
   try {
     await axios.delete(`${API}/push/subscribe`, { headers: authHeaders });
   } catch (err) {
-    console.error("[push] backend unsubscribe failed:", err);
   }
   try {
     if ("serviceWorker" in navigator) {
@@ -537,7 +396,6 @@ async function unsubscribeFromWebPush(authHeaders) {
       if (sub) await sub.unsubscribe();
     }
   } catch (err) {
-    console.error("[push] browser unsubscribe failed:", err);
   }
 }
 
@@ -631,15 +489,15 @@ async function registerServiceWorkerForUpdates() {
   });
 
   activateWaitingWorker();
-  registration.update().catch((err) => console.error("SW update error:", err));
+  registration.update().catch(() => {});
 
   const interval = window.setInterval(() => {
-    registration.update().catch((err) => console.error("SW update error:", err));
+    registration.update().catch(() => {});
   }, 5 * 60 * 1000);
 
   const onVisibilityChange = () => {
     if (document.visibilityState === "visible") {
-      registration.update().catch((err) => console.error("SW update error:", err));
+      registration.update().catch(() => {});
     }
   };
   document.addEventListener("visibilitychange", onVisibilityChange);
@@ -727,7 +585,7 @@ function readChallengesCollapsedPreference() {
     const saved = localStorage.getItem(CHALLENGES_COLLAPSED_KEY);
     if (saved !== null) return saved === "true";
   } catch {
-    /* ignore */
+
   }
   return false;
 }
@@ -737,7 +595,7 @@ function readCalendarCollapsedPreference() {
     const saved = localStorage.getItem(CALENDAR_COLLAPSED_KEY);
     if (saved !== null) return saved === "true";
   } catch {
-    /* ignore */
+
   }
   return true;
 }
@@ -764,8 +622,8 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
     const quests = dayTasks.filter((t) => t.task_type !== "event");
     const events = dayTasks.filter((t) => t.task_type === "event");
     const eventCategories = getRecurringCategoriesForDate(recurringEvents, dateStr, dayTasks);
-    return { 
-      total: quests.length, 
+    return {
+      total: quests.length,
       done: quests.filter((t) => t.completed).length,
       events,
       eventCategories,
@@ -789,7 +647,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
       try {
         localStorage.setItem(CALENDAR_COLLAPSED_KEY, String(next));
       } catch {
-        /* ignore */
+
       }
       return next;
     });
@@ -1044,7 +902,7 @@ function ChallengesBar({ challenges }) {
   if (!challenges?.goals?.length) return null;
   const bonusExp = challenges.triple_bonus_exp || 35;
   const completedGoals = challenges.goals.filter((g) => g.done || g.current >= g.target).length;
-  
+
   const getChallengeDescription = (goal) => {
     if (goal.description) return goal.description;
     const label = goal.label;
@@ -1071,7 +929,7 @@ function ChallengesBar({ challenges }) {
       try {
         localStorage.setItem(CHALLENGES_COLLAPSED_KEY, String(next));
       } catch {
-        /* ignore */
+
       }
       return next;
     });
@@ -1152,7 +1010,6 @@ function LeaderboardPanel({ currentUser }) {
       setAllRankings(normalizeRankings(res.data));
       setRankingLoaded(true);
     } catch (err) {
-      console.error("Ranking error:", err);
       if (!rankingLoaded) setAllRankings({});
     }
     setRankingLoading(false);
@@ -1183,7 +1040,7 @@ function LeaderboardPanel({ currentUser }) {
     }, 300000);
     return () => clearInterval(interval);
   }, [open]);
-  
+
   return (
     <div className="leaderboard-panel">
       <button type="button" className="leaderboard-toggle" onClick={toggleOpen}>🏅 Rankingi {open ? "▲" : "▼"}</button>
@@ -1223,7 +1080,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
-  const [copyModal, setCopyModal] = useState(null); // { taskId, targetDate }
+  const [copyModal, setCopyModal] = useState(null);
 
   const saveItem = async (id, form) => {
     if (!form.title?.trim()) { onToast("Tytuł jest wymagany"); return; }
@@ -1278,7 +1135,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
   const copyTask = async (taskId, targetDate) => {
     const original = tasks.find(t => t.id === taskId);
     if (!original) return;
-    
+
     try {
       await axios.post(`${api}/tasks`, {
         title: original.title,
@@ -1293,7 +1150,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
         recurring_pattern: original.recurring_pattern || null,
         recurring_end_date: original.recurring_end_date || null,
       }, { headers });
-      
+
       if (onRefresh) await onRefresh();
       setCopyModal(null);
       onToast("📋 Skopiowano quest");
@@ -1353,11 +1210,11 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
           })()}
         </h3>
       </div>
-      {/* RZĄD 1 – filtry stanu */}
+
       <div className="filter-group">
         {["all", "active", "done"].map(f => <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "all" ? "Wszystkie" : f === "active" ? "Aktywne" : "Ukończone"}</button>)}
       </div>
-      {/* RZĄD 2 – filtry typów */}
+
       <div className="filter-group" style={{ marginTop: '8px' }}>
         {["all", "quest", "event"].map(f => <button key={f} className={`filter-btn ${typeFilter === f ? "active" : ""}`} onClick={() => setTypeFilter(f)}>{f === "all" ? "Wszystkie typy" : f === "quest" ? "⚔️ Questy" : "📅 Wydarzenia"}</button>)}
       </div>
@@ -1492,7 +1349,6 @@ function AdminPanel({ isOpen, onClose, headers, onRefreshAppData, onShowToast })
       setUsers(usersRes.data);
       setStats(statsRes.data);
     } catch (err) {
-      console.error("Admin error:", err);
       setError(err.response?.data?.detail || "Błąd ładowania danych admina");
     }
     setLoading(false);
@@ -1600,7 +1456,7 @@ function PwaInstallBanner({ standalonePwa, onShowToast, onDismissForever }) {
     try {
       localStorage.setItem(PWA_HINT_DISMISSED_KEY, "1");
     } catch {
-      /* ignore */
+
     }
     setDismissed(true);
     onDismissForever?.();
@@ -1612,7 +1468,7 @@ function PwaInstallBanner({ standalonePwa, onShowToast, onDismissForever }) {
       try {
         localStorage.setItem(PWA_HINT_COLLAPSED_KEY, String(next));
       } catch {
-        /* ignore */
+
       }
       return next;
     });
@@ -1701,13 +1557,13 @@ function Profile({
       alert("Hasła nie są identyczne");
       return;
     }
-    
+
     try {
       const token = localStorage.getItem("token");
-      await axios.post(`${API}/change-password`, { 
-        new_password: newPassword 
+      await axios.post(`${API}/change-password`, {
+        new_password: newPassword
       }, { headers: { Authorization: `Bearer ${token}` } });
-      
+
       alert("✅ Hasło zmienione");
       setChangePasswordMode(false);
       setNewPassword("");
@@ -1770,17 +1626,17 @@ function Profile({
 
           {changePasswordMode && (
             <div className="change-password-form">
-              <input 
-                type="password" 
-                placeholder="Nowe hasło (min. 3 znaki)" 
-                value={newPassword} 
-                onChange={(e) => setNewPassword(e.target.value)} 
+              <input
+                type="password"
+                placeholder="Nowe hasło (min. 3 znaki)"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
               />
-              <input 
-                type="password" 
-                placeholder="Potwierdź hasło" 
-                value={confirmPassword} 
-                onChange={(e) => setConfirmPassword(e.target.value)} 
+              <input
+                type="password"
+                placeholder="Potwierdź hasło"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
               />
               <button className="change-password-confirm" onClick={changePassword}>
                 Zapisz nowe hasło
@@ -1837,7 +1693,6 @@ export default function App() {
   const [workEntries, setWorkEntries] = useState([]);
   const [workSummary, setWorkSummary] = useState(null);
   const [familyId, setFamilyId] = useState(null);
-  console.log("[APP] familyId:", familyId);
   const [freeDays, setFreeDays] = useState([]);
   const [recurringEvents, setRecurringEvents] = useState([]);
   const [familyInvitations, setFamilyInvitations] = useState([]);
@@ -1850,40 +1705,16 @@ export default function App() {
 
   useEffect(() => {
     if (!isConnected) return;
-    
+
     const handleMessage = (event) => {
       const data = JSON.parse(event.data);
-      console.log('[WS] Received:', data);
-      
+
       switch (data.type) {
         case 'task_updated':
           loadTasksOnly();
           break;
         case 'shopping_updated':
-          // 🔥 TYMCZASOWO WYŁĄCZONE – PROBLEMY Z SYNCHRONIZACJĄ
-          // const { id, action, bought, family_id: wsFamilyId, item } = data.data;
-          // console.log('[WS] Shopping update:', { action, id, bought, wsFamilyId, currentFamilyId: familyId });
-          // if (wsFamilyId && familyId && wsFamilyId !== familyId) {
-          //   console.log('[WS] Ignoring - different family');
-          //   return;
-          // }
-          // if (action === 'toggled' || action === 'updated') {
-          //   setShoppingItems(prev => prev.map(i => 
-          //     i.id === id ? { ...i, bought: bought } : i
-          //   ));
-          // } else if (action === 'deleted') {
-          //   setShoppingItems(prev => prev.filter(i => i.id !== id));
-          // } else if (action === 'cleared_bought') {
-          //   setShoppingItems(prev => prev.map(i => ({ ...i, bought: false })));
-          // } else if (action === 'added') {
-          //   if (item) {
-          //     setShoppingItems(prev => [item, ...prev]);
-          //   } else {
-          //     if (typeof loadShoppingItems === 'function') {
-          //       loadShoppingItems();
-          //     }
-          //   }
-          // }
+
           break;
         case 'shopping_history_updated':
           if (typeof loadHistory === 'function') {
@@ -1893,7 +1724,7 @@ export default function App() {
         case 'schedule_updated':
           const scheduleData = data.data;
           if (scheduleData.action === 'completed') {
-            setScheduleEntries(prev => prev.map(item => 
+            setScheduleEntries(prev => prev.map(item =>
               item.id === scheduleData.id ? { ...item, completed: scheduleData.completed } : item
             ));
           } else {
@@ -1904,26 +1735,25 @@ export default function App() {
           break;
         case 'work_updated':
           const workData = data.data;
-          console.log('[WS] Work update:', workData);
-          
+
           if (workData.action === 'completed') {
-            setWorkEntries(prev => prev.map(item => 
+            setWorkEntries(prev => prev.map(item =>
               item.id === workData.id ? { ...item, completed: workData.completed } : item
             ));
           } else if (workData.action === 'deleted') {
             setWorkEntries(prev => prev.filter(item => item.id !== workData.id));
           } else {
-            // Pełne odświeżenie jeśli trzeba
+
             if (typeof loadWork === 'function') loadWork();
           }
           break;
         case 'family_member_removed':
           const { user_id: removedUserId, family_id: removedFamilyId } = data.data;
-          // 🔥 SPRAWDŹ CZY TO TEN SAM UŻYTKOWNIK
+
           if (removedUserId === user?.id) {
-            // Użytkownik został usunięty z rodziny
+
             setFamilyId(null);
-            // Odśwież dane
+
             fetchData();
             showToast("🗑️ Zostałeś usunięty z rodziny");
           }
@@ -1935,17 +1765,17 @@ export default function App() {
 
     const ws = new WebSocket(WS_URL);
     ws.onmessage = handleMessage;
-    
+
     return () => ws.close();
   }, [isConnected, familyId]);
 
   const enqueueRequest = async (requestFn, priority = false) => {
     if (priority) {
-      // Wykonaj natychmiast dla priorytetowych zapytań (np. POST)
+
       await requestFn();
       return;
     }
-    // Normalna kolejka dla pozostałych zapytań
+
     apiQueue.current.push({ fn: requestFn });
     if (!isProcessingQueue.current) {
       isProcessingQueue.current = true;
@@ -2004,7 +1834,6 @@ export default function App() {
         await enableNotifications();
       }
     } catch (err) {
-      console.error("[notifications] toggle failed:", err);
       showToast("Nie udało się zmienić ustawień powiadomień");
     }
   };
@@ -2015,14 +1844,6 @@ export default function App() {
     window.matchMedia("(display-mode: standalone)").addEventListener("change", onDisplayMode);
     return () => window.matchMedia("(display-mode: standalone)").removeEventListener("change", onDisplayMode);
   }, []);
-
-  // 🔥 WYŁĄCZONE – SERVICE WORKER POWODUJE PROBLEMY Z CORS
-  // useEffect(() => {
-  //   const cleanup = registerServiceWorkerForUpdates();
-  //   return () => {
-  //     if (cleanup) cleanup();
-  //   };
-  // }, []);
 
   useEffect(() => {
     if (!notificationsEnabled || !tasks.length) return undefined;
@@ -2048,41 +1869,34 @@ export default function App() {
 
   const fetchData = async () => {
     if (!token) return;
-    
+
     const noCacheHeaders = {
       ...headers,
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache'
     };
-    
-    // 🔥 TIMEOUT – nie czekaj dłużej niż 5s na zapytania
+
     const timeout = (promise, ms = 5000) => {
       return Promise.race([
         promise,
         new Promise((_, reject) => setTimeout(() => reject(new Error('Timeout')), ms))
       ]).catch(() => null);
     };
-    
+
     try {
       const shoppingParams = familyId ? { family_id: familyId } : {};
-      
-      // 🔥 KROK 1 – TYLKO TO, CO KRYTYCZNE (z timeout)
+
       const [userRes, tasksRes] = await Promise.all([
         timeout(axios.get(`${API}/me`, { headers: noCacheHeaders })),
         timeout(axios.get(`${API}/tasks`, { headers: noCacheHeaders })),
       ]);
-      
+
       if (userRes) setUser(userRes.data);
       if (tasksRes) {
         const tasksData = Array.isArray(tasksRes.data?.data) ? tasksRes.data.data : [];
-        const sortedTasks = [...tasksData].sort((a, b) => {
-          if (a.completed !== b.completed) return a.completed ? 1 : -1;
-          return new Date(a.due_date) - new Date(b.due_date);
-        });
-        setTasks(sortedTasks);
+        setTasks(sortTasks(tasksData));
       }
-      
-      // 🔥 KROK 2 – RESZTA W TLE (nie blokuje)
+
       setTimeout(async () => {
         try {
           const [chRes, achRes, scheduleRes, shoppingRes, workRes, freeDaysRes, recurringRes, historyRes, rareDropsRes] = await Promise.all([
@@ -2096,7 +1910,7 @@ export default function App() {
             axios.get(`${API}/history`, { headers: noCacheHeaders }).catch(() => ({ data: [] })),
             axios.get(`${API}/rare-drops/inventory`, { headers: noCacheHeaders }).catch(() => ({ data: null })),
           ]);
-          
+
           if (chRes) setChallenges(chRes.data);
           if (achRes) setAchievements(achRes.data);
           setScheduleEntries(Array.isArray(scheduleRes?.data) ? scheduleRes.data : []);
@@ -2106,22 +1920,18 @@ export default function App() {
           setRecurringEvents(Array.isArray(recurringRes?.data) ? recurringRes.data : []);
           setHistory(historyRes?.data || []);
           if (rareDropsRes?.data) setRareDrops(rareDropsRes.data);
-          
-          // Auto-generate holidays for years 2020-2030
+
           try {
             for (let year = 2020; year <= 2030; year++) {
               await axios.post(`${API}/free-days/generate/${year}`, {}, { headers: noCacheHeaders });
             }
           } catch (err) {
-            console.log("Holidays generation:", err.response?.status);
           }
         } catch (err) {
-          console.error("Background load error:", err);
         }
       }, 50);
-      
+
     } catch (err) {
-      console.error("Fetch error:", err);
       if (err.response?.status === 401) {
         localStorage.removeItem("token");
         setToken(null);
@@ -2132,9 +1942,9 @@ export default function App() {
     }
   };
 
-  useEffect(() => { if (token) fetchData(); }, [token]);
+  useEffect(() => { if (token) fetchData(); }, [token, familyId]);
+
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
-  useEffect(() => { if (token) fetchData(); }, [familyId]);
 
   const loadTasksOnly = async () => {
     if (!token) return;
@@ -2147,16 +1957,11 @@ export default function App() {
       ]);
 
       const tasksData = Array.isArray(tasksRes.data?.data) ? tasksRes.data.data : [];
-      const sortedTasks = [...tasksData].sort((a, b) => {
-        if (a.completed !== b.completed) return a.completed ? 1 : -1;
-        return new Date(a.due_date) - new Date(b.due_date);
-      });
-      setTasks(sortedTasks);
+      setTasks(sortTasks(tasksData));
       setChallenges(chRes.data);
       setAchievements(achRes.data);
       setHistory(historyRes.data || []);
     } catch (err) {
-      console.error("loadTasksOnly error:", err);
       if (err.response?.status === 401) {
         localStorage.removeItem("token");
         setToken(null);
@@ -2173,7 +1978,6 @@ export default function App() {
       const res = await axios.get(`${API}/family/invitations`, { headers });
       setFamilyInvitations(res.data);
     } catch (err) {
-      console.error("Błąd ładowania zaproszeń:", err);
       if (err.response?.status === 401) {
         localStorage.removeItem("token");
         setToken(null);
@@ -2207,28 +2011,28 @@ export default function App() {
 
   useEffect(() => {
     if (!token) return;
-    
+
     const pingBackend = async () => {
       try {
         await axios.get(`${API}/me`, { headers });
       } catch (err) {
-        // ignoruj błędy – ping nie musi być potwierdzany
+
       }
     };
-    
+
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
         pingBackend();
       }
     }, 300000);
-    
+
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
         pingBackend();
       }
     };
     document.addEventListener("visibilitychange", onVisibilityChange);
-    
+
     return () => {
       clearInterval(interval);
       document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -2269,9 +2073,9 @@ export default function App() {
     try {
       const response = await axios.post(`${API}/tasks`, apiPayload, { headers });
       const data = response.data;
-      
+
       await loadTasksOnly();
-      
+
       showToast("✅ Zadanie dodane");
     } catch (err) {
       showToast(err.response?.data?.detail || "Błąd dodawania – spróbuj ponownie");
@@ -2385,7 +2189,6 @@ export default function App() {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
 
-    // Optimistic update
     const originalTask = { ...task };
     setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
 
@@ -2393,7 +2196,7 @@ export default function App() {
       try {
         const response = await axios.patch(`${API}/tasks/${id}`, updates, { headers });
         const data = response.data;
-        
+
         if (data.exp !== undefined) {
           setUser(prev => ({
             ...prev,
@@ -2405,17 +2208,17 @@ export default function App() {
             streak: data.streak,
           }));
         }
-        
+
         if (data.task) {
           setTasks(prev => prev.map(t => t.id === id ? data.task : t));
         }
-        
+
         if (data.achievements) setAchievements(data.achievements);
         if (data.history) setHistory(data.history);
-        
+
         showToast("✅ Zadanie zapisane");
       } catch (err) {
-        // Rollback optimistic update
+
         setTasks(prev => prev.map(t => t.id === id ? originalTask : t));
         showToast(err.response?.data?.detail || "Błąd zapisu – spróbuj ponownie");
       }
@@ -2463,7 +2266,7 @@ export default function App() {
         if (data.revoked_achievements && data.revoked_achievements.length > 0) {
           setAchievements(prev => ({
             ...prev,
-            unlocked: (prev.unlocked || []).filter(ach => 
+            unlocked: (prev.unlocked || []).filter(ach =>
               !data.revoked_achievements.some(rev => rev.slug === ach.slug || rev.title === ach.title)
             ),
           }));
@@ -2506,24 +2309,20 @@ export default function App() {
       }
     });
   };
-  
+
   const deleteAccount = async (password, onDone) => {
-    console.log("[deleteAccount] 1. Start - password length:", password?.length);
-    
+
     if (!window.confirm("Na pewno usunąć konto? Ta operacja jest nieodwracalna!")) {
-      console.log("[deleteAccount] 2. Anulowane przez użytkownika");
       return;
     }
-    
+
     if (!password || password.length < 3) {
       showToast("Podaj poprawne hasło (min. 3 znaki)");
-      console.log("[deleteAccount] 3. Hasło za krótkie");
       return;
     }
-    
+
     try {
-      console.log("[deleteAccount] 4. Wysyłam DELETE do:", `${API}/me`);
-      
+
       const response = await fetch(`${API}/me`, {
         method: 'DELETE',
         headers: {
@@ -2532,27 +2331,24 @@ export default function App() {
         },
         body: JSON.stringify({ password })
       });
-      
-      console.log("[deleteAccount] 5. Status odpowiedzi:", response.status);
+
       const data = await response.json();
-      console.log("[deleteAccount] 6. Odpowiedź:", data);
-      
+
       if (!response.ok) {
         throw new Error(data.detail || "Błąd usuwania konta");
       }
-      
+
       localStorage.removeItem("token");
       setToken(null);
       setUser(null);
       showToast("✅ Konto usunięte");
       if (onDone) onDone();
-      
+
     } catch (err) {
-      console.error("[deleteAccount] ❌ BŁĄD:", err);
       showToast(err.message || "Nie udało się usunąć konta");
     }
   };
-  
+
   const deleteTask = async (task) => {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
@@ -2596,7 +2392,7 @@ export default function App() {
       }
     });
   };
-  
+
   const logout = () => { localStorage.removeItem("token"); setToken(null); setUser(null); };
   const handleLogin = () => { const newToken = localStorage.getItem("token"); setToken(newToken); if (newToken) setTimeout(fetchData, 100); };
 
@@ -2633,16 +2429,16 @@ export default function App() {
       <PwaInstallBanner
         standalonePwa={standalonePwa}
         onShowToast={showToast}
-        onDismissForever={() => setPwaHintDismissed(true)} 
+        onDismissForever={() => setPwaHintDismissed(true)}
       />
       <PlayerSummary user={user} progress={progress} />
       <AppTabs activeTab={mainTab} onTabChange={setMainTab} />
 
-      <FamilyInvitationsBanner 
-        api={API} 
-        headers={headers} 
-        onToast={showToast} 
-        onFamilyChange={fetchData} 
+      <FamilyInvitationsBanner
+        api={API}
+        headers={headers}
+        onToast={showToast}
+        onFamilyChange={fetchData}
       />
 
       {mainTab === "tasks" && (

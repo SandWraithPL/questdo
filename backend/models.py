@@ -290,12 +290,10 @@ class RecurringEvent(Base):
     owner_id = Column(Integer, ForeignKey("users.id"), index=True)
     title = Column(String)
     category = Column(String, default="birthday")
-    # Legacy fields for backward compatibility
     month = Column(Integer, nullable=True)
     day = Column(Integer, nullable=True)
-    # New fields for arbitrary intervals
-    interval_type = Column(String, nullable=True)  # daily, weekly, monthly, yearly
-    interval_value = Column(Integer, nullable=True)  # e.g., 2 for "every 2 weeks"
+    interval_type = Column(String, nullable=True)
+    interval_value = Column(Integer, nullable=True)
     start_date = Column(Date, nullable=True)
     end_date = Column(Date, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)

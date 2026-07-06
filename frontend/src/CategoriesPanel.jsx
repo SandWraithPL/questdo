@@ -2,20 +2,17 @@ import { useState, useEffect } from "react";
 import axios from "axios";
 import { SHOPPING_CATEGORIES } from "./ShoppingPanel";
 
-// Funkcja formatująca pieniądze z przecinkiem i 2 miejscami po przecinku
 function formatMoney(value) {
   const num = Number(value || 0);
   const formatted = num.toFixed(2).replace(".", ",");
   return `${formatted} zł`;
 }
 
-// Funkcja formatująca ilość z przecinkiem
 function formatQuantity(value) {
   if (!value) return "";
   return value.replace(".", ",");
 }
 
-// Funkcja konwertująca przecinek na kropkę dla API
 function parseRateInput(value) {
   if (!value) return "";
   return value.replace(",", ".");
@@ -119,11 +116,11 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
       <div className="add-task">
         <h3>➕ Dodaj artykuł domyślny</h3>
         <div className="form-row-inline">
-          <input 
-            placeholder="Nazwa (wymagane)" 
-            value={name} 
-            onChange={(e) => setName(e.target.value)} 
-            onKeyDown={(e) => e.key === "Enter" && addArticle()} 
+          <input
+            placeholder="Nazwa (wymagane)"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && addArticle()}
           />
           <select className="input-small" style={{ width: '100px', flex: '0 0 auto' }} value={unit} onChange={(e) => setUnit(e.target.value)}>
             <option value="szt">szt</option>

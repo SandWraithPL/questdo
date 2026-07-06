@@ -1,4 +1,4 @@
-/* eslint-disable react-hooks/set-state-in-effect */
+
 import { useState } from "react";
 
 const WEEKDAYS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
@@ -17,16 +17,16 @@ function getEventCategoryEmoji(cat) {
 
 function recurringEventOccursOn(event, dateStr) {
   if (!event.interval_type || !event.start_date) return false;
-  
+
   const targetDate = new Date(`${dateStr}T12:00:00`);
   const start = new Date(`${event.start_date}T12:00:00`);
-  
+
   if (targetDate < start) return false;
   if (event.end_date) {
     const endDate = new Date(`${event.end_date}T12:00:00`);
     if (targetDate > endDate) return false;
   }
-  
+
   const iv = event.interval_value || 1;
   if (event.interval_type === "daily") {
     const diffDays = Math.floor((targetDate - start) / (1000 * 60 * 60 * 24));
@@ -50,13 +50,7 @@ function recurringEventOccursOn(event, dateStr) {
 }
 
 function getRecurringCategoriesForDate(recurringEvents, dateStr) {
-  const categories = [];
-  for (const event of recurringEvents) {
-    if (recurringEventOccursOn(event, dateStr)) {
-      categories.push(event.category);
-    }
-  }
-  return categories;
+  return recurringEvents.filter(event => recurringEventOccursOn(event, dateStr)).map(event => event.category);
 }
 
 function toDateStr(d) {
@@ -98,9 +92,7 @@ export default function SharedCalendar({
     try {
       const saved = localStorage.getItem(collapsedStorageKey);
       if (saved !== null) return saved === "true";
-    } catch {
-      /* ignore */
-    }
+    } catch {}
     return defaultCollapsed;
   });
 
@@ -134,9 +126,7 @@ export default function SharedCalendar({
       const next = !prev;
       try {
         localStorage.setItem(collapsedStorageKey, String(next));
-      } catch {
-        /* ignore */
-      }
+      } catch {}
       return next;
     });
   };

@@ -1,7 +1,7 @@
 import { useMemo, useState, useEffect } from "react";
 import axios from "axios";
 import FamilyPanel from "./FamilyPanel";
-import { applyUserFromResponse } from "./helpers";
+import { applyUserFromResponse, validateQuantity, isValidQtyInput } from "./helpers";
 import { useEditItem } from "./hooks/useEditItem";
 
 const SHOPPING_MODE_KEY = "questdo-shopping-mode";
@@ -11,14 +11,14 @@ function readShoppingMode() {
   try {
     const saved = localStorage.getItem(SHOPPING_MODE_KEY);
     if (saved === "individual" || saved === "family") return saved;
-  } catch { /* ignore */ }
+  } catch {}
   return "individual";
 }
 
 function writeShoppingMode(mode) {
   try {
     localStorage.setItem(SHOPPING_MODE_KEY, mode);
-  } catch { /* ignore */ }
+  } catch {}
 }
 
 function readShowFamilyToggle() {
@@ -30,17 +30,15 @@ function readShowFamilyToggle() {
 function writeShowFamilyToggle(value) {
   try {
     localStorage.setItem(SHOW_FAMILY_TOGGLE_KEY, String(value));
-  } catch { /* ignore */ }
+  } catch {}
 }
 
-// Funkcja formatująca pieniądze z przecinkiem i 2 miejscami po przecinku
 function formatMoney(value) {
   const num = Number(value || 0);
   const formatted = num.toFixed(2).replace(".", ",");
   return `${formatted} zł`;
 }
 
-// Funkcja formatująca ilość z przecinkiem
 function formatQuantity(value) {
   if (!value) return "";
   return value.replace(".", ",");
@@ -62,7 +60,18 @@ function getCategory(cat) {
   return SHOPPING_CATEGORIES.find((c) => c.value === cat) || SHOPPING_CATEGORIES[8];
 }
 
-// Funkcja formatująca datę z uwzględnieniem lokalnej strefy czasowej
+function formatPriceBadge(item) {
+  if (!(item.price > 0)) return null;
+  const qty = item.quantity ? `${formatQuantity(item.quantity)} ${item.unit || "szt"} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price);
+  return <span className="badge category">💰 {qty}</span>;
+}
+
+function handleQtyInput(value, unit, setter) {
+  if (isValidQtyInput(value, unit)) setter(value);
+}
+
+const familyParams = (familyId) => familyId ? { family_id: familyId } : {};
+
 function formatLocalDateTime(dateString) {
   const date = new Date(dateString);
   return date.toLocaleDateString("pl-PL", {
@@ -75,19 +84,18 @@ function formatLocalDateTime(dateString) {
   });
 }
 
-export default function ShoppingPanel({ 
-  api, 
-  headers, 
-  items, 
-  setItems, 
-  onUserUpdate, 
-  onToast, 
-  enqueueRequest, 
-  familyId, 
+export default function ShoppingPanel({
+  api,
+  headers,
+  items,
+  setItems,
+  onUserUpdate,
+  onToast,
+  enqueueRequest,
+  familyId,
   onFamilyChange,
   currentUserId
 }) {
-  console.log("[SHOPPING] familyId prop received:", familyId);
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
   const [unit, setUnit] = useState("szt");
@@ -108,27 +116,7 @@ export default function ShoppingPanel({
 
   const saveItem = async (id, form) => {
     if (!form.name?.trim()) return;
-
-    // Walidacja ilości w zależności od jednostki
-    if (form.qty) {
-      const qtyValue = parseFloat(form.qty.replace(",", "."));
-      if (isNaN(qtyValue)) {
-        onToast("Nieprawidłowa ilość");
-        return;
-      }
-      if (form.unit === "szt") {
-        if (!Number.isInteger(qtyValue)) {
-          onToast("Dla sztuk podaj liczbę całkowitą");
-          return;
-        }
-      } else if (form.unit === "kg" || form.unit === "l") {
-        const decimalPlaces = (form.qty.replace(",", ".").split(".")[1] || "").length;
-        if (decimalPlaces > 3) {
-          onToast("Dla kg/l podaj max 3 miejsca po przecinku");
-          return;
-        }
-      }
-    }
+    if (!validateQuantity(form.qty, form.unit, onToast)) return;
 
     enqueueRequest(async () => {
       try {
@@ -167,57 +155,35 @@ export default function ShoppingPanel({
 
   const loadSummary = async () => {
     try {
-      const params = familyId ? { family_id: familyId } : {};
+      const params = familyParams(familyId);
       const res = await axios.get(`${api}/shopping/summary`, { headers, params });
       setSummary(res.data);
     } catch {
-      /* ignore */
+
     }
   };
 
   const loadShoppingItems = async () => {
     try {
       const params = selectedMode === "family" && familyId ? { family_id: familyId } : {};
-      console.log("[SHOPPING] Loading items with params:", params);
       const res = await axios.get(`${api}/shopping`, { headers, params });
-      console.log("[SHOPPING] Loaded items:", res.data.length);
       setItems(res.data);
       await loadSummary();
     } catch (err) {
-      console.error("[SHOPPING] Error loading:", err);
       onToast(err.response?.data?.detail || "Błąd ładowania listy");
     }
   };
 
-  // ============ POLLING – CO 3 SEKUNDY ============
   useEffect(() => {
-    // Pierwsze załadowanie
     loadShoppingItems();
-    
-    // Polling co 3 sekundy
     const interval = setInterval(() => {
-      if (document.visibilityState === "visible") {
-        loadShoppingItems();
-      }
+      if (document.visibilityState === "visible") loadShoppingItems();
     }, 3000);
-    
+    writeShoppingMode(selectedMode);
+    if (selectedMode === "family") setShowFamilyToggle(true);
+    loadDefaultCategory();
     return () => clearInterval(interval);
   }, [familyId, selectedMode]);
-
-  // ============ ZAPAMIĘTYWANIE STANÓW ============
-  useEffect(() => {
-    writeShoppingMode(selectedMode);
-  }, [selectedMode]);
-
-  useEffect(() => {
-    if (selectedMode === "family") {
-      setShowFamilyToggle(true);
-    }
-  }, []);
-
-  useEffect(() => {
-    loadDefaultCategory();
-  }, []);
 
   const loadDefaultCategory = async () => {
     try {
@@ -225,37 +191,16 @@ export default function ShoppingPanel({
       setDefaultCategory(res.data.category || "other");
       setCategory(res.data.category || "other");
     } catch {
-      /* ignore */
+
     }
   };
 
-  // ============ DODAWANIE PRODUKTU ============
   const addItem = () => {
     if (!name.trim()) {
       onToast("Podaj nazwę produktu");
       return;
     }
-
-    // Walidacja ilości w zależności od jednostki
-    if (qty) {
-      const qtyValue = parseFloat(qty.replace(",", "."));
-      if (isNaN(qtyValue)) {
-        onToast("Nieprawidłowa ilość");
-        return;
-      }
-      if (unit === "szt") {
-        if (!Number.isInteger(qtyValue)) {
-          onToast("Dla sztuk podaj liczbę całkowitą");
-          return;
-        }
-      } else if (unit === "kg" || unit === "l") {
-        const decimalPlaces = (qty.replace(",", ".").split(".")[1] || "").length;
-        if (decimalPlaces > 3) {
-          onToast("Dla kg/l podaj max 3 miejsca po przecinku");
-          return;
-        }
-      }
-    }
+    if (!validateQuantity(qty, unit, onToast)) return;
 
     enqueueRequest(async () => {
       try {
@@ -268,10 +213,8 @@ export default function ShoppingPanel({
           family_id: selectedMode === "family" && familyId ? familyId : undefined
         };
 
-        console.log("[SHOPPING] Adding item:", payload);
         await axios.post(`${api}/shopping`, payload, { headers });
 
-        // 🔥 ODŚWIEŻ LISTĘ PO DODANIU
         await loadShoppingItems();
 
         setName("");
@@ -284,51 +227,42 @@ export default function ShoppingPanel({
 
         onToast("✅ Dodano do listy zakupów");
       } catch (err) {
-        console.error("[SHOPPING] Error:", err.response?.data);
         onToast(err.response?.data?.detail || "Błąd dodawania");
       }
     });
   };
 
-  // ============ ZAZNACZANIE/ODZNAZCZANIE ============
   const toggleBought = (item) => {
     const newBought = !item.bought;
-    
+
     enqueueRequest(async () => {
       try {
-        console.log("[SHOPPING] Toggling item:", item.id, "to", newBought);
         await axios.patch(`${api}/shopping/${item.id}`, { bought: newBought }, { headers });
-        
-        // 🔥 ODŚWIEŻ LISTĘ PO ZMIANIE
+
         await loadShoppingItems();
-        
+
         if (newBought) {
           onToast("🛒 Kupione!");
         } else {
           onToast("↩️ Cofnięto zakup");
         }
       } catch (err) {
-        console.error("[SHOPPING] Error toggling:", err.response?.data);
         onToast(err.response?.data?.detail || "Błąd aktualizacji");
       }
     });
   };
 
-  // ============ USUWANIE PRODUKTU ============
   const deleteItem = (item) => {
     enqueueRequest(async () => {
       try {
-        console.log("[SHOPPING] Deleting item:", item.id);
         const res = await axios.delete(`${api}/shopping/${item.id}`, { headers });
-        
-        // 🔥 ODŚWIEŻ LISTĘ PO USUNIĘCIU
+
         await loadShoppingItems();
-        
+
         applyUserFromResponse(res.data, onUserUpdate);
         await loadSummary();
         onToast("🗑️ Usunięto produkt");
       } catch (err) {
-        console.error("[SHOPPING] Error deleting:", err.response?.data);
         onToast(err.response?.data?.detail || "Błąd usuwania");
       }
     });
@@ -347,12 +281,11 @@ export default function ShoppingPanel({
   const clearBought = () => {
     enqueueRequest(async () => {
       try {
-        const params = familyId ? { family_id: familyId } : {};
+        const params = familyParams(familyId);
         await axios.delete(`${api}/shopping/bought/clear`, { headers, params });
-        
-        // 🔥 ODŚWIEŻ LISTĘ PO CZYSZCZENIU
+
         await loadShoppingItems();
-        
+
         await loadSummary();
         onToast("🗑️ Usunięto kupione produkty");
       } catch (err) {
@@ -363,7 +296,7 @@ export default function ShoppingPanel({
 
   const loadHistory = async () => {
     try {
-      const params = familyId ? { family_id: familyId } : {};
+      const params = familyParams(familyId);
       const res = await axios.get(`${api}/shopping/history`, { headers, params });
       setHistory(res.data);
       setShowHistory(true);
@@ -427,7 +360,6 @@ export default function ShoppingPanel({
       setSuggestions(res.data);
       setShowSuggestions(res.data.length > 0);
     } catch (err) {
-      console.error("Błąd wyszukiwania:", err);
     }
   };
 
@@ -450,7 +382,7 @@ export default function ShoppingPanel({
             await axios.patch(`${api}/shopping/${item.id}`, { bought: true }, { headers });
           }
         }
-        const params = familyId ? { family_id: familyId } : {};
+        const params = familyParams(familyId);
         const res = await axios.get(`${api}/shopping`, { headers, params });
         setItems(res.data);
         onToast("✅ Zaznaczono wszystkie produkty");
@@ -475,7 +407,7 @@ export default function ShoppingPanel({
         notes: "",
         is_template: false
       };
-      const params = familyId ? { family_id: familyId } : {};
+      const params = familyParams(familyId);
       await axios.post(`${api}/shopping/history`, payload, { headers, params });
       await axios.delete(`${api}/shopping/bought/clear`, { headers, params });
       setItems((prev) => prev.filter((i) => !i.bought));
@@ -486,16 +418,12 @@ export default function ShoppingPanel({
     }
   };
 
-  // Gdy użytkownik wybiera rodzinę z FamilyPanel, ustawiamy tryb na "family"
   const handleFamilySelected = (fid) => {
-    console.log("[SHOPPING] Family selected, fid:", fid);
-    console.log("[SHOPPING] Current familyId before:", familyId);
     onFamilyChange?.(fid);
     setShowFamilyToggle(true);
     writeShowFamilyToggle(true);
     setSelectedMode("family");
     writeShoppingMode("family");
-    console.log("[SHOPPING] Called onFamilyChange with:", fid);
   };
 
   return (
@@ -503,8 +431,8 @@ export default function ShoppingPanel({
       <div className="shopping-header">
         <h3>🛒 Lista zakupów</h3>
         <div className="family-toggle">
-          <button 
-            type="button" 
+          <button
+            type="button"
             className={`family-toggle-btn ${selectedMode === "individual" ? "active" : ""}`}
             onClick={() => {
               setSelectedMode("individual");
@@ -516,8 +444,8 @@ export default function ShoppingPanel({
           >
             👤 Indywidualna
           </button>
-          <button 
-            type="button" 
+          <button
+            type="button"
             className={`family-toggle-btn ${selectedMode === "family" ? "active" : ""}`}
             onClick={() => {
               setSelectedMode("family");
@@ -532,10 +460,10 @@ export default function ShoppingPanel({
       </div>
 
       {showFamilyToggle && (
-        <FamilyPanel 
-          api={api} 
-          headers={headers} 
-          onToast={onToast} 
+        <FamilyPanel
+          api={api}
+          headers={headers}
+          onToast={onToast}
           onFamilyChange={handleFamilySelected}
           initialMode={selectedMode}
           currentUserId={currentUserId}
@@ -570,14 +498,14 @@ export default function ShoppingPanel({
         <h3>🛒 Dodaj produkt</h3>
         <div className="form-row-inline">
           <div style={{ position: "relative", flex: 1 }}>
-            <input 
-              placeholder="Nazwa (wymagane)" 
-              value={name} 
+            <input
+              placeholder="Nazwa (wymagane)"
+              value={name}
               onChange={(e) => {
                 setName(e.target.value);
                 searchDefaultArticles(e.target.value);
-              }} 
-              onKeyDown={(e) => e.key === "Enter" && addItem()} 
+              }}
+              onKeyDown={(e) => e.key === "Enter" && addItem()}
             />
             {showSuggestions && suggestions.length > 0 && (
               <div className="suggestions-dropdown">
@@ -590,31 +518,11 @@ export default function ShoppingPanel({
               </div>
             )}
           </div>
-          <input 
-            className="input-small" 
-            placeholder="Ilość" 
-            value={qty} 
-            onChange={(e) => {
-              const value = e.target.value;
-              
-              // Dla sztuk – tylko cyfry (bez kropki i przecinka)
-              if (unit === "szt") {
-                if (value === "" || /^\d+$/.test(value)) {
-                  setQty(value);
-                }
-                return;
-              }
-              
-              // Dla kg/l – cyfry, kropka i przecinek
-              if (unit === "kg" || unit === "l") {
-                if (value === "" || /^[\d,.]*$/.test(value)) {
-                  const dots = (value.match(/[.,]/g) || []).length;
-                  if (dots <= 1) {
-                    setQty(value);
-                  }
-                }
-              }
-            }} 
+          <input
+            className="input-small"
+            placeholder="Ilość"
+            value={qty}
+            onChange={(e) => handleQtyInput(e.target.value, unit, setQty)}
           />
           <select value={unit} onChange={(e) => setUnit(e.target.value)}>
             <option value="szt">szt.</option>
@@ -632,7 +540,7 @@ export default function ShoppingPanel({
       </div>
 
       <input className="search-input" placeholder="🔍 Szukaj produktu..." value={search} onChange={(e) => setSearch(e.target.value)} />
-      
+
       <div className="import-export-row">
         <button type="button" className="icon-btn history-btn" onClick={selectAll} title="Zaznacz wszystkie">✅ Zaznacz wszystkie</button>
         <button type="button" className="icon-btn history-btn" onClick={loadHistory} title="Historia list">📜 Historia</button>
@@ -678,32 +586,11 @@ export default function ShoppingPanel({
               {editing ? (
                 <div className="edit-mode">
                   <input value={editForm.name || ""} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nazwa" />
-                  <input 
-                    className="input-small" 
-                    value={editForm.qty || ""} 
-                    onChange={(e) => {
-                      const value = e.target.value;
-                      const currentUnit = editForm.unit || "szt";
-                      
-                      // Dla sztuk – tylko cyfry (bez kropki i przecinka)
-                      if (currentUnit === "szt") {
-                        if (value === "" || /^\d+$/.test(value)) {
-                          setEditForm({ ...editForm, qty: value });
-                        }
-                        return;
-                      }
-                      
-                      // Dla kg/l – cyfry, kropka i przecinek
-                      if (currentUnit === "kg" || currentUnit === "l") {
-                        if (value === "" || /^[\d,.]*$/.test(value)) {
-                          const dots = (value.match(/[.,]/g) || []).length;
-                          if (dots <= 1) {
-                            setEditForm({ ...editForm, qty: value });
-                          }
-                        }
-                      }
-                    }} 
-                    placeholder="Ilość" 
+                  <input
+                    className="input-small"
+                    value={editForm.qty || ""}
+                    onChange={(e) => handleQtyInput(e.target.value, editForm.unit || "szt", (v) => setEditForm({ ...editForm, qty: v }))}
+                    placeholder="Ilość"
                   />
                   <select value={editForm.unit || "szt"} onChange={(e) => setEditForm({ ...editForm, unit: e.target.value })}>
                     <option value="szt">szt.</option>
@@ -726,11 +613,7 @@ export default function ShoppingPanel({
                     <div className="task-meta">
                       {item.quantity && <span className="badge category">{formatQuantity(item.quantity)} {item.unit || "szt"}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
-                      {item.price > 0 && (
-                        <span className="badge category">
-                          💰 {item.quantity ? `${formatQuantity(item.quantity)} ${item.unit || "szt"} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
-                        </span>
-                      )}
+                      {formatPriceBadge(item)}
                     </div>
                   </div>
                   <div className="task-actions">
@@ -759,12 +642,12 @@ export default function ShoppingPanel({
           ) : (
             <div className="history-list">
               {history.map((h) => {
-                // Oblicz czy można edytować/usunąć (mniej niż 24h)
+
                 const completedAt = new Date(h.completed_at);
                 const now = new Date();
                 const hoursSinceCompletion = (now - completedAt) / (1000 * 60 * 60);
                 const canEdit = hoursSinceCompletion < 24;
-                
+
                 return (
                   <div key={h.id} className="history-card" style={{ cursor: "pointer" }} onClick={() => viewHistoryDetail(h.id)}>
                     <div className="history-info">
@@ -778,18 +661,18 @@ export default function ShoppingPanel({
                       )}
                     </div>
                     <div className="history-actions" onClick={(e) => e.stopPropagation()}>
-                      <button 
-                        type="button" 
-                        className="icon-btn" 
-                        onClick={() => loadFromHistory(h.id)} 
+                      <button
+                        type="button"
+                        className="icon-btn"
+                        onClick={() => loadFromHistory(h.id)}
                         title="Wczytaj listę"
                       >
                         📋
                       </button>
-                      <button 
-                        type="button" 
-                        className="icon-btn delete" 
-                        onClick={() => deleteHistory(h.id, canEdit)} 
+                      <button
+                        type="button"
+                        className="icon-btn delete"
+                        onClick={() => deleteHistory(h.id, canEdit)}
                         title={canEdit ? "Usuń" : "Nie można usunąć (minęło 24h)"}
                         disabled={!canEdit}
                         style={{ opacity: canEdit ? 1 : 0.5 }}
@@ -828,11 +711,7 @@ export default function ShoppingPanel({
                     <div className="task-meta">
                       {item.quantity && <span className="badge category">{formatQuantity(item.quantity)} {item.unit || "szt"}</span>}
                       <span className="badge category">{cat.emoji} {cat.label}</span>
-                      {item.price > 0 && (
-                        <span className="badge category">
-                          💰 {item.quantity ? `${formatQuantity(item.quantity)} ${item.unit || "szt"} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price)}
-                        </span>
-                      )}
+                      {formatPriceBadge(item)}
                     </div>
                   </div>
                 </div>

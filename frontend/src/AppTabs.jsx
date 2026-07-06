@@ -13,9 +13,7 @@ export function readMainTab() {
   try {
     const saved = localStorage.getItem(TAB_STORAGE_KEY);
     if (TABS.some((t) => t.id === saved)) return saved;
-  } catch {
-    /* ignore */
-  }
+  } catch {}
   return "tasks";
 }
 
@@ -31,9 +29,7 @@ export default function AppTabs({ activeTab, onTabChange }) {
             onTabChange(tab.id);
             try {
               localStorage.setItem(TAB_STORAGE_KEY, tab.id);
-            } catch {
-              /* ignore */
-            }
+            } catch {}
           }}
           aria-current={activeTab === tab.id ? "page" : undefined}
         >
