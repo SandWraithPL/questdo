@@ -1249,6 +1249,39 @@ class FreeDayUpdate(BaseModel):
     notes: Optional[str] = None
 
 
+class DefaultArticleCreate(BaseModel):
+    name: str
+    quantity: Optional[str] = ''
+    unit: Optional[str] = 'szt'
+    category: Optional[str] = 'other'
+    default_price: float = 0.0
+    family_id: Optional[int] = None
+
+
+class DefaultArticleUpdate(BaseModel):
+    name: Optional[str] = None
+    quantity: Optional[str] = None
+    unit: Optional[str] = None
+    category: Optional[str] = None
+    default_price: Optional[float] = None
+
+
+class ShoppingHistoryCreate(BaseModel):
+    items_json: str
+    total_items: int
+    total_spent: float = 0.0
+    notes: str = ''
+    is_template: bool = False
+
+
+class DefaultCategoryUpdate(BaseModel):
+    category: str
+
+
+class DefaultHourlyRateUpdate(BaseModel):
+    rate: float
+
+
 # ===== FUNKCJE WALIDACYJNE =====
 
 def validate_schedule_payload(data: ScheduleCreate | ScheduleUpdate, is_create: bool = False) -> None:
@@ -3902,28 +3935,6 @@ def fix_achievements(user_id: int, current_user: models.User = Depends(get_curre
 
 # ===== HISTORIA ZAKUPÓW (SHOPPING HISTORY) =====
 
-class ShoppingHistoryCreate(BaseModel):
-    items_json: str
-    total_items: int
-    total_spent: float = 0.0
-    notes: str = ''
-    is_template: bool = False
-
-class DefaultArticleCreate(BaseModel):
-    name: str
-    quantity: Optional[str] = ''
-    unit: Optional[str] = 'szt'
-    category: Optional[str] = 'other'
-    default_price: float = 0.0
-    family_id: Optional[int] = None
-
-class DefaultArticleUpdate(BaseModel):
-    name: Optional[str] = None
-    quantity: Optional[str] = None
-    unit: Optional[str] = None
-    category: Optional[str] = None
-    default_price: Optional[float] = None
-
 @app.get('/shopping/history')
 def get_shopping_history(family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     if family_id is not None:
@@ -4051,12 +4062,6 @@ def load_shopping_from_history(history_id: int, current_user: models.User = Depe
 
 
 # ===== USTAWIENIA =====
-
-class DefaultCategoryUpdate(BaseModel):
-    category: str
-
-class DefaultHourlyRateUpdate(BaseModel):
-    rate: float
 
 @app.get('/settings/default-category')
 def get_default_category(current_user: models.User = Depends(get_current_user)):
