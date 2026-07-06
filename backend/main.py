@@ -2957,6 +2957,35 @@ def update_shopping(item_id: int, body: ShoppingUpdate, current_user: models.Use
     }
 
 
+# Pobiera podsumowanie zakupów
+@app.get('/shopping/summary')
+def shopping_summary(family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if family_id is not None:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail='Nie jesteś członkiem tej rodziny')
+        items = db.query(models.ShoppingItem).filter(models.ShoppingItem.family_id == family_id).all()
+    else:
+        items = db.query(models.ShoppingItem).filter(
+            models.ShoppingItem.owner_id == current_user.id,
+            models.ShoppingItem.family_id.is_(None)
+        ).all()
+
+    total_items = len(items)
+    bought_items = sum(1 for i in items if i.bought)
+    total_spent = sum(float(i.price or 0) for i in items if i.bought)
+    
+    return {
+        'total_items': total_items,
+        'bought_items': bought_items,
+        'pending_items': total_items - bought_items,
+        'total_spent': total_spent
+    }
+
+
 # Usuwa przedmiot z listy zakupów
 @app.delete('/shopping/{item_id}')
 def delete_shopping(item_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
