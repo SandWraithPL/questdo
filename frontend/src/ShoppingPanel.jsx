@@ -489,23 +489,23 @@ export default function ShoppingPanel({
         <div className="earnings-summary">
           <div className="earnings-stat">
             <span className="earnings-stat-label">Lista</span>
-            <strong>{formatMoney(summary.current_list)}</strong>
+            <strong>{formatMoney(summary.current_list ?? 0)}</strong>
           </div>
           <div className="earnings-stat">
             <span className="earnings-stat-label">Dzień</span>
-            <strong>{formatMoney(Object.values(summary.by_day).slice(-1)[0] || 0)}</strong>
+            <strong>{formatMoney(Object.values(summary.by_day ?? {}).slice(-1)[0] ?? 0)}</strong>
           </div>
           <div className="earnings-stat">
             <span className="earnings-stat-label">Tydzień</span>
-            <strong>{formatMoney(Object.values(summary.by_week).slice(-1)[0] || 0)}</strong>
+            <strong>{formatMoney(Object.values(summary.by_week ?? {}).slice(-1)[0] ?? 0)}</strong>
           </div>
           <div className="earnings-stat">
             <span className="earnings-stat-label">Miesiąc</span>
-            <strong>{formatMoney(Object.values(summary.by_month).slice(-1)[0] || 0)}</strong>
+            <strong>{formatMoney(Object.values(summary.by_month ?? {}).slice(-1)[0] ?? 0)}</strong>
           </div>
           <div className="earnings-stat muted">
             <span className="earnings-stat-label">Łącznie</span>
-            <strong>{formatMoney(summary.all_time)}</strong>
+            <strong>{formatMoney(summary.all_time ?? 0)}</strong>
           </div>
         </div>
       )}

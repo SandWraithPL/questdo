@@ -2968,21 +2968,51 @@ def shopping_summary(family_id: Optional[int] = None, current_user: models.User 
         if not membership:
             raise HTTPException(status_code=403, detail='Nie jesteś członkiem tej rodziny')
         items = db.query(models.ShoppingItem).filter(models.ShoppingItem.family_id == family_id).all()
+        history = db.query(models.ShoppingHistory).filter(models.ShoppingHistory.family_id == family_id).all()
     else:
         items = db.query(models.ShoppingItem).filter(
             models.ShoppingItem.owner_id == current_user.id,
             models.ShoppingItem.family_id.is_(None)
         ).all()
+        history = db.query(models.ShoppingHistory).filter(
+            models.ShoppingHistory.owner_id == current_user.id,
+            models.ShoppingHistory.family_id.is_(None)
+        ).all()
 
-    total_items = len(items)
-    bought_items = sum(1 for i in items if i.bought)
-    total_spent = sum(float(i.price or 0) for i in items if i.bought)
+    # Oblicza koszt obecnej listy (tylko kupione produkty)
+    current_list_cost = sum(float(i.price or 0) for i in items if i.bought)
+    
+    # Oblicza statystyki z historii
+    now = datetime.now()
+    by_day = {}
+    by_week = {}
+    by_month = {}
+    all_time = 0.0
+    
+    for h in history:
+        spent = float(h.total_spent or 0)
+        all_time += spent
+        
+        completed_at = datetime.fromisoformat(h.completed_at.replace('Z', '+00:00'))
+        
+        # Klucz dla dnia
+        day_key = completed_at.strftime('%Y-%m-%d')
+        by_day[day_key] = by_day.get(day_key, 0) + spent
+        
+        # Klucz dla tygodnia (ISO week)
+        week_key = completed_at.strftime('%Y-W%W')
+        by_week[week_key] = by_week.get(week_key, 0) + spent
+        
+        # Klucz dla miesiąca
+        month_key = completed_at.strftime('%Y-%m')
+        by_month[month_key] = by_month.get(month_key, 0) + spent
     
     return {
-        'total_items': total_items,
-        'bought_items': bought_items,
-        'pending_items': total_items - bought_items,
-        'total_spent': total_spent
+        'current_list': current_list_cost,
+        'by_day': by_day,
+        'by_week': by_week,
+        'by_month': by_month,
+        'all_time': all_time
     }
 
 
