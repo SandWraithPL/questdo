@@ -1,8 +1,11 @@
+/* ===== RESET STYLÓW ===== */
 * { margin: 0; padding: 0; box-sizing: border-box; }
 
+/* ===== GŁÓWNE USTAWIENIA ===== */
 body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe; min-height: 100vh; }
 .app { max-width: 800px; margin: 0 auto; padding: 20px; }
 
+/* ===== EKRAN LOGOWANIA ===== */
 .auth-container { display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 100vh; gap: 12px; }
 .auth-container h1 { font-size: 2.5rem; color: #ff8906; margin-bottom: 8px; }
 .auth-container input { width: 300px; padding: 12px; border-radius: 8px; border: 1px solid #444; background: #1a1a2e; color: #fff; font-size: 1rem; }
@@ -10,14 +13,17 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .auth-container .switch { color: #aaa; font-size: 0.9rem; cursor: pointer; }
 .auth-container .switch span { color: #ff8906; }
 
+/* ===== POLE HASŁA Z PRZYCISKIEM POKAŻ/UKRYJ ===== */
 .password-field { position: relative; width: 300px; }
 .password-field input { width: 100%; padding: 12px; padding-right: 40px; border-radius: 8px; border: 1px solid #444; background: #1a1a2e; color: #fff; font-size: 1rem; box-sizing: border-box; }
 .auth-container .eye-icon { position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer; font-size: 1.2rem; padding: 0; width: 30px; height: 30px; display: flex; align-items: center; justify-content: center; border-radius: 6px; color: #aaa; }
 .eye-icon:hover { background: #2a2a3e; }
 
+/* ===== NAGŁÓWEK ===== */
 .header { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid #333; margin-bottom: 24px; }
 .header h1 { color: #ff8906; font-size: 1.5rem; }
 
+/* ===== KARTA GRACZA ===== */
 .profile-card { background: #1a1a2e; border-radius: 12px; padding: 20px; margin-bottom: 24px; display: flex; align-items: center; gap: 20px; }
 .profile-card--top { margin-bottom: 14px; border: 1px solid #2a2a3e; }
 .avatar { width: 60px; height: 60px; border-radius: 50%; background: #ff8906; display: flex; align-items: center; justify-content: center; font-size: 1.8rem; font-weight: bold; color: #0f0e17; }
@@ -33,6 +39,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .level-next-hint { font-size: 0.75rem; color: #ff8906; margin-top: 4px; opacity: 0.9; }
 .exp-tip { font-size: 0.72rem; color: #666; margin-top: 6px; line-height: 1.35; }
 
+/* ===== FORMULARZE ===== */
 .add-task { background: #1a1a2e; border-radius: 12px; padding: 20px; margin-bottom: 24px; overflow: visible; }
 .add-task h3 { margin-bottom: 12px; color: #ff8906; }
 .add-task input, .add-task select, .add-task textarea { width: 100%; padding: 10px; margin-bottom: 10px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; font-size: 0.95rem; min-height: 44px; }
@@ -49,6 +56,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .cancel-btn { background: #333 !important; color: #fff !important; min-height: 44px; border: 1px solid #444 !important; transition: background 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s !important; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.3) !important; }
 .cancel-btn:hover:not(:disabled) { background: #444 !important; border-color: #555 !important; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4) !important; }
 
+/* ===== SUGESTIE PRZY WPISYWANIU ===== */
 .suggestions-dropdown {
   position: absolute;
   top: 100%;
@@ -86,6 +94,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   font-size: 0.85rem;
 }
 
+/* ===== STOPKA HISTORII ===== */
 .history-footer {
   padding: 12px;
   background: #1a1a2e;
@@ -99,6 +108,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   margin: 0;
 }
 
+/* ===== ZAKUPY ===== */
 .shopping-header {
   display: flex;
   justify-content: space-between;
@@ -137,6 +147,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   border-color: #ff8906;
 }
 
+/* ===== RODZINA ===== */
 .family-panel {
   background: #1a1a2e;
   border-radius: 12px;
@@ -149,6 +160,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   color: #ff8906;
 }
 
+/* ===== ZAPROSZENIA ===== */
 .invitations-section {
   background: #2a2a3e;
   border-radius: 8px;
@@ -201,6 +213,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   font-weight: bold;
 }
 
+/* ===== PRZYCISKI AKCEPTACJI/ODRZUCENIA ===== */
 .accept-btn {
   background: #4caf50;
   color: #fff;
@@ -233,6 +246,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   transform: translateY(-1px);
 }
 
+/* ===== BRAK RODZINY ===== */
 .no-family {
   text-align: center;
   padding: 20px;
@@ -383,6 +397,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .exp-preview-hint { font-size: 0.8rem; color: #aaa; margin: -4px 0 12px; }
 .exp-preview-hint strong { color: #ff8906; }
 
+/* ===== PANEL ZADAŃ ===== */
 .day-tasks-panel { margin-bottom: 24px; }
 .tasks-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
 .tasks-header h3 { font-size: 1.1rem; }
@@ -414,11 +429,13 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .stats-counter { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.85rem; color: #aaa; margin-bottom: 16px; }
 .stats-counter strong { color: #ff8906; }
 
+/* ===== ŁADOWANIE ===== */
 .loading-state { display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 48px 20px; gap: 14px; color: #aaa; }
 .loading-state p { font-size: 0.95rem; margin: 0; }
 .spinner { width: 40px; height: 40px; border: 3px solid #2a2a3e; border-top-color: #ff8906; border-radius: 50%; animation: questdo-spin 0.75s linear infinite; }
 @keyframes questdo-spin { to { transform: rotate(360deg); } }
 
+/* ===== KARTA ZADANIA ===== */
 .task-card { background: #1a1a2e; border-radius: 10px; padding: 10px 12px; margin-bottom: 8px; display: flex; align-items: center; gap: 10px; border-left: 4px solid #333; transition: background 0.2s, opacity 0.2s, border-color 0.2s; }
 .task-card.easy { border-left-color: #4caf50; }
 .task-card.medium { border-left-color: #ff9800; }
@@ -468,6 +485,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .task-check:disabled { opacity: 0.65; cursor: wait; }
 .empty { text-align: center; color: #555; padding: 40px; font-size: 1rem; }
 
+/* ===== EDYCJA ZADANIA ===== */
 .task-edit-form { flex: 1; display: flex; flex-direction: column; gap: 8px; overflow: visible; }
 .input-edit { width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid #333; background: #0f0e17; color: #fff; font-size: 0.9rem; min-height: 44px; }
 .edit-actions { display: flex; gap: 8px; }
@@ -479,6 +497,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .important-toggle input { width: 18px; height: 18px; margin: 0; accent-color: #ff8906; }
 .important-toggle span { color: #ff8f45; }
 
+/* ===== STAWKI GODZINOWE ===== */
 .rate-input-group {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -510,10 +529,12 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .save-default-btn:hover:not(:disabled) { background: #2a2a3e; border-color: #ff8906; color: #ffa040; }
 .save-default-btn:disabled { opacity: 0.65; cursor: wait; }
 
+/* ===== TOASTY ===== */
 .toast-stack { position: fixed; bottom: 24px; right: 24px; display: flex; flex-direction: column; gap: 8px; z-index: 1000; }
 .toast { background: #ff8906; color: #0f0e17; padding: 12px 20px; border-radius: 8px; font-weight: bold; font-size: 0.95rem; animation: slideIn 0.3s ease; box-shadow: 0 4px 12px rgba(0,0,0,0.3); }
 @keyframes slideIn { from { transform: translateX(100px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
 
+/* ===== KALENDARZ ===== */
 .calendar-section { background: #1a1a2e; border-radius: 12px; margin-bottom: 18px; border: 1px solid #2a2a3e; overflow: hidden; }
 .calendar-section--collapsed { margin-bottom: 12px; }
 .calendar-section-bar { display: flex; align-items: stretch; gap: 8px; padding: 10px 12px; border-bottom: 1px solid transparent; }
@@ -554,6 +575,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .event-icon { font-size: 0.65rem; line-height: 1; }
 .event-icon-more { font-size: 0.6rem; color: #888; }
 
+/* ===== DNI WOLNE ===== */
 .free-day-icon { font-size: 0.7rem; line-height: 1; }
 .calendar-day.free-day-holiday { background: #3d1414; border-color: #c62828; }
 .calendar-day.free-day-deans_day { background: #142a45; border-color: #42a5f5; }
@@ -568,6 +590,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .week-free-icon { font-size: 0.8rem; margin-left: 4px; }
 .day-free-indicator { font-size: 0.85rem; color: #ff8906; font-weight: normal; }
 
+/* ===== WIDOK TYGODNIA ===== */
 .week-view { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 8px; }
 .week-day { min-width: 0; background: #0f0e17; border: 1px solid #2a2a3e; border-radius: 9px; padding: 10px; cursor: pointer; color: #fff; text-align: left; min-height: 160px; display: flex; flex-direction: column; gap: 10px; }
 .week-day:hover { border-color: #ff8906; }
@@ -588,6 +611,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .week-task.completed { color: #777; text-decoration: line-through; }
 .week-empty, .week-more { font-size: 0.74rem; color: #666; }
 
+/* ===== WIDOK DNIA ===== */
 .day-view { padding: 4px 0 0; }
 .day-view h3 { text-align: center; margin-bottom: 14px; color: #ff8906; font-size: 1rem; text-transform: capitalize; }
 .day-task { display: flex; gap: 12px; padding: 12px; background: #0f0e17; border: 1px solid #2a2a3e; border-radius: 9px; margin-bottom: 8px; align-items: flex-start; }
@@ -598,9 +622,12 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .day-task-info p { font-size: 0.85rem; color: #aaa; margin-top: 4px; }
 .day-task > button:last-child { background: transparent; border: none; color: #777; cursor: pointer; font-size: 1.1rem; }
 
+/* ===== PRZYCISK DODAWANIA ===== */
 .add-task-btn { width: 100%; padding: 16px; background: #ff8906; color: #0f0e17; border: 1px solid #e67a00; border-radius: 12px; font-weight: bold; font-size: 1rem; cursor: pointer; margin-bottom: 24px; transition: background 0.2s, transform 0.15s, box-shadow 0.2s, border-color 0.2s; box-shadow: 0 4px 6px rgba(255, 137, 6, 0.3); }
 .add-task-btn:hover { background: #ffa040; transform: translateY(-1px); border-color: #ff8906; box-shadow: 0 6px 10px rgba(255, 137, 6, 0.4); }
 .add-task-btn:active { transform: translateY(0); box-shadow: 0 2px 4px rgba(255, 137, 6, 0.3); }
+
+/* ===== POWIADOMIENIA W PROFILU ===== */
 .profile-notifications-block { margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #2a2a3e; }
 .profile-notifications-btn { width: 100%; padding: 10px 12px; background: #0f0e17; color: #ff8906; border: 1px solid #333; border-radius: 8px; font-weight: bold; cursor: pointer; font-size: 0.88rem; text-align: left; transition: border-color 0.2s, background 0.2s, color 0.2s; }
 .profile-notifications-btn:hover:not(:disabled) { border-color: #ff8906; color: #ffa040; }
@@ -609,6 +636,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .profile-notifications-btn.enabled { color: #e57373; border-color: #3a1f1f; background: #1a1010; }
 .profile-notifications-btn.enabled:hover:not(:disabled) { border-color: #e57373; color: #ef9a9a; }
 
+/* ===== BANER INSTALACJI PWA ===== */
 .pwa-install-banner { background: #1a1a2e; border: 1px solid #2a2a3e; border-radius: 12px; margin-bottom: 14px; overflow: hidden; }
 .pwa-install-banner-bar { display: flex; align-items: center; gap: 8px; padding: 10px 12px; }
 .pwa-install-banner-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 8px; padding: 0; border: none; background: transparent; color: #fff; cursor: pointer; text-align: left; }
@@ -626,6 +654,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .pwa-install-banner-hide:hover { color: #fff; border-color: #666; }
 .pwa-install-banner--collapsed .pwa-install-banner-bar { border-bottom: none; }
 
+/* ===== WYZWANIA DZIENNE ===== */
 .challenges-section { background: #1a1a2e; border-radius: 12px; margin-bottom: 16px; border: 1px solid #2a2a3e; overflow: hidden; }
 .challenges-section--collapsed { margin-bottom: 12px; }
 .challenges-section-toggle { width: 100%; display: flex; align-items: center; gap: 10px; padding: 12px 14px; border: none; background: transparent; color: #fff; cursor: pointer; text-align: left; }
@@ -657,6 +686,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .challenge-item.completed .challenge-label { text-decoration: line-through; }
 .challenge-item.completed .challenge-description { text-decoration: line-through; }
 
+/* ===== RANKINGI ===== */
 .leaderboard-panel { background: #1a1a2e; border-radius: 12px; padding: 12px 16px; margin-bottom: 16px; }
 .leaderboard-toggle { width: 100%; background: none; border: none; color: #ff8906; font-weight: bold; cursor: pointer; text-align: left; font-size: 0.95rem; padding: 4px 0; }
 .leaderboard-content { margin-top: 12px; }
@@ -673,10 +703,12 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .leaderboard-empty { color: #777; font-size: 0.85rem; padding: 8px 0 2px; text-align: center; }
 .leaderboard-error { color: #f44336; font-size: 0.85rem; padding: 4px 0 8px; }
 
+/* ===== PROFIL UŻYTKOWNIKA ===== */
 .profile-dropdown { position: relative; }
 .profile-trigger { display: flex; align-items: center; gap: 8px; cursor: pointer; padding: 8px 12px; background: #1a1a2e; border-radius: 24px; }
 .avatar-small { width: 32px; height: 32px; border-radius: 50%; background: #ff8906; display: flex; align-items: center; justify-content: center; font-weight: bold; color: #0f0e17; }
 
+/* ===== ZMIANA HASŁA ===== */
 .change-password-btn {
   width: 100%;
   margin-top: 8px;
@@ -723,6 +755,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   cursor: pointer;
 }
 
+/* ===== NAZWA RODZINY ===== */
 .family-name-header {
   display: flex;
   align-items: center;
@@ -754,6 +787,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .ach-progress { font-size: 0.75rem; color: #ff8906 !important; margin-top: 4px !important; }
 .achievements-list .muted { color: #666; font-size: 0.85rem; }
 
+/* ===== ZNAJDŹKI ===== */
 .rare-drops-list { max-height: 200px; overflow-y: auto; margin-bottom: 12px; }
 .rare-drops-list h4 { margin-bottom: 8px; color: #ff8906; }
 .rare-drop-item { display: flex; gap: 8px; padding: 6px 0; font-size: 0.85rem; }
@@ -772,6 +806,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .history-item strong { color: #ff8906; font-size: 0.75rem; }
 .history-item span { color: #ddd; line-height: 1.35; }
 
+/* ===== BANER ZAPROSZEŃ ===== */
 .family-invitations-banner {
   background: #1a1a2e;
   border-radius: 12px;
@@ -877,6 +912,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .delete-account-cancel { padding: 8px; background: #333; color: #fff; border: none; border-radius: 8px; cursor: pointer; }
 .admin-btn { width: 100%; margin-top: 8px; padding: 8px; background: #ff8906; color: #0f0e17; border: none; border-radius: 8px; cursor: pointer; font-size: 0.85rem; font-weight: bold; }
 
+/* ===== PANEL ADMINA ===== */
 .admin-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0, 0, 0, 0.8); display: flex; align-items: center; justify-content: center; z-index: 1000; }
 .admin-panel { background: #1a1a2e; border-radius: 12px; padding: 24px; max-width: 800px; width: 90%; max-height: 90vh; overflow-y: auto; }
 .admin-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 16px; border-bottom: 1px solid #333; }
@@ -902,6 +938,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .delete-user-btn { padding: 8px 12px; background: #e74c3c; color: white; border: none; border-radius: 6px; cursor: pointer; font-size: 0.85rem; }
 .delete-user-btn:hover { background: #c0392b; }
 
+/* ===== WYBIERANIE DATY ===== */
 .date-picker-wrap { position: relative; width: 100%; margin-bottom: 10px; overflow: visible !important; z-index: 1; }
 .date-picker-wrap.open { z-index: 999999 !important; }
 .date-picker-label { display: block; font-size: 0.8rem; color: #aaa; margin-bottom: 6px; }
@@ -938,6 +975,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .dp-today-btn { width: 100% !important; margin-top: 10px !important; padding: 8px !important; border: none !important; border-radius: 6px !important; background: #2a2a3e !important; color: #ff8906 !important; font-weight: bold !important; cursor: pointer !important; font-size: 0.85rem !important; }
 .dp-today-btn:hover { background: #333 !important; }
 
+/* ===== RESPONSYWNOŚĆ ===== */
 @media (max-width: 600px) {
   .app { padding: 12px; }
   
@@ -1133,6 +1171,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   }
 }
 
+/* ===== TOAST AKTUALIZACJI ===== */
 .toast-update {
   position: fixed;
   bottom: 80px;
@@ -1154,6 +1193,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   100% { opacity: 0; transform: translateX(-50%) translateY(-20px); }
 }
 
+/* ===== ZAKŁADKI ===== */
 .app-tabs {
   display: flex;
   gap: 8px;
@@ -1194,6 +1234,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .app-tab-icon { font-size: 1.2rem; line-height: 1; }
 .app-tab-label { font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em; }
 
+/* ===== SPECYFICZNE DLA DATE-PICKER ===== */
 .schedule-panel .date-picker-wrap {
   z-index: 999999 !important;
 }
@@ -1218,6 +1259,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   transform: translate(-50%, -50%) !important;
 }
 
+/* ===== MODUŁY ===== */
 .module-panel { margin-bottom: 24px; }
 
 .form-row-inline {
@@ -1273,6 +1315,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .shopping-card .icon-btn.delete:hover,
 .schedule-card .icon-btn.delete:hover { background: rgba(244, 67, 54, 0.15); }
 
+/* ===== TRYB EDYCJI ===== */
 .edit-mode {
   display: flex;
   gap: 8px;
@@ -1412,6 +1455,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
 .cancel-mini { background: #333; color: #fff; border-color: #444; }
 .cancel-mini:hover { background: #444; border-color: #555; box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4); }
 
+/* ===== PRZYCISKI NIEBEZPIECZNE ===== */
 .danger-btn {
   min-height: 44px;
   width: 100%;
@@ -1456,6 +1500,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   line-height: 1.45;
 }
 
+/* ===== PODSUMOWANIE ZAROBKÓW ===== */
 .earnings-summary {
   display: grid;
   grid-template-columns: repeat(4, 1fr);
@@ -1483,6 +1528,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   font-size: 0.95rem;
 }
 
+/* ===== WYBÓR GODZINY ===== */
 .time-picker {
   display: flex;
   flex-direction: column;
@@ -1536,6 +1582,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   padding: 0 4px;
 }
 
+/* ===== PRZYCISKI IMPORT/EXPORT ===== */
 .import-export-buttons {
   display: flex;
   gap: 8px;
@@ -1604,6 +1651,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   border-color: #ff8906;
 }
 
+/* ===== HISTORIA ===== */
 .history-panel, .history-detail-panel {
   background: #1a1a2e;
   border-radius: 12px;
@@ -1666,6 +1714,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   gap: 8px;
 }
 
+/* ===== STAWKI ===== */
 .rate-dropdown {
   flex: 0 0 auto;
   min-width: 160px;
@@ -1732,6 +1781,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   text-decoration: underline;
 }
 
+/* ===== STYLE DLA PANELU RODZINY ===== */
 .family-panel .add-task {
   background: #1a1a2e;
   border-radius: 12px;
@@ -1891,6 +1941,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   gap: 8px;
 }
 
+/* ===== DODATKOWE MEDIA QUERY ===== */
 @media (max-width: 600px) {
   
   .shopping-panel .form-row-inline {
@@ -1963,6 +2014,7 @@ body { font-family: 'Segoe UI', sans-serif; background: #0f0e17; color: #fffffe;
   }
 }
 
+/* ===== DODATKOWE STYLE DLA DATE-PICKER ===== */
 .date-picker-wrap {
   position: relative !important;
   z-index: 999999 !important;
