@@ -1,26 +1,40 @@
+// Importy React - hooki do zarządzania stanem, efektami, memoizacją i referencjami
 import { useState, useEffect, useMemo, useRef } from "react";
+// Axios do wykonywania zapytań HTTP do backendu
 import axios from "axios";
+// Główny plik stylów aplikacji
 import "./index.css";
-import DatePicker from "./DatePicker";
-import AppTabs, { readMainTab } from "./AppTabs";
-import ShoppingPanel from "./ShoppingPanel";
-import SchedulePanel from "./SchedulePanel";
-import EarningsPanel from "./EarningsPanel";
-import CategoriesPanel from "./CategoriesPanel";
-import RecurringPanel from "./RecurringPanel";
-import FamilyInvitationsBanner from "./FamilyInvitationsBanner";
-import FreeDayManager from "./FreeDayManager";
-import { getRecurringCategoriesForDate, toVirtualRecurringTasks } from "./recurringHelpers";
-import { useEditItem } from "./hooks/useEditItem";
-import { useWebSocket } from "./hooks/useWebSocket";
 
+// Importy komponentów - każdy odpowiada za jedną sekcję aplikacji
+import DatePicker from "./DatePicker"; // Komponent wyboru daty
+import AppTabs, { readMainTab } from "./AppTabs"; // Nawigacja między zakładkami
+import ShoppingPanel from "./ShoppingPanel"; // Lista zakupów
+import SchedulePanel from "./SchedulePanel"; // Plan zajęć
+import EarningsPanel from "./EarningsPanel"; // Zarobki z pracy
+import CategoriesPanel from "./CategoriesPanel"; // Ustawienia i kategorie
+import RecurringPanel from "./RecurringPanel"; // Cykliczne wydarzenia
+import FamilyInvitationsBanner from "./FamilyInvitationsBanner"; // Zaproszenia do rodziny
+import FreeDayManager from "./FreeDayManager"; // Zarządzanie dniami wolnymi
+
+// Importy helpersów - funkcje pomocnicze
+import { getRecurringCategoriesForDate, toVirtualRecurringTasks } from "./recurringHelpers";
+import { useEditItem } from "./hooks/useEditItem"; // Hook do edycji elementów
+import { useWebSocket } from "./hooks/useWebSocket"; // Hook do WebSocket
+
+// URL API backendu - pobieramy ze zmiennych środowiskowych lub używamy domyślnego localhost
 const API = import.meta.env.VITE_API_URL || "http://localhost:8000";
+// URL WebSocket - zamieniamy http na ws dla połączenia real-time
 const WS_URL = API.replace("https://", "wss://").replace("http://", "ws://") + "/ws";
 
+// Progi doświadczenia (EXP) potrzebne do osiągnięcia każdego poziomu
+// Każdy indeks odpowiada numerowi poziomu (indeks 0 = poziom 1)
 const DEFAULT_LEVEL_THRESHOLDS = [
   0, 80, 180, 320, 480, 660, 860, 1080, 1320, 1600, 1900, 2250, 2650, 3100, 3600,
   4150, 4750, 5400, 6100, 7000,
 ];
+
+// Informacje o poziomach: próg EXP, numer poziomu, tytuł
+// Używane do wyświetlania postępu gracza
 const DEFAULT_LEVELS_META = [
   { threshold: 0, level: 1, title: "Kadet" },
   { threshold: 80, level: 2, title: "Rekrut" },
@@ -43,15 +57,27 @@ const DEFAULT_LEVELS_META = [
   { threshold: 6100, level: 19, title: "W zasięgu" },
   { threshold: 7000, level: 20, title: "Legenda" },
 ];
+
+// Klucz do localStorage dla ustawień powiadomień
 const NOTIFICATIONS_PREF_KEY = "questdo-notifications-enabled";
+
+// EXP przyznawane za każdy poziom trudności zadania
 const EXP_MAP = { easy: 10, medium: 25, hard: 50 };
+
+// Etykiety dla czasu wykonania zadania (wcześnie/na czas/spóźnione)
+// Używane do wyświetlania informacji o bonusie/kary za termin
 const EXP_TIMING_LABELS = {
   early: { text: "Wcześnie +50%", className: "timing-early" },
   ontime: { text: "Na czas", className: "timing-ontime" },
   late: { text: "Spóźnione -50%", className: "timing-late" },
 };
+
+// Skróty dni tygodnia (do kalendarza)
 const WEEKDAYS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
+// Pełne nazwy dni tygodnia
 const WEEKDAYS_LONG = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"];
+
+// Opcje dla przypomnienia o zadaniach - ile dni przed terminem
 const REMINDER_OPTIONS = [
   { value: "", label: "Bez przypomnienia" },
   { value: "0", label: "W dniu zadania" },
@@ -60,14 +86,17 @@ const REMINDER_OPTIONS = [
   { value: "7", label: "Tydzień wcześniej" },
 ];
 
+// Klucze do cache'owania poziomów w localStorage
 const LEVELS_CACHE_KEY = "questdo-levels-cache";
-const LEVELS_CACHE_DURATION = 24 * 60 * 60 * 1000;
+const LEVELS_CACHE_DURATION = 24 * 60 * 60 * 1000; // 24 godziny
 
+// Pobiera levele z cache'u jeśli są świeże (nie starsze niż 24h)
 const getCachedLevels = () => {
   try {
     const cached = localStorage.getItem(LEVELS_CACHE_KEY);
     if (cached) {
       const { data, timestamp } = JSON.parse(cached);
+      // Sprawdzamy czy cache nie jest za stary
       if (Date.now() - timestamp < LEVELS_CACHE_DURATION) {
         return data;
       }
@@ -76,6 +105,7 @@ const getCachedLevels = () => {
   return null;
 };
 
+// Zapisuje levele do cache'u z aktualnym timestampem
 const setCachedLevels = (data) => {
   try {
     localStorage.setItem(LEVELS_CACHE_KEY, JSON.stringify({
@@ -85,24 +115,31 @@ const setCachedLevels = (data) => {
   } catch {}
 };
 
+// Oblicza podgląd EXP (ile będzie przyznane) na podstawie trudności i terminu
+// Używane do pokazania użytkownikowi ile EXP dostanie przed ukończeniem
 function getExpPreview(difficulty, dueDateStr) {
   const base = EXP_MAP[difficulty] || 10;
   const today = toDateStr(new Date());
+  // Jeśli termin w przyszłości - dostaniesz 50% bonusu
   if (today < dueDateStr) {
     return { amount: Math.max(1, Math.floor(base * 1.5)), timing: "early", base };
   }
+  // Jeśli po terminie - dostaniesz tylko 50% podstawy
   if (today > dueDateStr) {
     return { amount: Math.max(1, Math.floor(base * 0.5)), timing: "late", base };
   }
+  // W terminie - pełna nagroda
   return { amount: base, timing: "ontime", base };
 }
 
+// Zwraca odpowiedni sufiks do komunikatu o EXP (bonus lub kara)
 function expToastSuffix(timing) {
   if (timing === "early") return " 🌟 Wcześnie (+50%)";
   if (timing === "late") return " ⏰ Spóźnione (-50%)";
   return "";
 }
 
+// Lista wszystkich kategorii zadań z emotkami - używane w selectach
 const CATEGORIES = [
   { value: "Inne", emoji: "📦" },
   { value: "Studia", emoji: "📚" },
@@ -115,6 +152,7 @@ const CATEGORIES = [
   { value: "Zdrowie", emoji: "💊" },
 ];
 
+// Kategorie dla specjalnych eventów (urodziny, rocznice, święta, przypomnienia)
 const EVENT_CATEGORIES = [
   { value: "birthday", emoji: "🎂", label: "Urodziny" },
   { value: "anniversary", emoji: "💍", label: "Rocznica" },
@@ -122,6 +160,7 @@ const EVENT_CATEGORIES = [
   { value: "reminder", emoji: "🔔", label: "Przypomnienie" },
 ];
 
+// Opcje powtarzania dla eventów - co rok, miesiąc, tydzień lub brak cyklu
 const RECURRING_PATTERNS = [
   { value: "", label: "Brak cyklu" },
   { value: "yearly", label: "Co rok" },
@@ -129,6 +168,8 @@ const RECURRING_PATTERNS = [
   { value: "weekly", label: "Co tydzień" },
 ];
 
+// Konwertuje datę na string w formacie YYYY-MM-DD
+// Przyjmuje Date, string lub null
 function toDateStr(d) {
   if (!d) return new Date().toISOString().slice(0, 10);
   if (typeof d === "string") return d.slice(0, 10);
@@ -138,27 +179,33 @@ function toDateStr(d) {
   return `${y}-${m}-${day}`;
 }
 
+// Znajduje emotkę dla kategorii zadania
 function getCategoryEmoji(cat) {
   return CATEGORIES.find((c) => c.value === cat)?.emoji || "📦";
 }
 
+// Znajduje emotkę dla kategorii eventu
 function getEventCategoryEmoji(cat) {
   return EVENT_CATEGORIES.find((c) => c.value === cat)?.emoji || "📅";
 }
 
+// Znajduje etykietę dla kategorii eventu
 function getEventCategoryLabel(cat) {
   return EVENT_CATEGORIES.find((c) => c.value === cat)?.label || "Inne";
 }
 
+// Znajduje etykietę dla opcji przypomnienia na podstawie wartości
 function getReminderLabel(value) {
   const normalized = value === null || value === undefined ? "" : String(value);
   return REMINDER_OPTIONS.find((o) => o.value === normalized)?.label || "Przypomnienie";
 }
 
+// Konwertuje wartość z formularza na numer lub null (dla przypomnień)
 function parseReminderValue(value) {
   return value === "" ? null : Number(value);
 }
 
+// Formatuje datę dla wyświetlenia w historii (DD.MM.YYYY)
 function formatHistoryDate(value) {
   if (!value) return "";
   const normalized = String(value).replace(" ", "T");
@@ -167,13 +214,18 @@ function formatHistoryDate(value) {
   return `${String(d.getDate()).padStart(2, "0")}.${String(d.getMonth() + 1).padStart(2, "0")}.${d.getFullYear()}`;
 }
 
+// Sortuje zadania: najpierw nieukończone, potem po dacie terminu
 function sortTasks(tasks) {
   return [...tasks].sort((a, b) => {
+    // Najpierw sortujemy po statusie (nieukończone na górze)
     if (a.completed !== b.completed) return a.completed ? 1 : -1;
+    // Potem po dacie terminu (najbliższe na górze)
     return new Date(a.due_date) - new Date(b.due_date);
   });
 }
 
+// Oblicza poziom, tytuł i postęp na podstawie EXP
+// Zwraca obiekt z poziomem, tytułem i procentem postępu do następnego poziomu
 function getGamificationFromExp(exp, levelsMeta = DEFAULT_LEVELS_META, thresholds = DEFAULT_LEVEL_THRESHOLDS) {
   const meta = levelsMeta?.length ? levelsMeta : DEFAULT_LEVELS_META;
   const thresh = thresholds?.length ? thresholds : DEFAULT_LEVEL_THRESHOLDS;
@@ -182,11 +234,14 @@ function getGamificationFromExp(exp, levelsMeta = DEFAULT_LEVELS_META, threshold
   let currentLevelThreshold = meta[0]?.threshold ?? 0;
   let nextLevelExp = null;
   let nextLevelTitle = null;
+  
+  // Znajdujemy obecny poziom na podstawie EXP (idziemy od najwyższego)
   for (let i = meta.length - 1; i >= 0; i--) {
     if (exp >= meta[i].threshold) {
       level = meta[i].level;
       title = meta[i].title;
       currentLevelThreshold = meta[i].threshold;
+      // Szukamy następnego poziomu
       if (meta[i + 1]) {
         nextLevelExp = meta[i + 1].threshold;
         nextLevelTitle = meta[i + 1].title;
@@ -194,9 +249,11 @@ function getGamificationFromExp(exp, levelsMeta = DEFAULT_LEVELS_META, threshold
       break;
     }
   }
+  
+  // Obliczamy postęp do następnego poziomu (w procentach)
   let progress;
   if (!nextLevelExp) {
-    progress = 100;
+    progress = 100; // Osiągnięto maksymalny poziom
   } else {
     const expInLevel = exp - currentLevelThreshold;
     const expNeeded = nextLevelExp - currentLevelThreshold;
@@ -205,23 +262,24 @@ function getGamificationFromExp(exp, levelsMeta = DEFAULT_LEVELS_META, threshold
   return { level, title, next_level_exp: nextLevelExp, next_level_title: nextLevelTitle, progress };
 }
 
+// Sprawdza czy użytkownik zezwolił na powiadomienia (z localStorage i API)
 function readNotificationsPreference() {
   try {
+    // Jeśli w localStorage jest zapisane "0" - wyłączone
     if (localStorage.getItem(NOTIFICATIONS_PREF_KEY) === "0") return false;
-  } catch {
-
-  }
+  } catch {}
+  // Domyślnie sprawdzamy czy przeglądarka ma przyznane uprawnienia
   return "Notification" in window && Notification.permission === "granted";
 }
 
+// Zapisuje preferencje powiadomień do localStorage
 function writeNotificationsPreference(enabled) {
   try {
     localStorage.setItem(NOTIFICATIONS_PREF_KEY, enabled ? "1" : "0");
-  } catch {
-
-  }
+  } catch {}
 }
 
+// Komponent wyświetlający toasty (komunikaty na dole ekranu)
 function Toast({ toasts }) {
   return (
     <div className="toast-stack">
@@ -234,6 +292,7 @@ function Toast({ toasts }) {
   );
 }
 
+// Komponent ładowania - wyświetla spinner i opcjonalną etykietę
 function LoadingSpinner({ label = "Ładowanie…" }) {
   return (
     <div className="loading-state" role="status" aria-live="polite">
@@ -243,6 +302,7 @@ function LoadingSpinner({ label = "Ładowanie…" }) {
   );
 }
 
+// Sprawdza czy można odznaczyć zadanie (czy minęło mniej niż 24h od ukończenia)
 function canUncheckTask(task) {
   if (!task.completed || !task.completed_at) return false;
   const completedAt = new Date(task.completed_at);
@@ -250,10 +310,13 @@ function canUncheckTask(task) {
   return hoursSinceCompletion < 24;
 }
 
+// Zwraca stan checkboxa zadania (klasy, tytuł, czy zablokowany)
 function getTaskCheckState(task) {
+  // Zadanie nieukończone
   if (!task.completed) {
     return { className: "", title: "Oznacz jako ukończone", disabled: false, showUncheckBadge: false };
   }
+  // Zadanie ukończone - można odznaczyć (mniej niż 24h)
   if (canUncheckTask(task)) {
     return {
       className: "checked uncheckable",
@@ -262,6 +325,7 @@ function getTaskCheckState(task) {
       showUncheckBadge: true,
     };
   }
+  // Zadanie ukończone - zablokowane (więcej niż 24h)
   return {
     className: "checked locked",
     title: "Nie można odznaczyć (minęło więcej niż 24h)",
@@ -270,9 +334,11 @@ function getTaskCheckState(task) {
   };
 }
 
+// Stałe dla przypomnień - godzina 9:00 i okno 24h na wysłanie
 const REMINDER_HOUR = 9;
 const REMINDER_GRACE_MS = 24 * 60 * 60 * 1000;
 
+// Oblicza kiedy ma być wysłane przypomnienie dla zadania
 function getReminderFireTime(task) {
   if (task.reminder_offset_days === null || task.reminder_offset_days === undefined) return null;
   const offset = Number(task.reminder_offset_days);
@@ -280,28 +346,33 @@ function getReminderFireTime(task) {
   const parts = String(task.due_date).slice(0, 10).split("-").map(Number);
   if (parts.length !== 3) return null;
   const [year, month, day] = parts;
+  // Ustawiamy na 9:00 rano w dniu przypomnienia
   const dueAtNine = new Date(year, month - 1, day, REMINDER_HOUR, 0, 0, 0);
   const fireAt = new Date(dueAtNine);
   fireAt.setDate(fireAt.getDate() - offset);
   return fireAt;
 }
 
+// Klucz do localStorage dla wysłanych przypomnień (unikamy duplikatów)
 function getReminderStorageKey(task) {
   const fireAt = getReminderFireTime(task);
   const fireDay = fireAt ? toDateStr(fireAt) : "unknown";
   return `questdo-reminded-${task.id}-${task.due_date}-${task.reminder_offset_days}-${fireDay}`;
 }
 
+// Sprawdza czy jesteśmy w oknie czasowym na wysłanie przypomnienia
 function isWithinReminderGracePeriod(fireTimeMs, nowMs = Date.now()) {
   return nowMs >= fireTimeMs && nowMs < fireTimeMs + REMINDER_GRACE_MS;
 }
 
+// Buduje treść powiadomienia (dla ważnych zadań dodaje "Ważny quest")
 function buildReminderBody(task) {
   return task.important
     ? `Ważny quest: „${task.title}" · termin ${task.due_date}`
     : `Przypomnienie: zadanie „${task.title}" ma termin ${task.due_date}`;
 }
 
+// Wysyła przypomnienie dla zadania (zapisuje w localStorage że wysłane)
 async function fireTaskReminder(task) {
   const storageKey = getReminderStorageKey(task);
   if (localStorage.getItem(storageKey)) return false;
@@ -313,6 +384,7 @@ async function fireTaskReminder(task) {
   return true;
 }
 
+// Przetwarza wszystkie zadania i wysyła pominięte przypomnienia
 async function processMissedTaskReminders(tasks) {
   if (!readNotificationsPreference()) return;
   if (!("Notification" in window) || Notification.permission !== "granted") return;
@@ -327,6 +399,7 @@ async function processMissedTaskReminders(tasks) {
   }
 }
 
+// Planuje przypomnienia dla zadań (ustawia setTimeout)
 function scheduleTaskReminders(tasks) {
   if (!readNotificationsPreference()) return [];
   const timers = [];
@@ -339,13 +412,15 @@ function scheduleTaskReminders(tasks) {
     const storageKey = getReminderStorageKey(task);
     if (localStorage.getItem(storageKey)) return;
 
+    // Jeśli czas przypomnienia w przyszłości - ustawiamy timeout
     if (fireTime > now) {
       const delay = fireTime - now;
-      if (delay > 0 && delay <= 2147483647) {
+      if (delay > 0 && delay <= 2147483647) { // max dla setTimeout
         timers.push(setTimeout(() => { fireTaskReminder(task); }, delay));
       }
       return;
     }
+    // Jeśli w oknie czasowym - wysyłamy od razu
     if (isWithinReminderGracePeriod(fireTime, now)) {
       fireTaskReminder(task);
     }
@@ -353,6 +428,7 @@ function scheduleTaskReminders(tasks) {
   return timers;
 }
 
+// Konwertuje base64 na Uint8Array (dla kluczy VAPID push)
 function urlBase64ToUint8Array(base64String) {
   const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
   const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
@@ -360,13 +436,16 @@ function urlBase64ToUint8Array(base64String) {
   return Uint8Array.from([...rawData], (char) => char.charCodeAt(0));
 }
 
+// Sprawdza czy aplikacja działa w trybie standalone PWA
 function isStandalonePwa() {
   return window.matchMedia("(display-mode: standalone)").matches || window.navigator.standalone === true;
 }
 
+// Subskrybuje powiadomienia push (wymaga Service Worker)
 async function subscribeToWebPush(authHeaders) {
   if (!("serviceWorker" in navigator) || !("PushManager" in window)) return { ok: false, reason: "unsupported" };
   try {
+    // Pobieramy publiczny klucz VAPID z backendu
     const { data } = await axios.get(`${API}/push/vapid-public-key`, { headers: authHeaders });
     if (!data?.publicKey) return { ok: false, reason: "server" };
     const reg = await navigator.serviceWorker.ready;
@@ -377,6 +456,7 @@ async function subscribeToWebPush(authHeaders) {
         applicationServerKey: urlBase64ToUint8Array(data.publicKey),
       });
     }
+    // Zapisujemy subskrypcję w backendzie
     await axios.post(`${API}/push/subscribe`, sub.toJSON(), { headers: authHeaders });
     return { ok: true, reason: "subscribed" };
   } catch (err) {
@@ -384,24 +464,25 @@ async function subscribeToWebPush(authHeaders) {
   }
 }
 
+// Anuluje subskrypcję powiadomień push
 async function unsubscribeFromWebPush(authHeaders) {
   try {
     await axios.delete(`${API}/push/subscribe`, { headers: authHeaders });
-  } catch (err) {
-  }
+  } catch (err) {}
   try {
     if ("serviceWorker" in navigator) {
       const reg = await navigator.serviceWorker.ready;
       const sub = await reg.pushManager.getSubscription();
       if (sub) await sub.unsubscribe();
     }
-  } catch (err) {
-  }
+  } catch (err) {}
 }
 
+// Klucze do localStorage dla hintu instalacji PWA
 const PWA_HINT_DISMISSED_KEY = "questdo-pwa-hint-dismissed";
 const PWA_HINT_COLLAPSED_KEY = "questdo-pwa-hint-collapsed";
 
+// Czyta czy hint PWA został odrzucony na stałe
 function readPwaHintDismissed() {
   try {
     return localStorage.getItem(PWA_HINT_DISMISSED_KEY) === "1";
@@ -410,6 +491,7 @@ function readPwaHintDismissed() {
   }
 }
 
+// Czyta czy hint PWA jest zwinięty
 function readPwaHintCollapsed() {
   try {
     return localStorage.getItem(PWA_HINT_COLLAPSED_KEY) === "true";
@@ -418,12 +500,14 @@ function readPwaHintCollapsed() {
   }
 }
 
+// Prosi o pozwolenie na powiadomienia (jeśli jeszcze nie ma)
 async function ensureNotificationPermission() {
   if (!("Notification" in window)) return "unsupported";
   if (Notification.permission === "default") return Notification.requestPermission();
   return Notification.permission;
 }
 
+// Wyświetla powiadomienie (przez Service Worker lub standardowe Notification)
 async function showAppNotification(body, options = {}) {
   if (!readNotificationsPreference()) return false;
   if (!("Notification" in window) || Notification.permission !== "granted") return false;
@@ -434,6 +518,7 @@ async function showAppNotification(body, options = {}) {
     tag: options.tag,
     data: options.data || { url: "/" },
   };
+  // Próbujemy przez Service Worker (działa w tle)
   if ("serviceWorker" in navigator) {
     const reg = await navigator.serviceWorker.getRegistration();
     if (reg?.showNotification) {
@@ -441,25 +526,30 @@ async function showAppNotification(body, options = {}) {
       return true;
     }
   }
+  // Fallback - standardowe powiadomienie
   new Notification(NOTIFICATION_TITLE, notificationOptions);
   return true;
 }
 
+// Przeładowuje stronę dla nowego Service Worker
 function reloadForNewServiceWorker() {
   if (sessionStorage.getItem("questdo-sw-reloading") === "1") return;
   sessionStorage.setItem("questdo-sw-reloading", "1");
   window.location.reload();
 }
 
+// Rejestruje Service Worker i nasłuchuje na aktualizacje
 async function registerServiceWorkerForUpdates() {
   if (!("serviceWorker" in navigator)) return undefined;
 
   let refreshing = false;
+  // Gdy controller się zmienia - przeładowujemy
   const onControllerChange = () => {
     if (refreshing) return;
     refreshing = true;
     reloadForNewServiceWorker();
   };
+  // Na wiadomość od SW - przeładowujemy
   const onMessage = (event) => {
     if (event.data?.type === "QUESTDO_SW_ACTIVATED" && navigator.serviceWorker.controller) {
       reloadForNewServiceWorker();
@@ -469,15 +559,18 @@ async function registerServiceWorkerForUpdates() {
   navigator.serviceWorker.addEventListener("controllerchange", onControllerChange);
   navigator.serviceWorker.addEventListener("message", onMessage);
 
+  // Rejestrujemy SW z wersją (pomija cache przy aktualizacji)
   const registration = await navigator.serviceWorker.register("/sw.js?v=questdo-v8", { updateViaCache: "none" });
   sessionStorage.removeItem("questdo-sw-reloading");
 
+  // Aktywuje czekającego workera
   const activateWaitingWorker = () => {
     if (registration.waiting && navigator.serviceWorker.controller) {
       registration.waiting.postMessage({ type: "QUESTDO_SKIP_WAITING" });
     }
   };
 
+  // Gdy znajdzie aktualizację - aktywujemy
   registration.addEventListener("updatefound", () => {
     const worker = registration.installing;
     if (!worker) return;
@@ -491,10 +584,12 @@ async function registerServiceWorkerForUpdates() {
   activateWaitingWorker();
   registration.update().catch(() => {});
 
+  // Co 5 minut sprawdzamy aktualizacje
   const interval = window.setInterval(() => {
     registration.update().catch(() => {});
   }, 5 * 60 * 1000);
 
+  // Gdy strona wraca na pierwszy plan - sprawdzamy aktualizacje
   const onVisibilityChange = () => {
     if (document.visibilityState === "visible") {
       registration.update().catch(() => {});
@@ -502,6 +597,7 @@ async function registerServiceWorkerForUpdates() {
   };
   document.addEventListener("visibilitychange", onVisibilityChange);
 
+  // Czyszczenie przy odmontowaniu
   return () => {
     window.clearInterval(interval);
     document.removeEventListener("visibilitychange", onVisibilityChange);
@@ -510,17 +606,20 @@ async function registerServiceWorkerForUpdates() {
   };
 }
 
+// Komponent logowania/rejestracji
 function Auth({ onLogin }) {
-  const [isRegister, setIsRegister] = useState(false);
+  const [isRegister, setIsRegister] = useState(false); // Czy tryb rejestracji
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
-  const [showPassword, setShowPassword] = useState(false);
+  const [showPassword, setShowPassword] = useState(false); // Czy pokazywać hasło
   const [error, setError] = useState("");
 
+  // Obsługa submit formularza
   const submit = async () => {
     setError("");
     const cleanUsername = username.trim();
     const cleanPassword = password.trim();
+    // Walidacja
     if (!cleanUsername) {
       setError("Nazwa użytkownika jest wymagana");
       return;
@@ -534,13 +633,16 @@ function Auth({ onLogin }) {
       return;
     }
     try {
+      // Jeśli rejestracja - najpierw rejestrujemy
       if (isRegister) {
         await axios.post(`${API}/register`, { username: cleanUsername, password: cleanPassword });
       }
+      // Logowanie - wysyłamy formularz OAuth2
       const form = new URLSearchParams();
       form.append("username", cleanUsername);
       form.append("password", cleanPassword);
       const res = await axios.post(`${API}/token`, form);
+      // Zapisujemy token i informujemy rodzica
       localStorage.setItem("token", res.data.access_token);
       onLogin();
     } catch (e) {
@@ -575,48 +677,52 @@ function Auth({ onLogin }) {
   );
 }
 
+// Klucze do localStorage dla zwijania kalendarza i wyzwań
 const CALENDAR_COLLAPSED_KEY = "questdo-calendar-collapsed";
 const CHALLENGES_COLLAPSED_KEY = "questdo-challenges-collapsed";
 const NOTIFICATION_ICON = "/notification-icon.svg";
 const NOTIFICATION_TITLE = "QuestDo";
 
+// Czyta preferencję zwinięcia wyzwań z localStorage
 function readChallengesCollapsedPreference() {
   try {
     const saved = localStorage.getItem(CHALLENGES_COLLAPSED_KEY);
     if (saved !== null) return saved === "true";
-  } catch {
-
-  }
+  } catch {}
   return false;
 }
 
+// Czyta preferencję zwinięcia kalendarza z localStorage (domyślnie zwinięty)
 function readCalendarCollapsedPreference() {
   try {
     const saved = localStorage.getItem(CALENDAR_COLLAPSED_KEY);
     if (saved !== null) return saved === "true";
-  } catch {
-
-  }
+  } catch {}
   return true;
 }
 
+// Komponent Kalendarza - wyświetla zadania w widoku miesiąca, tygodnia lub dnia
 function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onTaskToggle, onTaskDelete, freeDays = [], onFreeDayChange, headers }) {
   const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
-  const [view, setView] = useState("month");
+  const [view, setView] = useState("month"); // month, week, day
   const [collapsed, setCollapsed] = useState(readCalendarCollapsedPreference);
   const selectedStr = toDateStr(selectedDate);
   const selectedDateObj = selectedDate instanceof Date ? selectedDate : new Date(selectedStr + "T12:00:00");
 
+  // Znajduje typ dnia wolnego dla danej daty (holiday, deans_day, rector_day)
   const getFreeDayType = (dateStr) => {
     const freeDay = freeDays.find(fd => fd.date === dateStr);
     return freeDay ? freeDay.day_type : null;
   };
 
+  // Pobiera zadania dla danej daty (zwykłe + wirtualne z recurring)
   const getTasksForDate = (dateStr) => {
     const dayTasks = tasks.filter((t) => t.due_date === dateStr);
     const virtual = toVirtualRecurringTasks(recurringEvents, dateStr, dayTasks);
     return [...dayTasks, ...virtual];
   };
+  
+  // Oblicza statystyki dla dnia (ile questów, ile ukończonych, eventy)
   const taskStats = (dateStr) => {
     const dayTasks = tasks.filter((t) => t.due_date === dateStr);
     const quests = dayTasks.filter((t) => t.task_type !== "event");
@@ -630,29 +736,31 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
     };
   };
 
+  // Wybiera dzień - aktualizuje stan i przesuwa kursor
   const selectDay = (dateStr) => {
     onDateSelect(dateStr);
     setCursor(new Date(dateStr + "T12:00:00"));
   };
 
+  // Przechodzi do dzisiejszego dnia
   const goToday = () => {
     const today = new Date();
     setCursor(today);
     onDateSelect(toDateStr(today));
   };
 
+  // Przełącza zwinięcie kalendarza
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       const next = !prev;
       try {
         localStorage.setItem(CALENDAR_COLLAPSED_KEY, String(next));
-      } catch {
-
-      }
+      } catch {}
       return next;
     });
   };
 
+  // Przesuwa widok o delta (miesiąc, tydzień lub dzień)
   const shift = (delta) => {
     if (view === "month") setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1, 12, 0, 0));
     if (view === "week") {
@@ -667,13 +775,16 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
     }
   };
 
+  // Renderuje widok miesiąca - siatka dni z badge'ami
   const renderMonthView = () => {
     const year = cursor.getFullYear();
     const month = cursor.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
     const days = [];
+    // Puste dni przed pierwszym dniem miesiąca
     for (let i = 0; i < firstWeekday; i++) days.push(<div key={`empty-${i}`} className="calendar-day empty" />);
+    // Dni miesiąca
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = toDateStr(new Date(year, month, day, 12, 0, 0));
       const stats = taskStats(dateStr);
@@ -683,9 +794,11 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
       days.push(
         <button key={dateStr} type="button" className={`calendar-day ${isSelected ? "selected" : ""} ${isToday ? "today" : ""} ${freeDayType ? `free-day free-day-${freeDayType}` : ""}`} onClick={() => selectDay(dateStr)}>
           <span className="day-number">{day}</span>
+          {/* Ikony dni wolnych */}
           {freeDayType === "holiday" && <span className="free-day-icon">🎉</span>}
           {freeDayType === "deans_day" && <span className="free-day-icon">🎓</span>}
           {freeDayType === "rector_day" && <span className="free-day-icon">🏛️</span>}
+          {/* Ikony eventów na ten dzień */}
           {stats.eventCategories.length > 0 && (
             <div className="day-event-icons">
               {stats.eventCategories.slice(0, 3).map((cat, idx) => (
@@ -694,6 +807,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
               {stats.eventCategories.length > 3 && <span className="event-icon-more">+</span>}
             </div>
           )}
+          {/* Badge z ilością zadań */}
           {stats.total > 0 && <span className={`day-badge ${stats.done === stats.total ? "done" : ""}`}>{stats.done}/{stats.total}</span>}
         </button>
       );
@@ -701,6 +815,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
     return days;
   };
 
+  // Renderuje widok tygodnia - 7 kolumn z zadaniami
   const renderWeekView = () => {
     const startOfWeek = new Date(selectedDateObj);
     const mondayIndex = (selectedDateObj.getDay() + 6) % 7;
@@ -720,10 +835,12 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
           <div className={`week-day-header ${isToday ? "today" : ""}`}>
             <span>{WEEKDAYS_LONG[i]}</span>
             <strong>{d.getDate()}</strong>
+            {/* Ikony dni wolnych */}
             {freeDayType === "holiday" && <span className="week-free-icon">🎉</span>}
             {freeDayType === "deans_day" && <span className="week-free-icon">🎓</span>}
             {freeDayType === "rector_day" && <span className="week-free-icon">🏛️</span>}
             <div className="week-day-stats">
+              {/* Ikony eventów */}
               {stats.eventCategories.length > 0 && (
                 <div className="week-event-icons">
                   {stats.eventCategories.slice(0, 2).map((cat, idx) => (
@@ -735,6 +852,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
               <em>{stats.total ? `${stats.done}/${stats.total}` : "0"}</em>
             </div>
           </div>
+          {/* Lista zadań na dany dzień (max 4) */}
           <div className="week-day-tasks">
             {dayTasks.length === 0 && <span className="week-empty">Brak questów</span>}
             {dayTasks.slice(0, 4).map(task => (
@@ -751,6 +869,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
     return days;
   };
 
+  // Renderuje widok dnia - lista zadań z opisami
   const renderDayView = () => {
     const dayTasks = getTasksForDate(selectedStr);
     const freeDayType = getFreeDayType(selectedStr);
@@ -768,6 +887,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
           const isVirtual = task.isRecurringVirtual;
           return (
             <div key={task.id} className={`day-task ${task.completed ? "completed" : ""} ${isEvent ? "event" : ""}`}>
+              {/* Checkbox dla questów */}
               {!isEvent && (task.completed ? <div className="task-check checked locked">✓</div> : (
                 <button type="button" className="task-check" onClick={() => onTaskToggle(task)} />
               ))}
@@ -791,6 +911,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
     );
   };
 
+  // Tytuł dla danego widoku (miesiąc, tydzień, dzień)
   const weekTitle = (() => {
     const start = new Date(selectedDateObj);
     start.setDate(selectedDateObj.getDate() - ((selectedDateObj.getDay() + 6) % 7));
@@ -804,6 +925,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
       ? weekTitle
       : selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" });
 
+  // Meta informacja o wybranym dniu
   const selectedDayStats = taskStats(selectedStr);
   const selectedDayLabel = selectedDateObj.toLocaleDateString("pl-PL", {
     weekday: "short",
@@ -876,6 +998,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
   );
 }
 
+// Komponent podsumowania gracza - avatar, poziom, EXP, seria
 function PlayerSummary({ user, progress }) {
   return (
     <div className="profile-card profile-card--top">
@@ -897,12 +1020,14 @@ function PlayerSummary({ user, progress }) {
   );
 }
 
+// Komponent wyzwań dziennych - pokazuje postęp w 3 wyzwaniach
 function ChallengesBar({ challenges }) {
   const [collapsed, setCollapsed] = useState(readChallengesCollapsedPreference);
   if (!challenges?.goals?.length) return null;
   const bonusExp = challenges.triple_bonus_exp || 35;
   const completedGoals = challenges.goals.filter((g) => g.done || g.current >= g.target).length;
 
+  // Generuje opis wyzwania jeśli nie ma go w danych
   const getChallengeDescription = (goal) => {
     if (goal.description) return goal.description;
     const label = goal.label;
@@ -923,14 +1048,13 @@ function ChallengesBar({ challenges }) {
     return descMap[label] || `Ukończ ${target} ${target === 1 ? 'zadanie' : 'zadania'}`;
   };
 
+  // Przełącza zwinięcie wyzwań
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       const next = !prev;
       try {
         localStorage.setItem(CHALLENGES_COLLAPSED_KEY, String(next));
-      } catch {
-
-      }
+      } catch {}
       return next;
     });
   };
@@ -978,6 +1102,7 @@ function ChallengesBar({ challenges }) {
   );
 }
 
+// Komponent rankingu - pokazuje top graczy w różnych kategoriach
 function LeaderboardPanel({ currentUser }) {
   const [open, setOpen] = useState(false);
   const [rankType, setRankType] = useState("exp");
@@ -985,6 +1110,7 @@ function LeaderboardPanel({ currentUser }) {
   const [rankingLoading, setRankingLoading] = useState(false);
   const [rankingLoaded, setRankingLoaded] = useState(false);
 
+  // Kategorie rankingów
   const categories = [
     { id: "exp", label: "🏆 EXP" },
     { id: "streak", label: "🔥 Seria" },
@@ -994,6 +1120,7 @@ function LeaderboardPanel({ currentUser }) {
     { id: "completed", label: "✅ Ukończone" },
   ];
 
+  // Normalizuje dane z API do spójnego formatu
   const normalizeRankings = (data) => ({
     exp: data?.exp || [],
     streak: data?.streak || [],
@@ -1003,6 +1130,7 @@ function LeaderboardPanel({ currentUser }) {
     completed: data?.completed || data?.completed_tasks || [],
   });
 
+  // Pobiera wszystkie rankingi z API
   const fetchAllRankings = async () => {
     setRankingLoading(true);
     try {
@@ -1015,6 +1143,7 @@ function LeaderboardPanel({ currentUser }) {
     setRankingLoading(false);
   };
 
+  // Ładuje rankingi przy starcie
   useEffect(() => {
     fetchAllRankings();
   }, []);
@@ -1022,6 +1151,7 @@ function LeaderboardPanel({ currentUser }) {
   const currentRanking = allRankings[rankType] || [];
   const currentCategory = categories.find((cat) => cat.id === rankType);
 
+  // Przełącza otwarcie panelu rankingów
   const toggleOpen = () => {
     if (!open && !rankingLoaded && !rankingLoading) {
       fetchAllRankings();
@@ -1029,8 +1159,10 @@ function LeaderboardPanel({ currentUser }) {
     setOpen(!open);
   };
 
+  // Zmienia kategorię rankingu
   const handleCategoryChange = (type) => setRankType(type);
 
+  // Odświeża rankingi co 5 minut gdy panel otwarty
   useEffect(() => {
     if (!open) return;
     const interval = setInterval(() => {
@@ -1076,12 +1208,14 @@ function LeaderboardPanel({ currentUser }) {
   );
 }
 
+// Komponent panelu zadań dla wybranego dnia
 function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, onDelete, onSave, onToast, onUncheck, loadingTaskIds, deletingTaskIds, api, headers, onRefresh, freeDays = [] }) {
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
   const [copyModal, setCopyModal] = useState(null);
 
+  // Zapisuje edytowane zadanie
   const saveItem = async (id, form) => {
     if (!form.title?.trim()) { onToast("Tytuł jest wymagany"); return; }
     try {
@@ -1101,8 +1235,10 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
     } catch (e) { onToast(e.response?.data?.detail || "Błąd zapisu"); }
   };
 
+  // Hook do edycji
   const { editingId, editForm, setEditForm, startEdit, cancelEdit, saveEdit } = useEditItem(saveItem);
 
+  // Obsługa kliknięcia checkboxa - toggle lub uncheck
   const handleToggleClick = (task) => {
     if (task.completed) {
       if (canUncheckTask(task) && onUncheck) {
@@ -1115,6 +1251,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
     }
   };
 
+  // Rozpoczyna edycję zadania (tylko jeśli nieukończone)
   const startEditItem = (task) => {
     if (task.completed) return;
     startEdit(task, {
@@ -1132,6 +1269,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
     });
   };
 
+  // Kopiuje zadanie na inny dzień
   const copyTask = async (taskId, targetDate) => {
     const original = tasks.find(t => t.id === taskId);
     if (!original) return;
@@ -1159,6 +1297,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
     }
   };
 
+  // Przygotowanie danych dla wybranego dnia
   const dateStr = toDateStr(selectedDate);
   const dateLabel = new Date(dateStr + "T12:00:00").toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
@@ -1169,6 +1308,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
   );
   const allTasksForDay = useMemo(() => [...baseDayTasks, ...virtualRecurring], [baseDayTasks, virtualRecurring]);
 
+  // Filtrowanie zadań według filtrów i wyszukiwania
   const dayTasks = useMemo(() => {
     let list = allTasksForDay;
     if (filter === "done") list = list.filter((t) => t.completed);
@@ -1189,6 +1329,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
     return list;
   }, [allTasksForDay, filter, search, typeFilter]);
 
+  // Statystyki
   const allDay = allTasksForDay;
   const doneCount = baseDayTasks.filter((t) => t.completed).length;
   const questCount = baseDayTasks.filter((t) => t.task_type !== "event").length;
@@ -1211,17 +1352,24 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
         </h3>
       </div>
 
+      {/* Filtry statusu */}
       <div className="filter-group">
         {["all", "active", "done"].map(f => <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "all" ? "Wszystkie" : f === "active" ? "Aktywne" : "Ukończone"}</button>)}
       </div>
 
+      {/* Filtry typu */}
       <div className="filter-group" style={{ marginTop: '8px' }}>
         {["all", "quest", "event"].map(f => <button key={f} className={`filter-btn ${typeFilter === f ? "active" : ""}`} onClick={() => setTypeFilter(f)}>{f === "all" ? "Wszystkie typy" : f === "quest" ? "⚔️ Questy" : "📅 Wydarzenia"}</button>)}
       </div>
       <input className="search-input" style={{ marginTop: '12px' }} type="search" placeholder="🔍 Szukaj questa..." value={search} onChange={(e) => setSearch(e.target.value)} />
+      
+      {/* Pasek postępu */}
       {questCount > 0 && (<div className="progress-wrap"><div className="progress-bar"><div className="progress-fill" style={{ width: `${percent}%` }} /></div><span>{percent}% ukończone ({doneCount}/{questCount})</span></div>)}
       <div className="stats-counter"><span>Wszystkich: <strong>{allDay.length}</strong></span><span>Ukończonych: <strong>{doneCount}</strong></span><span>Pozostało: <strong>{questCount - doneCount}</strong></span></div>
+      
       {dayTasks.length === 0 && <div className="empty">{allDay.length ? "Brak questów pasujących do filtrów." : "Brak questów na ten dzień. Dodaj pierwszy! ⚔️"}</div>}
+      
+      {/* Modal kopiowania */}
       {copyModal && (
         <div className="add-task">
           <h3>📋 Kopiuj quest</h3>
@@ -1232,6 +1380,8 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
           </div>
         </div>
       )}
+      
+      {/* Lista zadań */}
       {dayTasks.map((task) => {
         const checkState = getTaskCheckState(task);
         const isEvent = task.task_type === "event";
@@ -1240,6 +1390,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
         return (
         <div key={task.id} className={`task-card ${isEvent ? "event" : task.difficulty} ${task.completed ? "done" : ""} ${checkState.showUncheckBadge ? "can-uncheck" : ""}`}>
           {editing && !isVirtual ? (
+            // Tryb edycji
             <div className="edit-mode">
               <input value={editForm.title || ""} onChange={(e) => setEditForm({ ...editForm, title: e.target.value })} placeholder="Nazwa zadania" />
               <textarea value={editForm.description || ""} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} placeholder="Opis (opcjonalnie)" rows="2" />
@@ -1286,6 +1437,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
               </div>
             </div>
           ) : (
+            // Widok normalny
             <>
               {!isEvent && (
                 <button
@@ -1333,11 +1485,14 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
   );
 }
 
+// Panel administratora - tylko dla użytkownika "Igor"
 function AdminPanel({ isOpen, onClose, headers, onRefreshAppData, onShowToast }) {
   const [users, setUsers] = useState([]);
   const [stats, setStats] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  
+  // Pobiera dane admina (użytkownicy i statystyki)
   const fetchData = async () => {
     setLoading(true);
     setError(null);
@@ -1354,6 +1509,7 @@ function AdminPanel({ isOpen, onClose, headers, onRefreshAppData, onShowToast })
     setLoading(false);
   };
 
+  // Usuwa użytkownika
   const deleteUser = async (userId, username) => {
     if (!window.confirm(`Na pewno usunąć użytkownika "${username}"? Ta operacja jest nieodwracalna.`)) return;
     try {
@@ -1364,6 +1520,7 @@ function AdminPanel({ isOpen, onClose, headers, onRefreshAppData, onShowToast })
     }
   };
 
+  // Resetuje postęp wszystkich użytkowników
   const resetAllProgress = async () => {
     const confirmMsg = "Zresetować WSZYSTKO (osiągnięcia, znajdźki, serie, EXP i historię) dla wszystkich użytkowników? Ta operacja jest nieodwracalna.";
     if (!window.confirm(confirmMsg)) return;
@@ -1377,8 +1534,10 @@ function AdminPanel({ isOpen, onClose, headers, onRefreshAppData, onShowToast })
     }
   };
 
+  // Ładuje dane gdy panel otwarty
   useEffect(() => { if (isOpen) fetchData(); }, [isOpen]);
 
+  // Odświeża dane co 5 minut gdy panel otwarty
   useEffect(() => {
     if (!isOpen) return;
     const interval = setInterval(() => {
@@ -1436,11 +1595,13 @@ function AdminPanel({ isOpen, onClose, headers, onRefreshAppData, onShowToast })
   );
 }
 
+// Baner zachęcający do instalacji PWA
 function PwaInstallBanner({ standalonePwa, onShowToast, onDismissForever }) {
   const [dismissed, setDismissed] = useState(readPwaHintDismissed);
   const [collapsed, setCollapsed] = useState(readPwaHintCollapsed);
   const deferredPromptRef = useRef(null);
 
+  // Nasłuchuje na event beforeinstallprompt
   useEffect(() => {
     const onBeforeInstall = (event) => {
       event.preventDefault();
@@ -1452,28 +1613,27 @@ function PwaInstallBanner({ standalonePwa, onShowToast, onDismissForever }) {
 
   if (standalonePwa || dismissed) return null;
 
+  // Ukrywa baner na stałe
   const dismissForever = () => {
     try {
       localStorage.setItem(PWA_HINT_DISMISSED_KEY, "1");
-    } catch {
-
-    }
+    } catch {}
     setDismissed(true);
     onDismissForever?.();
   };
 
+  // Przełącza zwinięcie banera
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       const next = !prev;
       try {
         localStorage.setItem(PWA_HINT_COLLAPSED_KEY, String(next));
-      } catch {
-
-      }
+      } catch {}
       return next;
     });
   };
 
+  // Obsługa instalacji PWA
   const handleInstall = async () => {
     const promptEvent = deferredPromptRef.current;
     if (promptEvent) {
@@ -1517,6 +1677,7 @@ function PwaInstallBanner({ standalonePwa, onShowToast, onDismissForever }) {
   );
 }
 
+// Komponent profilu użytkownika - dropdown z osiągnięciami i ustawieniami
 function Profile({
   user,
   onLogout,
@@ -1542,8 +1703,10 @@ function Profile({
   const nextAch = achievements?.next;
   const isAdmin = user.username === "Igor";
 
+  // Obsługa usunięcia konta
   const submitDelete = () => { if (!deletePassword.trim()) return; onDeleteAccount(deletePassword, () => { setDeleteMode(false); setDeletePassword(""); }); };
 
+  // Obsługa zmiany hasła
   const changePassword = async () => {
     if (!newPassword.trim()) {
       alert("Podaj nowe hasło");
@@ -1581,6 +1744,8 @@ function Profile({
       {showAchievements && (
         <div className="profile-menu">
           <div className="profile-info-dropdown"><p><strong>{user.username}</strong></p><p>Poziom {user.level} - {user.title}</p><p>{user.exp} EXP | 🔥 {user.streak} dni</p></div>
+          
+          {/* Sekcja powiadomień */}
           <div className="profile-notifications-block">
             <button
               type="button"
@@ -1605,25 +1770,35 @@ function Profile({
               <p className="profile-notifications-hint">Ta przeglądarka nie obsługuje powiadomień.</p>
             )}
           </div>
+          
+          {/* Zakładki - osiągnięcia / historia */}
           <div className="profile-tabs">
             <button type="button" className={activeTab === "achievements" ? "active" : ""} onClick={() => setActiveTab("achievements")}>Osiągnięcia</button>
             <button type="button" className={activeTab === "history" ? "active" : ""} onClick={() => setActiveTab("history")}>Historia</button>
           </div>
+          
           {activeTab === "achievements" ? (
             <>
+              {/* Następne osiągnięcie */}
               {nextAch && (<div className="next-achievement"><h4>Następne osiągnięcie 🎯</h4><div className="achievement-item next"><span>{nextAch.icon}</span><div><strong>{nextAch.title}</strong><p>{nextAch.description}</p><p className="ach-progress">Postęp: {nextAch.progress}</p></div></div></div>)}
+              {/* Lista odblokowanych osiągnięć */}
               <div className="achievements-list"><h4>Odznaczone 🏆 ({unlocked.length})</h4>{unlocked.length === 0 && <p className="muted">Jeszcze brak - pierwszy quest czeka!</p>}{unlocked.map(ach => (<div key={ach.slug || ach.title} className="achievement-item"><span>{ach.icon}</span><div><strong>{ach.title}</strong><p>{ach.description}</p></div></div>))}</div>
+              {/* Lista znajdziek */}
               <div className="rare-drops-list"><h4>Znajdźki ✨ ({rareDrops?.total_items || 0})</h4>{(!rareDrops?.items || rareDrops.items.length === 0) && <p className="muted">Jeszcze brak znajdziek - codziennie masz szansę!</p>}{rareDrops?.items?.map(drop => (<div key={drop.slug} className="rare-drop-item"><span className={`rare-drop-${drop.rarity}`}>{drop.icon}</span><div><strong>{drop.name}</strong><p>{drop.description}</p><p className="rare-drop-count">x{drop.count} · {drop.rarity}</p></div></div>))}</div>
             </>
           ) : (
+            // Historia gracza
             <div className="history-list"><h4>Dziennik zdobyczy</h4>{(!history || history.length === 0) && <p className="muted">Historia pojawi się po zdobyciu nagród.</p>}{history?.map(entry => (<div key={entry.id} className="history-item"><span><strong>{formatHistoryDate(entry.occurred_at)}</strong> - {entry.message}</span></div>))}</div>
           )}
+          
+          {/* Przyciski administracyjne */}
           {isAdmin && <button type="button" onClick={onOpenAdmin} className="admin-btn">🔧 Panel Admina</button>}
           <button type="button" onClick={onLogout} className="logout-btn">Wyloguj</button>
           <button type="button" onClick={() => setChangePasswordMode(!changePasswordMode)} className="change-password-btn">
             🔑 Zmień hasło
           </button>
 
+          {/* Formularz zmiany hasła */}
           {changePasswordMode && (
             <div className="change-password-form">
               <input
@@ -1647,6 +1822,7 @@ function Profile({
             </div>
           )}
 
+          {/* Usuwanie konta */}
           {!deleteMode ? <button className="delete-account-btn" onClick={() => setDeleteMode(true)}>Usuń konto</button> : (
             <div className="delete-account-form"><input type="password" placeholder="Hasło do potwierdzenia" value={deletePassword} onChange={(e) => setDeletePassword(e.target.value)} /><button className="delete-account-confirm" onClick={submitDelete}>Potwierdź usunięcie</button><button className="delete-account-cancel" onClick={() => setDeleteMode(false)}>Anuluj</button></div>
           )}
@@ -1656,9 +1832,13 @@ function Profile({
   );
 }
 
+// GŁÓWNY KOMPONENT APLIKACJI
 export default function App() {
+  // Stan autoryzacji
   const [token, setToken] = useState(localStorage.getItem("token"));
   const [user, setUser] = useState(null);
+  
+  // Dane gry
   const [tasks, setTasks] = useState([]);
   const [achievements, setAchievements] = useState({ unlocked: [], next: null });
   const [rareDrops, setRareDrops] = useState(null);
@@ -1666,9 +1846,15 @@ export default function App() {
   const [levelThresholds, setLevelThresholds] = useState(DEFAULT_LEVEL_THRESHOLDS);
   const [levelsMeta, setLevelsMeta] = useState(DEFAULT_LEVELS_META);
   const [challenges, setChallenges] = useState(null);
+  
+  // UI i nawigacja
   const [toasts, setToasts] = useState([]);
   const [selectedDate, setSelectedDate] = useState(new Date());
   const [showAddTask, setShowAddTask] = useState(false);
+  const [mainTab, setMainTab] = useState(readMainTab);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  
+  // Formularz dodawania zadania
   const [title, setTitle] = useState("");
   const [desc, setDesc] = useState("");
   const [difficulty, setDifficulty] = useState("easy");
@@ -1680,14 +1866,19 @@ export default function App() {
   const [eventCategory, setEventCategory] = useState("");
   const [recurringPattern, setRecurringPattern] = useState("");
   const [recurringEndDate, setRecurringEndDate] = useState("");
+  
+  // Powiadomienia i PWA
   const [notificationsEnabled, setNotificationsEnabled] = useState(readNotificationsPreference);
   const [standalonePwa, setStandalonePwa] = useState(false);
   const notificationsUnsupported = !("Notification" in window);
-  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [pwaHintDismissed, setPwaHintDismissed] = useState(readPwaHintDismissed);
+  
+  // Stan ładowania
   const [loadingTaskIds, setLoadingTaskIds] = useState(new Set());
   const [isAddingTask, setIsAddingTask] = useState(false);
   const [deletingTaskIds, setDeletingTaskIds] = useState(new Set());
-  const [mainTab, setMainTab] = useState(readMainTab);
+  
+  // Dane z innych modułów
   const [scheduleEntries, setScheduleEntries] = useState([]);
   const [shoppingItems, setShoppingItems] = useState([]);
   const [workEntries, setWorkEntries] = useState([]);
@@ -1696,13 +1887,16 @@ export default function App() {
   const [freeDays, setFreeDays] = useState([]);
   const [recurringEvents, setRecurringEvents] = useState([]);
   const [familyInvitations, setFamilyInvitations] = useState([]);
-  const [pwaHintDismissed, setPwaHintDismissed] = useState(readPwaHintDismissed);
+  
+  // Kolejka zapytań API (zapobiega przeciążeniu)
   const apiQueue = useRef([]);
   const isProcessingQueue = useRef(false);
 
+  // Nagłówki autoryzacji
   const headers = { Authorization: `Bearer ${token}` };
   const { isConnected } = useWebSocket();
 
+  // Obsługa WebSocket - nasłuchuje na aktualizacje z backendu
   useEffect(() => {
     if (!isConnected) return;
 
@@ -1714,7 +1908,7 @@ export default function App() {
           loadTasksOnly();
           break;
         case 'shopping_updated':
-
+          // Obsługa aktualizacji zakupów
           break;
         case 'shopping_history_updated':
           if (typeof loadHistory === 'function') {
@@ -1735,7 +1929,6 @@ export default function App() {
           break;
         case 'work_updated':
           const workData = data.data;
-
           if (workData.action === 'completed') {
             setWorkEntries(prev => prev.map(item =>
               item.id === workData.id ? { ...item, completed: workData.completed } : item
@@ -1743,17 +1936,13 @@ export default function App() {
           } else if (workData.action === 'deleted') {
             setWorkEntries(prev => prev.filter(item => item.id !== workData.id));
           } else {
-
             if (typeof loadWork === 'function') loadWork();
           }
           break;
         case 'family_member_removed':
           const { user_id: removedUserId, family_id: removedFamilyId } = data.data;
-
           if (removedUserId === user?.id) {
-
             setFamilyId(null);
-
             fetchData();
             showToast("🗑️ Zostałeś usunięty z rodziny");
           }
@@ -1769,9 +1958,9 @@ export default function App() {
     return () => ws.close();
   }, [isConnected, familyId]);
 
+  // Funkcja kolejkowania zapytań API (priority = true pomija kolejkę)
   const enqueueRequest = async (requestFn, priority = false) => {
     if (priority) {
-
       await requestFn();
       return;
     }
@@ -1787,6 +1976,7 @@ export default function App() {
     }
   };
 
+  // Wyświetla toast (komunikat)
   const showToast = (msg) => {
     const id = Date.now();
     setToasts((prev) => [...prev, { id, message: msg }]);
@@ -1795,6 +1985,7 @@ export default function App() {
     }, 3000);
   };
 
+  // Włącza powiadomienia
   const enableNotifications = async () => {
     const permission = await ensureNotificationPermission();
     const enabled = permission === "granted";
@@ -1819,6 +2010,7 @@ export default function App() {
     }
   };
 
+  // Wyłącza powiadomienia
   const disableNotifications = async () => {
     writeNotificationsPreference(false);
     setNotificationsEnabled(false);
@@ -1826,6 +2018,7 @@ export default function App() {
     showToast("Powiadomienia wyłączone w aplikacji. Aby całkowicie wyłączyć powiadomienia w przeglądarce, zmień ustawienia (kliknij ikonę kłódki 🔒 w pasku adresu).");
   };
 
+  // Przełącza powiadomienia
   const toggleNotifications = async () => {
     try {
       if (notificationsEnabled) {
@@ -1838,6 +2031,7 @@ export default function App() {
     }
   };
 
+  // Sprawdza czy aplikacja działa w trybie PWA
   useEffect(() => {
     setStandalonePwa(isStandalonePwa());
     const onDisplayMode = () => setStandalonePwa(isStandalonePwa());
@@ -1845,6 +2039,7 @@ export default function App() {
     return () => window.matchMedia("(display-mode: standalone)").removeEventListener("change", onDisplayMode);
   }, []);
 
+  // Planowanie przypomnień
   useEffect(() => {
     if (!notificationsEnabled || !tasks.length) return undefined;
 
@@ -1867,15 +2062,18 @@ export default function App() {
     };
   }, [tasks, notificationsEnabled]);
 
+  // Główna funkcja pobierająca dane z API
   const fetchData = async () => {
     if (!token) return;
 
+    // Nagłówki bez cache
     const noCacheHeaders = {
       ...headers,
       'Cache-Control': 'no-cache',
       'Pragma': 'no-cache'
     };
 
+    // Timeout dla zapytań (5s)
     const timeout = (promise, ms = 5000) => {
       return Promise.race([
         promise,
@@ -1886,6 +2084,7 @@ export default function App() {
     try {
       const shoppingParams = familyId ? { family_id: familyId } : {};
 
+      // Pierwsze zapytania - user i tasks
       const [userRes, tasksRes] = await Promise.all([
         timeout(axios.get(`${API}/me`, { headers: noCacheHeaders })),
         timeout(axios.get(`${API}/tasks`, { headers: noCacheHeaders })),
@@ -1897,6 +2096,7 @@ export default function App() {
         setTasks(sortTasks(tasksData));
       }
 
+      // Reszta danych - z opóźnieniem 50ms
       setTimeout(async () => {
         try {
           const [chRes, achRes, scheduleRes, shoppingRes, workRes, freeDaysRes, recurringRes, historyRes, rareDropsRes] = await Promise.all([
@@ -1921,14 +2121,13 @@ export default function App() {
           setHistory(historyRes?.data || []);
           if (rareDropsRes?.data) setRareDrops(rareDropsRes.data);
 
+          // Generuje święta na lata 2020-2030
           try {
             for (let year = 2020; year <= 2030; year++) {
               await axios.post(`${API}/free-days/generate/${year}`, {}, { headers: noCacheHeaders });
             }
-          } catch (err) {
-          }
-        } catch (err) {
-        }
+          } catch (err) {}
+        } catch (err) {}
       }, 50);
 
     } catch (err) {
@@ -1942,10 +2141,13 @@ export default function App() {
     }
   };
 
+  // Ładuje dane przy starcie i gdy zmienia się token lub rodzina
   useEffect(() => { if (token) fetchData(); }, [token, familyId]);
 
+  // Aktualizuje datę zadania gdy zmienia się wybrany dzień
   useEffect(() => { setTaskDate(toDateStr(selectedDate)); }, [selectedDate]);
 
+  // Ładuje tylko zadania (bez innych danych)
   const loadTasksOnly = async () => {
     if (!token) return;
     try {
@@ -1972,6 +2174,7 @@ export default function App() {
     }
   };
 
+  // Ładuje zaproszenia do rodzin
   const loadFamilyInvitations = async () => {
     if (!token) return;
     try {
@@ -1988,10 +2191,12 @@ export default function App() {
     }
   };
 
+  // Ładuje zaproszenia przy starcie
   useEffect(() => {
     loadFamilyInvitations();
   }, [token]);
 
+  // Co 2 minuty odświeża zaproszenia gdy strona widoczna
   useEffect(() => {
     const interval = setInterval(() => {
       if (document.visibilityState === "visible") {
@@ -2001,6 +2206,7 @@ export default function App() {
     return () => clearInterval(interval);
   }, [token]);
 
+  // Ustawia wybraną datę z parametru URL (?date=YYYY-MM-DD)
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
     const dateParam = params.get("date");
@@ -2009,15 +2215,14 @@ export default function App() {
     }
   }, []);
 
+  // Ping do backendu co 5 minut (utrzymuje sesję)
   useEffect(() => {
     if (!token) return;
 
     const pingBackend = async () => {
       try {
         await axios.get(`${API}/me`, { headers });
-      } catch (err) {
-
-      }
+      } catch (err) {}
     };
 
     const interval = setInterval(() => {
@@ -2039,6 +2244,7 @@ export default function App() {
     };
   }, [token]);
 
+  // Dodaje nowe zadanie
   const addTask = async () => {
     if (!title.trim()) { showToast("Podaj nazwę zadania"); return; }
     if (isAddingTask) return;
@@ -2059,6 +2265,7 @@ export default function App() {
       recurring_end_date: taskType === "event" ? recurringEndDate || null : null,
     };
 
+    // Reset formularza
     setTitle("");
     setDesc("");
     setDifficulty("easy");
@@ -2075,7 +2282,6 @@ export default function App() {
       const data = response.data;
 
       await loadTasksOnly();
-
       showToast("✅ Zadanie dodane");
     } catch (err) {
       showToast(err.response?.data?.detail || "Błąd dodawania – spróbuj ponownie");
@@ -2084,6 +2290,7 @@ export default function App() {
     }
   };
 
+  // Przełącza status zadania (ukończone/nieukończone)
   const toggleTask = async (task) => {
     if (task.completed) return;
     if (loadingTaskIds.has(task.id)) return;
@@ -2095,6 +2302,7 @@ export default function App() {
         const response = await axios.patch(`${API}/tasks/${task.id}`, { completed: true }, { headers });
         const data = response.data;
 
+        // Aktualizacja danych użytkownika
         setUser(prev => ({
           ...prev,
           exp: data.exp,
@@ -2105,6 +2313,7 @@ export default function App() {
           next_level_title: data.next_level_title,
         }));
 
+        // Aktualizacja listy zadań
         setTasks(prev => {
           const sorted = [...prev];
           const idx = sorted.findIndex(t => t.id === data.task.id);
@@ -2119,6 +2328,7 @@ export default function App() {
           });
         });
 
+        // Nowe osiągnięcia
         if (data.new_achievements && data.new_achievements.length > 0) {
           setAchievements(prev => ({
             ...prev,
@@ -2126,6 +2336,7 @@ export default function App() {
           }));
         }
 
+        // Nowa znajdźka
         if (data.earned_drop) {
           setRareDrops(prev => {
             if (!prev) return { total_items: 1, items: [data.earned_drop] };
@@ -2147,6 +2358,7 @@ export default function App() {
         if (data.achievements) setAchievements(data.achievements);
         if (data.history) setHistory(data.history);
 
+        // Komunikaty
         const expPreview = getExpPreview(task.difficulty, task.due_date);
         const today = toDateStr(new Date());
         const timing = today < task.due_date ? "early" : today > task.due_date ? "late" : "ontime";
@@ -2171,6 +2383,7 @@ export default function App() {
           showToast(`🎁 Bonus dzienny: +${data.daily_bonus} EXP`);
         }
 
+        // Odśwież wyzwania
         const challengesRes = await axios.get(`${API}/challenges`, { headers });
         setChallenges(challengesRes.data);
       } catch (err) {
@@ -2185,6 +2398,7 @@ export default function App() {
     });
   };
 
+  // Zapisuje zmiany w zadaniu (edycja)
   const saveTask = async (id, updates) => {
     const task = tasks.find(t => t.id === id);
     if (!task) return;
@@ -2218,13 +2432,14 @@ export default function App() {
 
         showToast("✅ Zadanie zapisane");
       } catch (err) {
-
+        // Przywracamy oryginalne zadanie w razie błędu
         setTasks(prev => prev.map(t => t.id === id ? originalTask : t));
         showToast(err.response?.data?.detail || "Błąd zapisu – spróbuj ponownie");
       }
     });
   };
 
+  // Cofa ukończenie zadania (uncheck)
   const uncheckTask = async (task) => {
     if (!canUncheckTask(task)) {
       showToast("Nie można odznaczyć tego zadania (minęło więcej niż 24h)");
@@ -2263,6 +2478,7 @@ export default function App() {
           });
         });
 
+        // Usuwamy cofnięte osiągnięcia
         if (data.revoked_achievements && data.revoked_achievements.length > 0) {
           setAchievements(prev => ({
             ...prev,
@@ -2310,8 +2526,8 @@ export default function App() {
     });
   };
 
+  // Usuwa konto użytkownika
   const deleteAccount = async (password, onDone) => {
-
     if (!window.confirm("Na pewno usunąć konto? Ta operacja jest nieodwracalna!")) {
       return;
     }
@@ -2322,7 +2538,6 @@ export default function App() {
     }
 
     try {
-
       const response = await fetch(`${API}/me`, {
         method: 'DELETE',
         headers: {
@@ -2349,6 +2564,7 @@ export default function App() {
     }
   };
 
+  // Usuwa zadanie
   const deleteTask = async (task) => {
     const exp = task.exp_awarded_amount || EXP_MAP[task.difficulty] || 10;
     if (task.exp_awarded && !window.confirm(`Usunąć ukończony quest "${task.title}"? Odejmie ${exp} EXP.`)) return;
@@ -2393,22 +2609,32 @@ export default function App() {
     });
   };
 
+  // Wylogowuje użytkownika
   const logout = () => { localStorage.removeItem("token"); setToken(null); setUser(null); };
+  
+  // Obsługa logowania
   const handleLogin = () => { const newToken = localStorage.getItem("token"); setToken(newToken); if (newToken) setTimeout(fetchData, 100); };
 
+  // Aktualizuje dane użytkownika z modułów (zakupy, praca)
   const updateUserFromModule = (patch) => {
     setUser((prev) => ({ ...prev, ...patch }));
   };
 
+  // Obsługa zmiany daty
   const handleDateSelect = (dateStr) => setSelectedDate(new Date(`${dateStr}T12:00:00`));
 
+  // Jeśli brak tokenu - pokaż ekran logowania
   if (!token) return <Auth onLogin={handleLogin} />;
+  
+  // Jeśli brak danych użytkownika - pokaż spinner
   if (!user) return <div className="app"><LoadingSpinner label="Ładowanie aplikacji…" /></div>;
 
+  // Oblicz postęp gracza
   const { progress } = getGamificationFromExp(user.exp, levelsMeta, levelThresholds);
 
   return (
     <div className="app">
+      {/* Nagłówek */}
       <div className="header">
         <h1>⚔️ QuestDo</h1>
         <Profile
@@ -2426,14 +2652,21 @@ export default function App() {
           onToggleNotifications={toggleNotifications}
         />
       </div>
+      
+      {/* Baner instalacji PWA */}
       <PwaInstallBanner
         standalonePwa={standalonePwa}
         onShowToast={showToast}
         onDismissForever={() => setPwaHintDismissed(true)}
       />
+      
+      {/* Podsumowanie gracza */}
       <PlayerSummary user={user} progress={progress} />
+      
+      {/* Nawigacja zakładek */}
       <AppTabs activeTab={mainTab} onTabChange={setMainTab} />
 
+      {/* Baner zaproszeń do rodziny */}
       <FamilyInvitationsBanner
         api={API}
         headers={headers}
@@ -2441,47 +2674,97 @@ export default function App() {
         onFamilyChange={fetchData}
       />
 
+      {/* Zawartość zakładki "Questy" */}
       {mainTab === "tasks" && (
         <>
-      <ChallengesBar challenges={challenges} />
-      <Calendar tasks={tasks} recurringEvents={recurringEvents} selectedDate={selectedDate} onDateSelect={handleDateSelect} onTaskToggle={toggleTask} onTaskDelete={deleteTask} freeDays={freeDays} onFreeDayChange={setFreeDays} headers={headers} />
-      <DayTasksPanel selectedDate={selectedDate} tasks={tasks} recurringEvents={recurringEvents} onToggle={toggleTask} onDelete={deleteTask} onSave={saveTask} onToast={showToast} onUncheck={uncheckTask} loadingTaskIds={loadingTaskIds} deletingTaskIds={deletingTaskIds} api={API} headers={headers} onRefresh={fetchData} freeDays={freeDays} />
-      {!showAddTask ? <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button> : (
-        <div className="add-task"><h3>+ Nowy Quest na {taskDate}</h3><input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} /><textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
-          <div className="add-task-meta">
-            <select value={taskType} onChange={(e) => setTaskType(e.target.value)}><option value="quest">⚔️ Quest (do wykonania)</option><option value="event">📅 Wydarzenie (urodziny, notatka)</option></select>
-            {taskType === "quest" && <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}><option value="easy">⚔️ Łatwe (+10 EXP)</option><option value="medium">🗡️ Średnie (+25 EXP)</option><option value="hard">💀 Trudne (+50 EXP)</option></select>}
-            {taskType === "event" && (
-              <>
-                <select value={eventCategory} onChange={(e) => setEventCategory(e.target.value)}>
-                  <option value="">Wybierz kategorię wydarzenia</option>
-                  {EVENT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
+          <ChallengesBar challenges={challenges} />
+          <Calendar 
+            tasks={tasks} 
+            recurringEvents={recurringEvents} 
+            selectedDate={selectedDate} 
+            onDateSelect={handleDateSelect} 
+            onTaskToggle={toggleTask} 
+            onTaskDelete={deleteTask} 
+            freeDays={freeDays} 
+            onFreeDayChange={setFreeDays} 
+            headers={headers} 
+          />
+          <DayTasksPanel 
+            selectedDate={selectedDate} 
+            tasks={tasks} 
+            recurringEvents={recurringEvents} 
+            onToggle={toggleTask} 
+            onDelete={deleteTask} 
+            onSave={saveTask} 
+            onToast={showToast} 
+            onUncheck={uncheckTask} 
+            loadingTaskIds={loadingTaskIds} 
+            deletingTaskIds={deletingTaskIds} 
+            api={API} 
+            headers={headers} 
+            onRefresh={fetchData} 
+            freeDays={freeDays} 
+          />
+          
+          {/* Formularz dodawania zadania */}
+          {!showAddTask ? (
+            <button className="add-task-btn" onClick={() => setShowAddTask(true)}>+ Dodaj zadanie</button>
+          ) : (
+            <div className="add-task">
+              <h3>+ Nowy Quest na {taskDate}</h3>
+              <input placeholder="Nazwa zadania..." value={title} onChange={(e) => setTitle(e.target.value)} />
+              <textarea placeholder="Opis..." value={desc} onChange={(e) => setDesc(e.target.value)} />
+              
+              <div className="add-task-meta">
+                <select value={taskType} onChange={(e) => setTaskType(e.target.value)}>
+                  <option value="quest">⚔️ Quest (do wykonania)</option>
+                  <option value="event">📅 Wydarzenie (urodziny, notatka)</option>
                 </select>
-              </>
-            )}
-            {taskType === "quest" && <select value={category} onChange={(e) => setCategory(e.target.value)}>{CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}</select>}
-            <DatePicker value={taskDate} onChange={setTaskDate} label="Termin" />
-          </div>
-          <div className="task-options-row">
-            <label className="important-toggle">
-              <input type="checkbox" checked={important} onChange={(e) => { setImportant(e.target.checked); if (e.target.checked && reminderOffset === "") setReminderOffset("7"); }} />
-              <span>Ważne</span>
-            </label>
-            <select value={reminderOffset} onChange={(e) => setReminderOffset(e.target.value)}>
-              {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
-          {taskType === "quest" && (() => { const p = getExpPreview(difficulty, taskDate); const info = EXP_TIMING_LABELS[p.timing]; return <p className="exp-preview-hint">Ukończ dziś: <strong>+{p.amount} EXP</strong> ({info.text})</p>; })()}
-          {taskType === "event" && <p className="exp-preview-hint">📅 Wydarzenie kalendarzowe - bez EXP, tylko informacja</p>}
-          <div className="row">
-            <button onClick={addTask} disabled={isAddingTask}>{isAddingTask ? "⏳ Dodawanie..." : taskType === "quest" ? "Dodaj Quest" : "Dodaj Wydarzenie"}</button>
-            <button onClick={() => setShowAddTask(false)} className="cancel-btn">Anuluj</button>
-          </div>
-        </div>
-      )}
+                {taskType === "quest" && (
+                  <select value={difficulty} onChange={(e) => setDifficulty(e.target.value)}>
+                    <option value="easy">⚔️ Łatwe (+10 EXP)</option>
+                    <option value="medium">🗡️ Średnie (+25 EXP)</option>
+                    <option value="hard">💀 Trudne (+50 EXP)</option>
+                  </select>
+                )}
+                {taskType === "event" && (
+                  <select value={eventCategory} onChange={(e) => setEventCategory(e.target.value)}>
+                    <option value="">Wybierz kategorię wydarzenia</option>
+                    {EVENT_CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>)}
+                  </select>
+                )}
+                {taskType === "quest" && (
+                  <select value={category} onChange={(e) => setCategory(e.target.value)}>
+                    {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}
+                  </select>
+                )}
+                <DatePicker value={taskDate} onChange={setTaskDate} label="Termin" />
+              </div>
+              
+              <div className="task-options-row">
+                <label className="important-toggle">
+                  <input type="checkbox" checked={important} onChange={(e) => { setImportant(e.target.checked); if (e.target.checked && reminderOffset === "") setReminderOffset("7"); }} />
+                  <span>Ważne</span>
+                </label>
+                <select value={reminderOffset} onChange={(e) => setReminderOffset(e.target.value)}>
+                  {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </div>
+              
+              {/* Podgląd EXP */}
+              {taskType === "quest" && (() => { const p = getExpPreview(difficulty, taskDate); const info = EXP_TIMING_LABELS[p.timing]; return <p className="exp-preview-hint">Ukończ dziś: <strong>+{p.amount} EXP</strong> ({info.text})</p>; })()}
+              {taskType === "event" && <p className="exp-preview-hint">📅 Wydarzenie kalendarzowe - bez EXP, tylko informacja</p>}
+              
+              <div className="row">
+                <button onClick={addTask} disabled={isAddingTask}>{isAddingTask ? "⏳ Dodawanie..." : taskType === "quest" ? "Dodaj Quest" : "Dodaj Wydarzenie"}</button>
+                <button onClick={() => setShowAddTask(false)} className="cancel-btn">Anuluj</button>
+              </div>
+            </div>
+          )}
         </>
       )}
 
+      {/* Zawartość zakładki "Cykliczne" */}
       {mainTab === "recurring" && (
         <RecurringPanel
           api={API}
@@ -2493,6 +2776,7 @@ export default function App() {
         />
       )}
 
+      {/* Zawartość zakładki "Plan" */}
       {mainTab === "schedule" && (
         <SchedulePanel
           api={API}
@@ -2509,6 +2793,7 @@ export default function App() {
         />
       )}
 
+      {/* Zawartość zakładki "Zakupy" */}
       {mainTab === "shopping" && (
         <ShoppingPanel
           api={API}
@@ -2524,6 +2809,7 @@ export default function App() {
         />
       )}
 
+      {/* Zawartość zakładki "Zarobki" */}
       {mainTab === "earnings" && (
         <EarningsPanel
           api={API}
@@ -2543,6 +2829,7 @@ export default function App() {
         />
       )}
 
+      {/* Zawartość zakładki "Ustawienia" */}
       {mainTab === "settings" && (
         <CategoriesPanel
           api={API}
@@ -2552,9 +2839,20 @@ export default function App() {
         />
       )}
 
+      {/* Ranking - tylko w zakładce "Questy" */}
       {mainTab === "tasks" && <LeaderboardPanel currentUser={user.username} />}
+      
+      {/* Toasty (komunikaty) */}
       {toasts.length > 0 && <Toast toasts={toasts} />}
-      <AdminPanel isOpen={showAdminPanel} onClose={() => setShowAdminPanel(false)} headers={headers} onRefreshAppData={fetchData} onShowToast={showToast} />
+      
+      {/* Panel administratora */}
+      <AdminPanel 
+        isOpen={showAdminPanel} 
+        onClose={() => setShowAdminPanel(false)} 
+        headers={headers} 
+        onRefreshAppData={fetchData} 
+        onShowToast={showToast} 
+      />
     </div>
   );
 }

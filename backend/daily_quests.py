@@ -1,7 +1,9 @@
+# Importy potrzebne do obsługi dziennych wyzwań
 import random
 from datetime import date
 from typing import Any
 
+# Pula wszystkich dostępnych dziennych wyzwań
 DAILY_QUEST_POOL: list[dict[str, Any]] = [
     {"id": "c1", "icon": "✅", "label": "Jeden krok", "description": "Ukończ 1 zadanie", "type": "complete_count", "target": 1},
     {"id": "c2", "icon": "⚔️", "label": "Podwójny wysiłek", "description": "Ukończ 2 zadania", "type": "complete_count", "target": 2},
@@ -84,16 +86,26 @@ DAILY_QUEST_POOL: list[dict[str, Any]] = [
     {"id": "special_ops", "icon": "🎭", "label": "Operacja specjalna", "description": "Ukończ 2 trudne zadania", "type": "complete_difficulty", "difficulty": "hard", "target": 2},
 ]
 
+# Słownik pozwalający szybko znaleźć wyzwanie po ID
 QUEST_BY_ID = {q["id"]: q for q in DAILY_QUEST_POOL}
 
+# EXP przyznawane za ukończenie wszystkich 3 wyzwań w jednym dniu
 TRIPLE_BONUS_EXP = 35
 
 
+# Wybiera 3 losowe wyzwania na dany dzień dla użytkownika (deterministycznie)
 def pick_three_quests(user_id: int, day: date) -> list[dict]:
+    """
+    Wybiera 3 dzienne wyzwania dla danego użytkownika na dany dzień.
+    Używa deterministycznego RNG aby każdy dzień/użytkownik miał zawsze te same wyzwania.
+    """
+    # Tworzymy RNG z unikalna seed (user_id + data + version)
     rng = random.Random(f"{user_id}-{day.isoformat()}-questdo-v3")
+    # Kopiujemy wszystkie wyzwania i je losujemy
     shuffled = DAILY_QUEST_POOL.copy()
     rng.shuffle(shuffled)
 
+    # Wybieramy 3 wyzwania, unikając duplikowania typów jeśli można
     selected: list[dict] = []
     types_seen: set[str] = set()
 
@@ -101,11 +113,13 @@ def pick_three_quests(user_id: int, day: date) -> list[dict]:
         if len(selected) >= 3:
             break
         qtype = quest["type"]
+        # Jeśli to type już widzieliśmy i jeszcze nie mamy 2 wyzwań, pomijamy
         if qtype in types_seen and len(selected) < 2:
             continue
         selected.append(quest)
         types_seen.add(qtype)
 
+    # Jeśli mamy mniej niż 3, uzupełniamy zwykłymi wyzwaniami
     if len(selected) < 3:
         selected_ids = {q["id"] for q in selected}
         for quest in shuffled:
@@ -118,26 +132,34 @@ def pick_three_quests(user_id: int, day: date) -> list[dict]:
     return selected[:3]
 
 
+# Buduje statystyki dnia dla użytkownika (ukończone zadania, kategorie itp.)
 def build_day_stats(user, all_tasks, day: date) -> dict:
+    """Zbiera informacje o postępie użytkownika w danym dniu."""
+    # Zadania zaplanowane na dany dzień
     today_tasks = [t for t in all_tasks if t.due_date == day]
+    # Zadania ukończone dzisiaj (niezależnie od terminu)
     completed_on_day = [t for t in all_tasks if t.completed and t.completed_at and t.completed_at.date() == day]
+    # Zadania dodane dzisiaj
     added_today = [t for t in all_tasks if t.created_at and t.created_at.date() == day]
+    # Zadania zaplanowane na dzisiaj i ukończone
     done_due_today = [t for t in today_tasks if t.completed]
 
     return {
-        "done_today": len(completed_on_day),
-        "done_due_today": len(done_due_today),
-        "total_today": len(today_tasks),
+        "done_today": len(completed_on_day),  # Ile zadań ukończono dzisiaj
+        "done_due_today": len(done_due_today),  # Ile z dzisiejszych zadań ukończono
+        "total_today": len(today_tasks),  # Ile zadań zaplanowano na dzisiaj
         "hard_done": sum(1 for t in completed_on_day if t.difficulty == "hard"),
         "medium_done": sum(1 for t in completed_on_day if t.difficulty == "medium"),
         "easy_done": sum(1 for t in completed_on_day if t.difficulty == "easy"),
-        "categories_done": {t.category for t in completed_on_day},
-        "added_today": len(added_today),
-        "streak": user.streak or 0,
+        "categories_done": {t.category for t in completed_on_day},  # Set kategorii
+        "added_today": len(added_today),  # Ile zadań dodano dzisiaj
+        "streak": user.streak or 0,  # Długość obecnej serii
     }
 
 
+# Sprawdza postęp w wyzwaniu na podstawie statystyk dnia
 def evaluate_quest(quest: dict, stats: dict) -> dict:
+    """Oblicza postęp w konkretnym wyzwaniu na podstawie dziennych statystyk."""
     qtype = quest["type"]
     target = quest.get("target", 1)
     current = 0
@@ -177,9 +199,11 @@ def evaluate_quest(quest: dict, stats: dict) -> dict:
     }
 
 
+# Oblicza postęp dla listy przypisanych wyzwań
 def evaluate_assigned_quests(quest_ids: list[str], stats: dict) -> list[dict]:
     return [evaluate_quest(QUEST_BY_ID[qid], stats) for qid in quest_ids if qid in QUEST_BY_ID]
 
 
+# Sprawdza czy wszystkie cele zostały ukończone
 def all_goals_complete(goals: list[dict]) -> bool:
     return bool(goals) and all(g["done"] for g in goals)

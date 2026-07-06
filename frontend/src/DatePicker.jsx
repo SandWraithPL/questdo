@@ -1,19 +1,24 @@
-
+// Komponent wyboru daty - wyświetla kalendarz z widokami dni/miesięcy/lat
 import { useState, useEffect, useRef } from "react";
 
+// Skróty dni tygodnia w języku polskim
 const WEEKDAYS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
+
+// Nazwy miesięcy po polsku
 const MONTHS = [
   "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec",
   "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień",
 ];
 
+// Parsuje string daty (YYYY-MM-DD) na obiekt Date
 function parseValue(value) {
   if (!value) return new Date();
   const [y, m, d] = value.split("-").map(Number);
   if (!y || !m || !d) return new Date();
-  return new Date(y, m - 1, d, 12, 0, 0);
+  return new Date(y, m - 1, d, 12, 0, 0); // Ustawiamy na południe (unikamy problemów ze strefami)
 }
 
+// Konwertuje Date na string YYYY-MM-DD
 function toIso(d) {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -21,6 +26,7 @@ function toIso(d) {
   return `${y}-${m}-${day}`;
 }
 
+// Formatuje datę do wyświetlenia w polskim formacie (np. "pon. 15 stycznia 2025")
 function formatDisplay(value) {
   if (!value) return "Wybierz datę";
   const d = parseValue(value);
@@ -32,16 +38,22 @@ function formatDisplay(value) {
   });
 }
 
+// Główny komponent wyboru daty
 export default function DatePicker({ value, onChange, label = "Termin" }) {
+  // Czy kalendarz jest otwarty
   const [open, setOpen] = useState(false);
+  // Aktualny widok: "days" (dni), "months" (miesiące), "years" (lata)
   const [view, setView] = useState("days");
+  // Aktualna data wyświetlana w kalendarzu (może być inna niż wybrana)
   const [cursor, setCursor] = useState(() => parseValue(value));
   const wrapRef = useRef(null);
 
+  // Aktualizujemy kursor gdy zmieni się wartość z zewnątrz
   useEffect(() => {
     if (value) setCursor(parseValue(value));
   }, [value]);
 
+  // Zamykamy kalendarz gdy klikniesz poza nim
   useEffect(() => {
     if (!open) return;
     const onDoc = (e) => {
@@ -51,6 +63,7 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
     return () => document.removeEventListener("click", onDoc, true);
   }, [open]);
 
+  // Przełącza otwarcie kalendarza
   const togglePicker = () => {
     if (open) {
       setOpen(false);
@@ -61,6 +74,7 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
     }
   };
 
+  // Wybiera dzień - zamyka kalendarz i zwraca wybraną datę
   const pickDay = (day) => {
     const next = new Date(cursor.getFullYear(), cursor.getMonth(), day, 12, 0, 0);
     onChange(toIso(next));
@@ -68,11 +82,13 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
     setView("days");
   };
 
+  // Wybiera miesiąc - przełącza na widok dni
   const pickMonth = (monthIndex) => {
     setCursor(new Date(cursor.getFullYear(), monthIndex, 1, 12, 0, 0));
     setView("days");
   };
 
+  // Wybiera rok - przełącza na widok miesięcy
   const pickYear = (year) => {
     setCursor(new Date(year, cursor.getMonth(), 1, 12, 0, 0));
     setView("months");
@@ -83,12 +99,15 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
   const todayIso = toIso(new Date());
   const selectedIso = value || "";
 
+  // Generuje dni dla aktualnego miesiąca
   const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const dayCells = [];
+  // Puste komórki przed pierwszym dniem miesiąca
   for (let i = 0; i < firstWeekday; i++) {
     dayCells.push(<div key={`e-${i}`} className="dp-day empty" />);
   }
+  // Dni miesiąca
   for (let d = 1; d <= daysInMonth; d++) {
     const iso = toIso(new Date(year, month, d, 12, 0, 0));
     dayCells.push(
@@ -103,6 +122,7 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
     );
   }
 
+  // Generuje przyciski lat dla widoku lat (12 lat na raz)
   const yearStart = year - (year % 12) - 1;
   const yearButtons = [];
   for (let y = yearStart; y < yearStart + 12; y++) {
@@ -120,13 +140,17 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
 
   return (
     <div className={`date-picker-wrap ${open ? "open" : ""}`} ref={wrapRef}>
+      {/* Etykieta */}
       {label && <span className="date-picker-label">{label}</span>}
+      
+      {/* Przycisk otwierający kalendarz */}
       <button type="button" className="date-picker-trigger" onClick={togglePicker}>
         <span className="date-picker-icon">📅</span>
         <span>{formatDisplay(value)}</span>
         <span className="date-picker-chevron">{open ? "▲" : "▼"}</span>
       </button>
 
+      {/* Wyskakujący kalendarz */}
       {open && (
         <div
           className="date-picker-popup"
@@ -140,6 +164,7 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
           role="dialog"
           aria-label="Wybierz datę"
         >
+          {/* Nagłówek kalendarza z nawigacją */}
           <div className="dp-header">
             {view === "days" && (
               <>
@@ -171,38 +196,21 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
             )}
             {view === "months" && (
               <>
-                <button type="button" className="dp-nav" onClick={() => setView("days")}>
-                  ←
-                </button>
-                <button type="button" className="dp-title" onClick={() => setView("years")}>
-                  {year}
-                </button>
-                <button type="button" className="dp-nav" onClick={() => setView("days")}>
-                  ✓
-                </button>
+                <button type="button" className="dp-nav" onClick={() => setView("days")}>←</button>
+                <button type="button" className="dp-title" onClick={() => setView("years")}>{year}</button>
+                <button type="button" className="dp-nav" onClick={() => setView("days")}>✓</button>
               </>
             )}
             {view === "years" && (
               <>
-                <button
-                  type="button"
-                  className="dp-nav"
-                  onClick={() => setCursor(new Date(year - 12, month, 1, 12, 0, 0))}
-                >
-                  ◀
-                </button>
+                <button type="button" className="dp-nav" onClick={() => setCursor(new Date(year - 12, month, 1, 12, 0, 0))}>◀</button>
                 <span className="dp-title-static">Wybierz rok</span>
-                <button
-                  type="button"
-                  className="dp-nav"
-                  onClick={() => setCursor(new Date(year + 12, month, 1, 12, 0, 0))}
-                >
-                  ▶
-                </button>
+                <button type="button" className="dp-nav" onClick={() => setCursor(new Date(year + 12, month, 1, 12, 0, 0))}>▶</button>
               </>
             )}
           </div>
 
+          {/* Widok dni */}
           {view === "days" && (
             <>
               <div className="dp-weekdays">
@@ -226,6 +234,7 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
             </>
           )}
 
+          {/* Widok miesięcy - 3 kolumny po 4 miesiące */}
           {view === "months" && (
             <div className="dp-months">
               {MONTHS.map((name, i) => (
@@ -241,6 +250,7 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
             </div>
           )}
 
+          {/* Widok lat - 3 kolumny po 4 lata */}
           {view === "years" && <div className="dp-years">{yearButtons}</div>}
         </div>
       )}

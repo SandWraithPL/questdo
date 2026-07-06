@@ -1,39 +1,42 @@
+// Panel ustawień - zarządzanie domyślnymi artykułami zakupów
 import { useState, useEffect } from "react";
 import axios from "axios";
 import { SHOPPING_CATEGORIES } from "./ShoppingPanel";
 
+// Formatuje kwotę na polski format (np. 10,50 zł)
 function formatMoney(value) {
   const num = Number(value || 0);
   const formatted = num.toFixed(2).replace(".", ",");
   return `${formatted} zł`;
 }
 
-function formatQuantity(value) {
-  if (!value) return "";
-  return value.replace(".", ",");
-}
-
+// Konwertuje wejście stawki (przecinki) na punkt dla API
 function parseRateInput(value) {
   if (!value) return "";
   return value.replace(",", ".");
 }
 
+// Znajduje kategorię produktu lub zwraca domyślną (ostatnią)
 function getCategory(cat) {
-  return SHOPPING_CATEGORIES.find((c) => c.value === cat) || SHOPPING_CATEGORIES[8];
+  return SHOPPING_CATEGORIES.find((c) => c.value === cat) || SHOPPING_CATEGORIES[SHOPPING_CATEGORIES.length - 1];
 }
 
 export default function CategoriesPanel({ api, headers, onToast, familyId }) {
+  // Lista domyślnych artykułów
   const [articles, setArticles] = useState([]);
+  // Pola formularza dodania artykułu
   const [name, setName] = useState("");
   const [unit, setUnit] = useState("szt");
   const [category, setCategory] = useState("other");
   const [price, setPrice] = useState("");
+  // Edycja artykułu
   const [editingId, setEditingId] = useState(null);
   const [editName, setEditName] = useState("");
   const [editUnit, setEditUnit] = useState("szt");
   const [editCat, setEditCat] = useState("other");
   const [editPrice, setEditPrice] = useState("");
 
+  // Ładuje domyślne artykuły z API
   const loadArticles = async () => {
     try {
       const params = familyId ? { family_id: familyId } : {};
@@ -44,10 +47,12 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
     }
   };
 
+  // Przy zmianie rodziny lub starcie - ładujemy artykuły
   useEffect(() => {
     loadArticles();
   }, [familyId]);
 
+  // Dodaje nowy domyślny artykuł
   const addArticle = async () => {
     if (!name.trim()) {
       onToast("Podaj nazwę artykułu");
@@ -61,6 +66,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
         default_price: parseFloat(parseRateInput(price)) || 0,
         family_id: familyId || null
       }, { headers });
+      // Reset formularza
       setName("");
       setUnit("szt");
       setCategory("other");
@@ -72,6 +78,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
     }
   };
 
+  // Rozpoczyna edycję artykułu - wypełnia formularz danymi
   const startEdit = (article) => {
     setEditingId(article.id);
     setEditName(article.name);
@@ -80,6 +87,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
     setEditPrice(article.default_price ? article.default_price.toFixed(2).replace(".", ",") : "");
   };
 
+  // Zapisuje edytowany artykuł
   const saveEdit = async () => {
     if (!editName.trim()) return;
     try {
@@ -89,6 +97,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
         category: editCat,
         default_price: parseFloat(parseRateInput(editPrice)) || 0
       }, { headers });
+      // Reset stanu edycji
       setEditingId(null);
       setEditName("");
       setEditUnit("szt");
@@ -101,6 +110,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
     }
   };
 
+  // Usuwa artykuł
   const deleteArticle = async (id) => {
     try {
       await axios.delete(`${api}/default-articles/${id}`, { headers });
@@ -113,6 +123,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
 
   return (
     <div className="module-panel settings-panel">
+      {/* Formularz dodawania artykułu */}
       <div className="add-task">
         <h3>➕ Dodaj artykuł domyślny</h3>
         <div className="form-row-inline">
@@ -137,6 +148,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
         <button type="button" className="add-task-btn" onClick={addArticle}>+ Dodaj artykuł</button>
       </div>
 
+      {/* Lista artykułów */}
       <div className="day-tasks-panel">
         <div className="tasks-header">
           <h3>📦 Artykuły domyślne</h3>
@@ -150,6 +162,7 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
           return (
             <div key={article.id} className="task-card shopping-card easy">
               {editing ? (
+                // Tryb edycji
                 <div className="edit-mode">
                   <input value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Nazwa" />
                   <select className="input-small" style={{ width: '100px', flex: '0 0 auto' }} value={editUnit} onChange={(e) => setEditUnit(e.target.value)}>
@@ -164,9 +177,16 @@ export default function CategoriesPanel({ api, headers, onToast, familyId }) {
                     ))}
                   </select>
                   <button type="button" className="save-mini" onClick={saveEdit}>✓</button>
-                  <button type="button" className="cancel-mini" onClick={() => { setEditingId(null); setEditName(""); setEditUnit("szt"); setEditCat("other"); setEditPrice(""); }}>✗</button>
+                  <button type="button" className="cancel-mini" onClick={() => {
+                    setEditingId(null);
+                    setEditName("");
+                    setEditUnit("szt");
+                    setEditCat("other");
+                    setEditPrice("");
+                  }}>✗</button>
                 </div>
               ) : (
+                // Widok normalny
                 <>
                   <div className="task-info">
                     <h4>{article.name}</h4>

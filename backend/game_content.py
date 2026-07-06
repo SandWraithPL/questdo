@@ -1,4 +1,6 @@
+# Definicje poziomów gry i osiągnięć
 from __future__ import annotations
+# Lista poziomów: (EXP wymagany, numer poziomu, tytuł)
 LEVELS: list[tuple[int, int, str]] = [
     (0, 1, "Kadet"),
     (80, 2, "Rekrut"),
@@ -22,6 +24,7 @@ LEVELS: list[tuple[int, int, str]] = [
     (7000, 20, "Legenda"),
 ]
 
+# Reguły przyznawania EXP za zadania
 EXP_RULES = {
     "early_bonus": "+50%",
     "late_penalty": "-50%",
@@ -29,6 +32,7 @@ EXP_RULES = {
 }
 
 
+# Zwraca poziom gracza na podstawie EXP (poziom, tytuł, następny poziom, tytuł następnego)
 def get_level(exp: int) -> tuple[int, str, int | None, str | None]:
     current = LEVELS[0]
     for entry in LEVELS:
@@ -39,6 +43,7 @@ def get_level(exp: int) -> tuple[int, str, int | None, str | None]:
     return current[1], current[2], nxt[0] if nxt else None, nxt[2] if nxt else None
 
 
+# Definicje wszystkich standardowych osiągnięć
 ACHIEVEMENT_DEFS: list[dict] = [
     {"slug": "first_step", "title": "Pierwszy krok", "description": "Ukończ pierwszy quest.", "icon": "🌟", "kind": "tasks", "value": 1},
     {"slug": "second_bite", "title": "Dobry start", "description": "Ukończ 3 questy.", "icon": "✨", "kind": "tasks", "value": 3},
@@ -78,9 +83,11 @@ ACHIEVEMENT_DEFS: list[dict] = [
     {"slug": "ackerman_focus", "title": "Pełne skupienie", "description": "Zdobądź 5000 EXP.", "icon": "🎯", "kind": "exp", "value": 5000},
 ]
 
+# Słownik osiągnięć po identyfikatorze
 ACHIEVEMENT_BY_SLUG = {a["slug"]: a for a in ACHIEVEMENT_DEFS}
 
 
+# Zbiera statystyki użytkownika potrzebne do sprawdzania osiągnięć
 def gather_user_stats(user, db, models) -> dict:
     from datetime import date, timedelta
     from zoneinfo import ZoneInfo
@@ -170,6 +177,7 @@ def gather_user_stats(user, db, models) -> dict:
     }
 
 
+# Pobiera wartość statystyki po jej typie (mapuje nazwy typów na pola statystyk)
 def _stat_value(stats: dict, kind: str) -> int:
     mapping = {
         "tasks": "completed_tasks",
@@ -196,16 +204,19 @@ def _stat_value(stats: dict, kind: str) -> int:
     return stats.get(mapping.get(kind, kind), 0)
 
 
+# Sprawdza czy osiągnięcie zostało spełnione na podstawie statystyk
 def achievement_met(stats: dict, ach: dict) -> bool:
     return _stat_value(stats, ach["kind"]) >= ach["value"]
 
 
+# Zwraca tekst postępu w osiągnięciu (np. "5/10")
 def achievement_progress_text(stats: dict, ach: dict) -> str:
     current = _stat_value(stats, ach["kind"])
     target = ach["value"]
     return f"{min(current, target)}/{target}"
 
 
+# Zwraca następne osiągnięcie do zdobycia (pierwsze niespełnione)
 def get_next_achievement(stats: dict, unlocked_slugs: set) -> dict | None:
     for ach in ACHIEVEMENT_DEFS:
         if ach["slug"] in unlocked_slugs:
@@ -224,6 +235,7 @@ def get_next_achievement(stats: dict, unlocked_slugs: set) -> dict | None:
     return None
 
 
+# Definicje rzadkich znajdziek do zdobycia
 RARE_DROPS: list[dict] = [
     {"slug": "bronze_coin", "name": "Moneta Regularności", "description": "Daje mały znak za codzienne wracanie do zadań.", "icon": "🪙", "rarity": "common", "drop_chance": 15},
     {"slug": "crystal_shard", "name": "Kryształ Skupienia", "description": "Przypomina o domykaniu rozpoczętych spraw.", "icon": "💎", "rarity": "common", "drop_chance": 15},
@@ -240,9 +252,11 @@ RARE_DROPS: list[dict] = [
     {"slug": "infinity_stone", "name": "Kamień Skupienia", "description": "Rzadki symbol pełnej koncentracji na celu.", "icon": "💜", "rarity": "legendary", "drop_chance": 0.5},
 ]
 
+# Słownik znajdziek po identyfikatorze
 RARE_DROP_BY_SLUG = {rd["slug"]: rd for rd in RARE_DROPS}
 
 
+# Definicje ekskluzywnych osiągnięć (trudniejsze do zdobycia)
 EXCLUSIVE_ACHIEVEMENTS: list[dict] = [
     {
         "slug": "founding_titan", 
@@ -358,16 +372,18 @@ EXCLUSIVE_ACHIEVEMENTS: list[dict] = [
     },
 ]
 
+# Słownik ekskluzywnych osiągnięć po identyfikatorze
 EXCLUSIVE_ACHIEVEMENT_BY_SLUG = {ea["slug"]: ea for ea in EXCLUSIVE_ACHIEVEMENTS}
 
 
+# Sprawdza czy użytkownik spełnia warunki ekskluzywnych osiągnięć
 def check_exclusive_achievements(user, db, models, revalidate=False) -> list[dict]:
     from datetime import datetime, timedelta, date, time
 
     reset_at = getattr(user, "progress_reset_at", None)
     stats = gather_user_stats(user, db, models)
     
-    # Get all player achievements with their achievement slugs
+    # Pobierz już odblokowane osiągnięcia użytkownika
     player_achievements = db.query(models.PlayerExclusiveAchievement).filter(
         models.PlayerExclusiveAchievement.user_id == user.id
     ).all()

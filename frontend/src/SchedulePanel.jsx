@@ -1,3 +1,4 @@
+// Panel planu zajęć - zarządzanie harmonogramem, import/export
 import { useMemo, useState, useEffect } from "react";
 import axios from "axios";
 import SharedCalendar, { WEEKDAYS_LONG } from "./SharedCalendar";
@@ -6,6 +7,7 @@ import DatePicker from "./DatePicker";
 import FreeDayManager from "./FreeDayManager";
 import { toVirtualRecurringTasks } from "./recurringHelpers";
 
+// Kategorie eventów
 const EVENT_CATEGORIES = [
   { value: "birthday", emoji: "🎂", label: "Urodziny" },
   { value: "anniversary", emoji: "💍", label: "Rocznica" },
@@ -21,6 +23,7 @@ function getEventCategoryLabel(cat) {
   return EVENT_CATEGORIES.find((c) => c.value === cat)?.label || "Inne";
 }
 
+// Konwertuje datę na string YYYY-MM-DD
 function toDateStr(d) {
   if (!d) return new Date().toISOString().slice(0, 10);
   if (typeof d === "string") return d.slice(0, 10);
@@ -43,6 +46,7 @@ export default function SchedulePanel({
   setFreeDays,
   recurringEvents = [],
 }) {
+  // Stany formularza
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
   const [lecturer, setLecturer] = useState("");
@@ -72,6 +76,7 @@ export default function SchedulePanel({
     setManualEntryDate(selectedStr);
   }, [selectedStr]);
 
+  // Pobiera wpisy dla wybranego dnia + wirtualne z recurring
   const dayEntries = useMemo(() => {
     const dayEntries = entries.filter((e) => e.entry_date === selectedStr);
     const virtual = toVirtualRecurringTasks(recurringEvents, selectedStr, dayEntries);
@@ -80,6 +85,7 @@ export default function SchedulePanel({
 
   const sortedDayEntries = [...dayEntries].sort((a, b) => a.start_time.localeCompare(b.start_time));
 
+  // Dodaje nowy wpis do planu
   const addEntry = () => {
     if (!title.trim()) {
       onToast("Podaj nazwę zajęć");
@@ -94,6 +100,7 @@ export default function SchedulePanel({
       return;
     }
 
+    // Tworzymy optymistyczny wpis
     const tempId = `temp-${Date.now()}`;
     const tempEntry = {
       id: tempId,
@@ -112,6 +119,7 @@ export default function SchedulePanel({
     };
     setEntries(prev => [...prev, tempEntry]);
 
+    // Reset formularza
     setTitle("");
     setLocation("");
     setLecturer("");
@@ -144,13 +152,13 @@ export default function SchedulePanel({
 
         onToast(`✅ Dodano ${newEntries.length} ${newEntries.length === 1 ? 'zajęcia' : 'zajęć'} do planu`);
       } catch (err) {
-
         setEntries(prev => prev.filter(e => e.id !== tempId));
         onToast(err.response?.data?.detail || "Błąd dodawania");
       }
     });
   };
 
+  // Usuwa wpis
   const deleteEntry = (entry) => {
     enqueueRequest(async () => {
       try {
@@ -163,6 +171,7 @@ export default function SchedulePanel({
     });
   };
 
+  // Rozpoczyna edycję
   const startEdit = (entry) => {
     setEditingId(entry.id);
     setEditTitle(entry.title);
@@ -172,6 +181,7 @@ export default function SchedulePanel({
     setEditEndTime(entry.end_time);
   };
 
+  // Zapisuje edycję
   const saveEdit = async () => {
     if (!editTitle.trim()) {
       onToast("Podaj nazwę zajęć");
@@ -183,13 +193,12 @@ export default function SchedulePanel({
 
     const timeChanged = (editStartTime !== original.start_time) || (editEndTime !== original.end_time);
 
+    // Automatyczne ukończenie jeśli czas minął
     let newCompleted = original.completed;
-
     if (timeChanged) {
       const today = new Date().toISOString().slice(0, 10);
       const now = new Date();
       const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
       const [h, m] = editEndTime.split(":").map(Number);
       const endMinutes = h * 60 + m;
 
@@ -200,7 +209,6 @@ export default function SchedulePanel({
       } else if (original.entry_date > today) {
         newCompleted = false;
       }
-
     }
 
     enqueueRequest(async () => {
@@ -233,6 +241,7 @@ export default function SchedulePanel({
     setEditEndTime("");
   };
 
+  // Eksportuje plan do pliku
   const handleExport = async () => {
     try {
       const res = await axios.post(`${api}/schedule/export`, {}, { headers });
@@ -249,6 +258,7 @@ export default function SchedulePanel({
     }
   };
 
+  // Importuje plan z pliku
   const handleImport = async () => {
     if (!importText.trim()) {
       onToast("Wklej zawartość pliku");
@@ -271,17 +281,11 @@ export default function SchedulePanel({
         currentEntry = null;
       }
     }
-
     if (currentEntry) entries.push(currentEntry);
 
     if (entries.length === 0) {
       onToast("Nie znaleziono żadnych wpisów w pliku");
       return;
-    }
-
-    const invalidEntries = entries.filter(e => !e.title || !e.title.trim());
-    if (invalidEntries.length > 0) {
-      onToast(`${invalidEntries.length} wpisów nie ma tytułu i zostanie pominiętych`);
     }
 
     const validEntries = entries.filter(e => e.title && e.title.trim());
@@ -300,6 +304,7 @@ export default function SchedulePanel({
     }
   };
 
+  // Usuwa wszystkie nieukończone wpisy
   const handleDeleteAll = () => {
     const unfinished = entries.filter(e => !e.completed);
     if (unfinished.length === 0) {
@@ -323,6 +328,7 @@ export default function SchedulePanel({
     });
   };
 
+  // Kopiuje wpis na inny dzień
   const copySchedule = async (entryId, targetDate) => {
     const original = entries.find(e => e.id === entryId);
     if (!original) return;
@@ -351,6 +357,7 @@ export default function SchedulePanel({
 
   return (
     <div className="module-panel schedule-panel">
+      {/* Wspólny kalendarz */}
       <SharedCalendar
         items={entries}
         selectedDate={selectedDate}
@@ -388,6 +395,7 @@ export default function SchedulePanel({
         )}
       />
 
+      {/* Lista wpisów dla wybranego dnia */}
       <div className="day-tasks-panel">
         <div className="tasks-header">
           <h3>
@@ -408,11 +416,14 @@ export default function SchedulePanel({
             <button type="button" className="danger-btn danger-btn--inline" onClick={handleDeleteAll} title="Usuń nieukończone zajęcia">🗑️ Usuń nieukończone</button>
           </div>
         </div>
+
         {sortedDayEntries.length === 0 && <p className="empty">Brak zajęć w tym dniu.</p>}
+
         {sortedDayEntries.map((entry) => {
           const editing = editingId === entry.id;
           const isVirtual = entry.isRecurringVirtual;
 
+          // Wirtualne wydarzenia z recurring
           if (isVirtual) {
             return (
               <div key={entry.id} className="task-card event schedule-card virtual-event">
@@ -430,22 +441,11 @@ export default function SchedulePanel({
           return (
             <div key={entry.id} className={`task-card medium schedule-card ${entry.completed ? "done" : ""}`}>
               {editing ? (
+                // Tryb edycji
                 <div className="edit-mode">
-                  <input
-                    value={editTitle}
-                    onChange={(e) => setEditTitle(e.target.value)}
-                    placeholder="Nazwa zajęć"
-                  />
-                  <input
-                    value={editLocation}
-                    onChange={(e) => setEditLocation(e.target.value)}
-                    placeholder="Sala / budynek"
-                  />
-                  <input
-                    value={editLecturer}
-                    onChange={(e) => setEditLecturer(e.target.value)}
-                    placeholder="Prowadzący"
-                  />
+                  <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Nazwa zajęć" />
+                  <input value={editLocation} onChange={(e) => setEditLocation(e.target.value)} placeholder="Sala / budynek" />
+                  <input value={editLecturer} onChange={(e) => setEditLecturer(e.target.value)} placeholder="Prowadzący" />
                   <div className="add-task-meta">
                     <TimePicker value={editStartTime} onChange={setEditStartTime} label="Od:" />
                     <TimePicker value={editEndTime} onChange={setEditEndTime} label="Do:" />
@@ -454,6 +454,7 @@ export default function SchedulePanel({
                   <button type="button" className="cancel-mini" onClick={cancelEdit}>✗</button>
                 </div>
               ) : (
+                // Widok normalny
                 <>
                   <div className="task-info">
                     <h4 className={entry.completed ? "done" : ""}>{entry.title}</h4>
@@ -466,14 +467,7 @@ export default function SchedulePanel({
                     </div>
                   </div>
                   <div className="task-actions">
-                    <button
-                      type="button"
-                      className="icon-btn"
-                      onClick={() => startEdit(entry)}
-                      title="Edytuj"
-                    >
-                      ✏️
-                    </button>
+                    <button type="button" className="icon-btn" onClick={() => startEdit(entry)} title="Edytuj">✏️</button>
                     <button type="button" className="icon-btn" onClick={() => setCopyModal({ entryId: entry.id, targetDate: toDateStr(new Date()) })} title="Kopiuj">📋</button>
                     <button type="button" className="icon-btn delete" onClick={() => deleteEntry(entry)}>🗑️</button>
                   </div>
@@ -484,6 +478,7 @@ export default function SchedulePanel({
         })}
       </div>
 
+      {/* Modal importu */}
       {showImport && (
         <div className="add-task">
           <h3>📤 Importuj plan zajęć</h3>
@@ -499,6 +494,8 @@ export default function SchedulePanel({
           </div>
         </div>
       )}
+
+      {/* Modal kopiowania */}
       {copyModal && (
         <div className="add-task">
           <h3>📋 Kopiuj zajęcia</h3>
@@ -510,6 +507,7 @@ export default function SchedulePanel({
         </div>
       )}
 
+      {/* Formularz dodawania */}
       {!showAdd ? (
         <button type="button" className="add-task-btn" onClick={() => setShowAdd(true)}>+ Dodaj zajęcia</button>
       ) : (

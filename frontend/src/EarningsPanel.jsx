@@ -1,3 +1,4 @@
+// Panel zarobków - śledzenie czasu pracy, stawki, podatki
 import { useMemo, useState, useEffect, useRef } from "react";
 import axios from "axios";
 import SharedCalendar, { WEEKDAYS_LONG } from "./SharedCalendar";
@@ -7,6 +8,7 @@ import FreeDayManager from "./FreeDayManager";
 import { applyUserFromResponse } from "./helpers";
 import { toVirtualRecurringTasks } from "./recurringHelpers";
 
+// Kategorie eventów
 const EVENT_CATEGORIES = [
   { value: "birthday", emoji: "🎂", label: "Urodziny" },
   { value: "anniversary", emoji: "💍", label: "Rocznica" },
@@ -22,6 +24,7 @@ function getEventCategoryLabel(cat) {
   return EVENT_CATEGORIES.find((c) => c.value === cat)?.label || "Inne";
 }
 
+// Formatuje kwotę na polski format (np. 10,50 zł)
 function formatMoney(value) {
   const num = Number(value || 0);
   const formatted = num.toFixed(2).replace(".", ",");
@@ -34,15 +37,18 @@ function formatRate(value) {
   return `${formatted} zł/h`;
 }
 
+// Konwertuje wejście stawki (przecinki) na punkt dla API
 function parseRateInput(value) {
   if (!value) return "";
   return value.replace(",", ".");
 }
 
+// Pobiera bieżącą datę w strefie czasowej Warszawy
 function getWarsawDateStr() {
   return new Intl.DateTimeFormat("en-CA", { timeZone: "Europe/Warsaw" }).format(new Date());
 }
 
+// Pobiera bieżące minuty (od północy) w strefie Warszawy
 function getWarsawMinutesNow() {
   const parts = new Intl.DateTimeFormat("en-GB", {
     timeZone: "Europe/Warsaw",
@@ -76,6 +82,7 @@ export default function EarningsPanel({
   setFreeDays,
   recurringEvents = [],
 }) {
+  // Stany formularza
   const [showAdd, setShowAdd] = useState(false);
   const [startTime, setStartTime] = useState("08:00");
   const [endTime, setEndTime] = useState("16:00");
@@ -107,26 +114,26 @@ export default function EarningsPanel({
     ? selectedDate.toISOString().slice(0, 10)
     : String(selectedDate).slice(0, 10);
 
-  const dayEntries = useMemo(
-    () => {
-      const dayEntries = entries.filter((e) => e.work_date === selectedStr);
-      const virtual = toVirtualRecurringTasks(recurringEvents, selectedStr, dayEntries);
-      return [...dayEntries, ...virtual].sort((a, b) => {
-        if (a.isRecurringVirtual && !b.isRecurringVirtual) return -1;
-        if (!a.isRecurringVirtual && b.isRecurringVirtual) return 1;
-        if (a.isRecurringVirtual && b.isRecurringVirtual) return 0;
-        return a.start_time.localeCompare(b.start_time);
-      });
-    },
-    [entries, selectedStr, recurringEvents],
-  );
+  // Pobiera wpisy dla wybranego dnia + wirtualne
+  const dayEntries = useMemo(() => {
+    const dayEntries = entries.filter((e) => e.work_date === selectedStr);
+    const virtual = toVirtualRecurringTasks(recurringEvents, selectedStr, dayEntries);
+    return [...dayEntries, ...virtual].sort((a, b) => {
+      if (a.isRecurringVirtual && !b.isRecurringVirtual) return -1;
+      if (!a.isRecurringVirtual && b.isRecurringVirtual) return 1;
+      if (a.isRecurringVirtual && b.isRecurringVirtual) return 0;
+      return a.start_time.localeCompare(b.start_time);
+    });
+  }, [entries, selectedStr, recurringEvents]);
 
+  // Ładuje domyślną stawkę i odświeża podsumowanie
   useEffect(() => {
     loadDefaultHourlyRate();
     setWorkDate(selectedStr);
     refreshSummary();
   }, [selectedStr]);
 
+  // Automatycznie kończy wpisy pracy gdy czas minął
   useEffect(() => {
     const checkAutoComplete = () => {
       const todayStr = getWarsawDateStr();
@@ -158,31 +165,31 @@ export default function EarningsPanel({
     return () => window.clearInterval(interval);
   }, [entries, api, headers, onToast, onUserUpdate]);
 
+  // Ładuje domyślną stawkę użytkownika
   const loadDefaultHourlyRate = async () => {
     try {
       const res = await axios.get(`${api}/settings/default-hourly-rate`, { headers });
       const rate = res.data.rate ? parseFloat(res.data.rate).toFixed(2).replace(".", ",") : "";
       setDefaultHourlyRate(rate);
-    } catch {
-
-    }
+    } catch {}
   };
 
+  // Oblicza sumy dla dnia, miesiąca, roku
   const dayTotal = dayEntries.filter((e) => e.completed).reduce((sum, e) => sum + (e.net || 0), 0);
   const monthKey = selectedStr.slice(0, 7);
   const yearKey = selectedStr.slice(0, 4);
   const monthTotal = summary?.by_month?.[monthKey] || 0;
   const yearTotal = summary?.by_year?.[yearKey] || 0;
 
+  // Odświeża podsumowanie finansowe
   const refreshSummary = async () => {
     try {
       const res = await axios.get(`${api}/work/summary`, { headers });
       setSummary(res.data);
-    } catch {
-
-    }
+    } catch {}
   };
 
+  // Zapisuje stawkę jako domyślną
   const saveAsDefaultRate = async () => {
     const rateValue = parseRateInput(hourlyRate);
     const rate = parseFloat(rateValue);
@@ -204,6 +211,7 @@ export default function EarningsPanel({
     }
   };
 
+  // Dodaje nowy wpis pracy
   const addEntry = () => {
     const rateValue = parseRateInput(hourlyRate);
     const rate = parseFloat(rateValue);
@@ -220,6 +228,7 @@ export default function EarningsPanel({
       return;
     }
 
+    // Optymistyczny wpis
     const tempId = `temp-${Date.now()}`;
     const tempEntry = {
       id: tempId,
@@ -264,7 +273,6 @@ export default function EarningsPanel({
           end_date: isRecurring && endDate ? endDate : null,
         };
 
-
         const res = await axios.post(`${api}/work`, payload, { headers });
         const newEntry = res.data.entries?.[0] || res.data.entry || res.data;
         setEntries(prev => prev.map(e => e.id === tempId ? newEntry : e));
@@ -277,6 +285,7 @@ export default function EarningsPanel({
     }, true);
   };
 
+  // Usuwa wpis pracy
   const deleteEntry = (entry) => {
     enqueueRequest(async () => {
       try {
@@ -291,6 +300,7 @@ export default function EarningsPanel({
     });
   };
 
+  // Usuwa wszystkie nieukończone wpisy
   const deleteUnfinishedEntries = () => {
     const unfinished = entries.filter((e) => !e.completed);
     if (unfinished.length === 0) {
@@ -313,6 +323,7 @@ export default function EarningsPanel({
     });
   };
 
+  // Kopiuje wpis pracy
   const copyWork = async (entryId, targetDate) => {
     const original = entries.find(e => e.id === entryId);
     if (!original) return;
@@ -343,6 +354,7 @@ export default function EarningsPanel({
     });
   };
 
+  // Rozpoczyna edycję
   const startEdit = (entry) => {
     if (entry.completed) {
       onToast("Nie można edytować ukończonej pracy");
@@ -360,6 +372,7 @@ export default function EarningsPanel({
     setEditEndDate(entry.end_date ? entry.end_date.slice(0, 10) : "");
   };
 
+  // Zapisuje edytowany wpis
   const saveEdit = (entry) => {
     enqueueRequest(async () => {
       try {
@@ -375,29 +388,22 @@ export default function EarningsPanel({
 
         const timeChanged = (editStartTime !== original.start_time) || (editEndTime !== original.end_time) || (editDate !== original.work_date);
 
+        // Automatyczne ukończenie jeśli czas minął
         let newCompleted = original.completed;
-
         if (timeChanged) {
           const today = new Date().toISOString().slice(0, 10);
           const now = new Date();
           const nowMinutes = now.getHours() * 60 + now.getMinutes();
-
           const [h, m] = editEndTime.split(":").map(Number);
           const endMinutes = h * 60 + m;
 
           if (editDate < today) {
             newCompleted = true;
-          }
-
-          else if (editDate === today && endMinutes <= nowMinutes) {
+          } else if (editDate === today && endMinutes <= nowMinutes) {
             newCompleted = true;
-          }
-
-          else if (editDate === today && endMinutes > nowMinutes) {
+          } else if (editDate === today && endMinutes > nowMinutes) {
             newCompleted = false;
-          }
-
-          else if (editDate > today) {
+          } else if (editDate > today) {
             newCompleted = false;
           }
         }
@@ -426,7 +432,7 @@ export default function EarningsPanel({
 
   return (
     <div className="module-panel earnings-panel">
-
+      {/* Podsumowanie finansowe */}
       <div className="earnings-summary">
         <div className="earnings-stat">
           <span className="earnings-stat-label">Dzień</span>
@@ -446,6 +452,7 @@ export default function EarningsPanel({
         </div>
       </div>
 
+      {/* Kalendarz zarobków */}
       <SharedCalendar
         items={entries}
         selectedDate={selectedDate}
@@ -483,6 +490,7 @@ export default function EarningsPanel({
         )}
       />
 
+      {/* Lista wpisów dla wybranego dnia */}
       <div className="day-tasks-panel">
         <div className="tasks-header">
           <h3>
@@ -499,7 +507,10 @@ export default function EarningsPanel({
           </h3>
           <span className="earnings-day-total">{formatMoney(dayTotal)}</span>
         </div>
+
         {dayEntries.length === 0 && <p className="empty">Brak wpisów pracy na ten dzień.</p>}
+
+        {/* Modal kopiowania */}
         {copyModal && (
           <div className="add-task">
             <h3>📋 Kopiuj pracę</h3>
@@ -510,10 +521,12 @@ export default function EarningsPanel({
             </div>
           </div>
         )}
+
         {dayEntries.map((entry) => {
           const editing = editingId === entry.id;
           const isVirtual = entry.isRecurringVirtual;
 
+          // Wirtualne wydarzenia
           if (isVirtual) {
             return (
               <div key={entry.id} className="task-card event virtual-event">
@@ -531,6 +544,7 @@ export default function EarningsPanel({
           return (
             <div key={entry.id} className={`task-card ${entry.completed ? "done" : "medium"}`}>
               {editing ? (
+                // Tryb edycji
                 <div className="edit-mode">
                   <DatePicker value={editDate} onChange={setEditDate} />
                   <TimePicker value={editStartTime} onChange={setEditStartTime} />
@@ -556,6 +570,7 @@ export default function EarningsPanel({
                   <button type="button" className="cancel-mini" onClick={() => setEditingId(null)}>✗</button>
                 </div>
               ) : (
+                // Widok normalny
                 <>
                   <div className="task-info">
                     <h4 className={entry.completed ? "done" : ""}>{entry.start_time} – {entry.end_time}</h4>
@@ -583,6 +598,7 @@ export default function EarningsPanel({
         })}
       </div>
 
+      {/* Przycisk dodawania i usuwania */}
       {!showAdd ? (
         <div className="row panel-actions-row">
           <button type="button" className="add-task-btn" onClick={() => {
@@ -594,6 +610,7 @@ export default function EarningsPanel({
           <button type="button" className="danger-btn danger-btn--inline" onClick={deleteUnfinishedEntries}>🗑️ Usuń nieukończoną pracę</button>
         </div>
       ) : (
+        // Formularz dodawania
         <div className="add-task">
           <h3>+ Nowy wpis pracy ({selectedStr})</h3>
           <div className="add-task-meta">

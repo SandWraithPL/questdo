@@ -1,9 +1,11 @@
+// Panel zarządzania rodzinami - tworzenie, zapraszanie, zarządzanie członkami
 import { useState, useEffect } from "react";
 import axios from "axios";
 import CategoriesPanel from "./CategoriesPanel";
 
 const FAMILY_COLLAPSED_KEY = "questdo-family-collapsed";
 
+// Czyta czy panel jest zwinięty
 const readCollapsed = () => {
   try { return localStorage.getItem(FAMILY_COLLAPSED_KEY) === "true"; } catch { return true; }
 };
@@ -18,13 +20,15 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
   const [selectedFamily, setSelectedFamily] = useState(null);
   const [collapsed, setCollapsed] = useState(readCollapsed);
 
-  const applyFirstFamily = (list, force = false) => {
-    if (!list.length || (selectedFamily && !force)) return;
+  // Ustawia pierwszą rodzinę jako wybraną
+  const applyFirstFamily = (list) => {
+    if (!list.length || selectedFamily) return;
     const first = list[0];
     setSelectedFamily(first);
     onFamilyChange?.(first.id);
   };
 
+  // Ładuje listę rodzin
   const loadFamilies = async () => {
     try {
       const res = await axios.get(`${api}/families`, { headers });
@@ -35,6 +39,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     }
   };
 
+  // Ładuje zaproszenia
   const loadInvitations = async () => {
     try {
       const res = await axios.get(`${api}/family/invitations`, { headers });
@@ -42,6 +47,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     } catch {}
   };
 
+  // Ładuje dane przy starcie
   useEffect(() => {
     loadFamilies();
     loadInvitations();
@@ -53,6 +59,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     applyFirstFamily(families);
   }, [families]);
 
+  // Tworzy nową rodzinę
   const createFamily = async () => {
     if (!familyName.trim()) {
       onToast("Podaj nazwę rodziny");
@@ -69,6 +76,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     }
   };
 
+  // Zaprasza użytkownika do rodziny
   const inviteUser = async () => {
     if (!inviteUsername.trim()) {
       onToast("Podaj nazwę użytkownika");
@@ -79,14 +87,11 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
       return;
     }
     try {
-      const usernameToSend = inviteUsername.trim().toLowerCase();
-
-      const res = await axios.post(
+      await axios.post(
         `${api}/families/${selectedFamily.id}/invite`,
-        { username: usernameToSend },
+        { username: inviteUsername.trim().toLowerCase() },
         { headers }
       );
-
       setInviteUsername("");
       setShowInvite(false);
       onToast("📧 Wysłano zaproszenie");
@@ -95,6 +100,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     }
   };
 
+  // Akceptuje zaproszenie
   const acceptInvitation = async (invitationId) => {
     try {
       await axios.post(`${api}/family/invitations/${invitationId}/accept`, {}, { headers });
@@ -106,6 +112,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     }
   };
 
+  // Odrzuca zaproszenie
   const declineInvitation = async (invitationId) => {
     try {
       await axios.post(`${api}/family/invitations/${invitationId}/decline`, {}, { headers });
@@ -116,6 +123,7 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     }
   };
 
+  // Opuszcza rodzinę
   const leaveFamily = async (familyId) => {
     try {
       await axios.post(`${api}/families/${familyId}/leave`, {}, { headers });
@@ -129,27 +137,28 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
     }
   };
 
+  // Wybiera rodzinę
   const selectFamily = (family) => {
     setSelectedFamily(family);
     onFamilyChange?.(family.id);
   };
 
+  // Usuwa członka rodziny
   const removeMember = async (memberId) => {
     if (!selectedFamily) return;
     try {
       await axios.delete(`${api}/families/${selectedFamily.id}/members/${memberId}`, { headers });
-
       setSelectedFamily(prev => ({
         ...prev,
         members: prev.members.filter(m => m.id !== memberId)
       }));
-
       onToast("🗑️ Usunięto członka rodziny");
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd usuwania członka");
     }
   };
 
+  // Przełącza zwinięcie panelu
   const toggleCollapsed = () => {
     setCollapsed(prev => {
       const next = !prev;
@@ -162,7 +171,6 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
 
   return (
     <div className="module-panel family-panel">
-
       <div className="calendar-section-bar" style={{ cursor: 'pointer' }} onClick={toggleCollapsed}>
         <span className="calendar-section-title">👨‍👩‍👧‍👦 Rodzina</span>
         <span className="calendar-section-chevron">{collapsed ? "▼" : "▲"}</span>
@@ -170,153 +178,145 @@ export default function FamilyPanel({ api, headers, onToast, onFamilyChange, ini
 
       {!collapsed && (
         <>
-
+          {/* Oczekujące zaproszenia */}
           {invitations.length > 0 && (
-        <div className="invitations-section">
-          <h4>📨 Oczekujące zaproszenia ({invitations.length})</h4>
-          {invitations.map((inv) => (
-            <div key={inv.id} className="invitation-card">
-              <div className="invitation-info">
-                <span className="invitation-family">👨‍👩‍👧‍👦 {inv.family_name}</span>
-                <span className="invitation-from">📩 od: {inv.invited_by}</span>
-              </div>
-              <div className="invitation-actions">
-                <button
-                  type="button"
-                  className="accept-btn"
-                  onClick={() => acceptInvitation(inv.id)}
-                >
-                  ✅ Akceptuj
-                </button>
-                <button
-                  type="button"
-                  className="decline-btn"
-                  onClick={() => declineInvitation(inv.id)}
-                >
-                  ❌ Odrzuć
-                </button>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-
-      {families.length === 0 ? (
-        <div className="no-family">
-          <p>Nie należysz do żadnej rodziny</p>
-          {!showCreate ? (
-            <button type="button" className="add-task-btn" onClick={() => setShowCreate(true)}>+ Utwórz rodzinę</button>
-          ) : (
-            <div className="add-task">
-              <h3>➕ Utwórz nową rodzinę</h3>
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Nazwa rodziny"
-                value={familyName}
-                onChange={(e) => setFamilyName(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && createFamily()}
-              />
-              <div className="row" style={{ marginTop: 12 }}>
-                <button type="button" className="add-task-btn" onClick={createFamily}>Utwórz</button>
-                <button type="button" className="cancel-btn" onClick={() => setShowCreate(false)}>Anuluj</button>
-              </div>
+            <div className="invitations-section">
+              <h4>📨 Oczekujące zaproszenia ({invitations.length})</h4>
+              {invitations.map((inv) => (
+                <div key={inv.id} className="invitation-card">
+                  <div className="invitation-info">
+                    <span className="invitation-family">👨‍👩‍👧‍👦 {inv.family_name}</span>
+                    <span className="invitation-from">📩 od: {inv.invited_by}</span>
+                  </div>
+                  <div className="invitation-actions">
+                    <button type="button" className="accept-btn" onClick={() => acceptInvitation(inv.id)}>✅ Akceptuj</button>
+                    <button type="button" className="decline-btn" onClick={() => declineInvitation(inv.id)}>❌ Odrzuć</button>
+                  </div>
+                </div>
+              ))}
             </div>
           )}
-        </div>
-      ) : (
-        <div className="families-list">
-          <div className="family-selector">
-            <label>Wybierz rodzinę:</label>
-            <select
-              value={selectedFamily?.id || ""}
-              onChange={(e) => {
-                const family = families.find(f => f.id === parseInt(e.target.value));
-                if (family) selectFamily(family);
-              }}
-              className="rate-dropdown"
-              style={{ width: "100%" }}
-            >
-              {families.map((f) => (
-                <option key={f.id} value={f.id}>{f.name}</option>
-              ))}
-            </select>
-          </div>
 
-          {selectedFamily && (
-            <div className="family-details">
-              <div className="family-name-header">
-                <span className="calendar-section-title">👨‍👩‍👧‍👦 {selectedFamily.name}</span>
+          {/* Brak rodzin - formularz tworzenia */}
+          {families.length === 0 ? (
+            <div className="no-family">
+              <p>Nie należysz do żadnej rodziny</p>
+              {!showCreate ? (
+                <button type="button" className="add-task-btn" onClick={() => setShowCreate(true)}>+ Utwórz rodzinę</button>
+              ) : (
+                <div className="add-task">
+                  <h3>➕ Utwórz nową rodzinę</h3>
+                  <input
+                    type="text"
+                    className="search-input"
+                    placeholder="Nazwa rodziny"
+                    value={familyName}
+                    onChange={(e) => setFamilyName(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && createFamily()}
+                  />
+                  <div className="row" style={{ marginTop: 12 }}>
+                    <button type="button" className="add-task-btn" onClick={createFamily}>Utwórz</button>
+                    <button type="button" className="cancel-btn" onClick={() => setShowCreate(false)}>Anuluj</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            // Lista rodzin i szczegóły wybranej
+            <div className="families-list">
+              <div className="family-selector">
+                <label>Wybierz rodzinę:</label>
+                <select
+                  value={selectedFamily?.id || ""}
+                  onChange={(e) => {
+                    const family = families.find(f => f.id === parseInt(e.target.value));
+                    if (family) selectFamily(family);
+                  }}
+                  className="rate-dropdown"
+                  style={{ width: "100%" }}
+                >
+                  {families.map((f) => (
+                    <option key={f.id} value={f.id}>{f.name}</option>
+                  ))}
+                </select>
               </div>
-              <div className="family-members">
-                <h5>Członkowie ({selectedFamily.members.length})</h5>
-                {selectedFamily.members.map((member) => (
-                  <div key={member.id} className="member-item">
-                    <div className="member-left">
-                      <span className="member-role">
-                        {member.role === "admin" ? "👑" : "👤"}
-                      </span>
-                      <span className="member-name">{member.username}</span>
-                    </div>
-                    {selectedFamily.role === "admin" && currentUserId && member.id !== currentUserId && (
-                      <button
-                        type="button"
-                        className="icon-btn delete"
-                        onClick={() => removeMember(member.id)}
-                        title="Usuń członka"
-                      >
-                        🗑️
+
+              {selectedFamily && (
+                <div className="family-details">
+                  <div className="family-name-header">
+                    <span className="calendar-section-title">👨‍👩‍👧‍👦 {selectedFamily.name}</span>
+                  </div>
+
+                  {/* Lista członków */}
+                  <div className="family-members">
+                    <h5>Członkowie ({selectedFamily.members.length})</h5>
+                    {selectedFamily.members.map((member) => (
+                      <div key={member.id} className="member-item">
+                        <div className="member-left">
+                          <span className="member-role">
+                            {member.role === "admin" ? "👑" : "👤"}
+                          </span>
+                          <span className="member-name">{member.username}</span>
+                        </div>
+                        {selectedFamily.role === "admin" && currentUserId && member.id !== currentUserId && (
+                          <button
+                            type="button"
+                            className="icon-btn delete"
+                            onClick={() => removeMember(member.id)}
+                            title="Usuń członka"
+                          >
+                            🗑️
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Akcje */}
+                  <div className="family-actions">
+                    {selectedFamily.role === "admin" && (
+                      <button type="button" className="add-task-btn" onClick={() => setShowInvite(!showInvite)} style={{ marginBottom: 8 }}>
+                        📧 Zaproś członka
                       </button>
                     )}
-                    {selectedFamily.role === "admin" && !currentUserId && (
-                      <span style={{fontSize: '10px', color: '#f44336'}}>⚠️ Brak currentUserId</span>
-                    )}
+                    <button type="button" className="danger-btn" onClick={() => leaveFamily(selectedFamily.id)}>
+                      👋 Opuść rodzinę
+                    </button>
                   </div>
-                ))}
-              </div>
 
-              <div className="family-actions">
-                {selectedFamily.role === "admin" && (
-              <button type="button" className="add-task-btn" onClick={() => setShowInvite(!showInvite)} style={{ marginBottom: 8 }}>
-                📧 Zaproś członka
-              </button>
-            )}
-            <button type="button" className="danger-btn" onClick={() => leaveFamily(selectedFamily.id)}>
-              👋 Opuść rodzinę
-            </button>
-          </div>
+                  {/* Formularz zaproszenia */}
+                  {showInvite && selectedFamily.role === "admin" && (
+                    <div className="add-task" style={{ marginTop: 12, padding: 16 }}>
+                      <h3>📧 Zaproś użytkownika</h3>
+                      <input
+                        type="text"
+                        className="search-input"
+                        placeholder="Nazwa użytkownika"
+                        value={inviteUsername}
+                        onChange={(e) => setInviteUsername(e.target.value)}
+                        onKeyDown={(e) => e.key === "Enter" && inviteUser()}
+                      />
+                      <div className="row" style={{ marginTop: 12 }}>
+                        <button type="button" className="add-task-btn" onClick={inviteUser}>Wyślij zaproszenie</button>
+                        <button type="button" className="cancel-btn" onClick={() => setShowInvite(false)}>Anuluj</button>
+                      </div>
+                    </div>
+                  )}
 
-          {showInvite && selectedFamily.role === "admin" && (
-            <div className="add-task" style={{ marginTop: 12, padding: 16 }}>
-              <h3>📧 Zaproś użytkownika</h3>
-              <input
-                type="text"
-                className="search-input"
-                placeholder="Nazwa użytkownika"
-                value={inviteUsername}
-                onChange={(e) => setInviteUsername(e.target.value)}
-                onKeyDown={(e) => e.key === "Enter" && inviteUser()}
-              />
-              <div className="row" style={{ marginTop: 12 }}>
-                <button type="button" className="add-task-btn" onClick={inviteUser}>Wyślij zaproszenie</button>
-                <button type="button" className="cancel-btn" onClick={() => setShowInvite(false)}>Anuluj</button>
-              </div>
+                  {/* Artykuły domyślne rodziny */}
+                  <div style={{ marginTop: 16, borderTop: '1px solid #333', paddingTop: 16 }}>
+                    <h5 style={{ marginBottom: 8 }}>📦 Artykuły domyślne rodziny</h5>
+                    <CategoriesPanel
+                      api={api}
+                      headers={headers}
+                      onToast={onToast}
+                      familyId={selectedFamily.id}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           )}
-
-              <div style={{ marginTop: 16, borderTop: '1px solid #333', paddingTop: 16 }}>
-                <h5 style={{ marginBottom: 8 }}>📦 Artykuły domyślne rodziny</h5>
-                <CategoriesPanel
-                  api={api}
-                  headers={headers}
-                  onToast={onToast}
-                  familyId={selectedFamily.id}
-                />
-              </div>
-            </div>
-          )}
-        </div>
-      )}
         </>
       )}
     </div>

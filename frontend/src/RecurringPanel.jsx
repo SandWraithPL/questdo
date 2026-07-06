@@ -1,7 +1,9 @@
+// Panel zarządzania cyklicznymi wydarzeniami (urodziny, rocznice, przypomnienia)
 import { useState, useEffect } from "react";
 import axios from "axios";
 import DatePicker from "./DatePicker";
 
+// Kategorie wydarzeń
 const EVENT_CATEGORIES = [
   { value: "birthday", emoji: "🎂", label: "Urodziny" },
   { value: "anniversary", emoji: "💍", label: "Rocznica" },
@@ -17,6 +19,7 @@ function getEventCategoryLabel(cat) {
   return EVENT_CATEGORIES.find((c) => c.value === cat)?.label || "Inne";
 }
 
+// Etykiety dla typów interwałów
 const INTERVAL_TYPE_LABELS = {
   daily: "Codziennie",
   weekly: "Co tydzień",
@@ -24,6 +27,7 @@ const INTERVAL_TYPE_LABELS = {
   yearly: "Co rok",
 };
 
+// Formatuje etykietę interwału (np. "Co 2 tygodnie")
 function getIntervalLabel(event) {
   const typeLabel = INTERVAL_TYPE_LABELS[event.interval_type] || event.interval_type;
   const value = event.interval_value || 1;
@@ -34,6 +38,7 @@ function getIntervalLabel(event) {
   return `Co ${value} ${unit}`;
 }
 
+// Formatuje datę do wyświetlenia (polski format)
 function formatDisplayDate(dateStr) {
   if (!dateStr) return "";
   return new Date(`${dateStr}T12:00:00`).toLocaleDateString("pl-PL", {
@@ -60,18 +65,19 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
   const [editStartDate, setEditStartDate] = useState("");
   const [editEndDate, setEditEndDate] = useState("");
 
+  // Ładuje cykliczne wydarzenia z API
   const loadRecurringEvents = async () => {
     try {
       const res = await axios.get(`${api}/recurring-events`, { headers });
       setRecurringEvents(res.data);
-    } catch (err) {
-    }
+    } catch (err) {}
   };
 
   useEffect(() => {
     loadRecurringEvents();
   }, []);
 
+  // Resetuje formularz dodawania
   const resetForm = () => {
     setTitle("");
     setCategory("birthday");
@@ -81,6 +87,7 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
     setEndDate("");
   };
 
+  // Dodaje nowe cykliczne wydarzenie
   const addRecurringEvent = async () => {
     if (!title.trim()) {
       onToast("Podaj nazwę wydarzenia");
@@ -109,6 +116,7 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
     }
   };
 
+  // Usuwa wydarzenie
   const deleteRecurringEvent = async (id) => {
     if (!window.confirm(`Czy na pewno chcesz usunąć to wydarzenie cykliczne?`)) return;
 
@@ -122,6 +130,7 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
     }
   };
 
+  // Usuwa wszystkie wydarzenia
   const deleteAllRecurringEvents = async () => {
     const count = recurringEvents.length;
     if (count === 0) {
@@ -140,6 +149,7 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
     }
   };
 
+  // Rozpoczyna edycję
   const startEdit = (event) => {
     setEditingId(event.id);
     setEditTitle(event.title);
@@ -150,6 +160,7 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
     setEditEndDate(event.end_date || "");
   };
 
+  // Zapisuje edytowane wydarzenie
   const saveEdit = async () => {
     if (!editTitle.trim()) return;
     if (!editStartDate) {
@@ -176,6 +187,7 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
     }
   };
 
+  // Sortuje wydarzenia po dacie startowej
   const sortedEvents = [...recurringEvents].sort((a, b) => {
     const aDate = a.start_date ? new Date(a.start_date) : new Date(0);
     const bDate = b.start_date ? new Date(b.start_date) : new Date(0);
@@ -187,17 +199,14 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
       <div className="day-tasks-panel">
         <div className="tasks-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
           <h3>🔄 Wydarzenia cykliczne</h3>
-          <button
-            type="button"
-            className="danger-btn danger-btn--inline"
-            onClick={deleteAllRecurringEvents}
-          >
+          <button type="button" className="danger-btn danger-btn--inline" onClick={deleteAllRecurringEvents}>
             🗑️ Usuń wszystkie
           </button>
         </div>
         <p className="panel-hint">Dodaj wydarzenia powtarzające się w regularnych odstępach (urodziny, rocznice, przypomnienia).</p>
       </div>
 
+      {/* Formularz dodawania */}
       {!showAdd ? (
         <button type="button" className="add-task-btn" onClick={() => setShowAdd(true)}>
           + Dodaj wydarzenie cykliczne
@@ -205,11 +214,7 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
       ) : (
         <div className="add-task">
           <h3>+ Nowe wydarzenie cykliczne</h3>
-          <input
-            placeholder="Nazwa"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-          />
+          <input placeholder="Nazwa" value={title} onChange={(e) => setTitle(e.target.value)} />
           <select value={category} onChange={(e) => setCategory(e.target.value)}>
             {EVENT_CATEGORIES.map((c) => (
               <option key={c.value} value={c.value}>{c.emoji} {c.label}</option>
@@ -234,16 +239,13 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
           <DatePicker value={startDate} onChange={setStartDate} label="Data startowa" />
           <DatePicker value={endDate} onChange={setEndDate} label="Data zakończenia (opcjonalnie)" />
           <div className="row">
-            <button type="button" className="add-task-btn" onClick={addRecurringEvent}>
-              Dodaj wydarzenie
-            </button>
-            <button type="button" className="cancel-btn" onClick={() => { setShowAdd(false); resetForm(); }}>
-              Anuluj
-            </button>
+            <button type="button" className="add-task-btn" onClick={addRecurringEvent}>Dodaj wydarzenie</button>
+            <button type="button" className="cancel-btn" onClick={() => { setShowAdd(false); resetForm(); }}>Anuluj</button>
           </div>
         </div>
       )}
 
+      {/* Lista wydarzeń */}
       <div className="day-tasks-panel">
         {sortedEvents.length === 0 && (
           <p className="empty">Brak wydarzeń cyklicznych. Dodaj pierwsze!</p>
@@ -253,6 +255,7 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
           return (
             <div key={event.id} className="task-card medium event">
               {editing ? (
+                // Tryb edycji
                 <div className="edit-mode">
                   <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="Nazwa" />
                   <select value={editCategory} onChange={(e) => setEditCategory(e.target.value)}>
@@ -280,6 +283,7 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
                   <button type="button" className="cancel-mini" onClick={() => setEditingId(null)}>✗</button>
                 </div>
               ) : (
+                // Widok normalny
                 <>
                   <div className="task-info">
                     <h4>{getEventCategoryEmoji(event.category)} {event.title}</h4>

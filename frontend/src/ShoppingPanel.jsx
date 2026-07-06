@@ -1,12 +1,15 @@
+// Panel listy zakupów - zarządzanie produktami, historia, rodziny
 import { useMemo, useState, useEffect } from "react";
 import axios from "axios";
 import FamilyPanel from "./FamilyPanel";
 import { applyUserFromResponse, validateQuantity, isValidQtyInput } from "./helpers";
 import { useEditItem } from "./hooks/useEditItem";
 
+// Klucze do localStorage dla trybu zakupów
 const SHOPPING_MODE_KEY = "questdo-shopping-mode";
 const SHOW_FAMILY_TOGGLE_KEY = "questdo-show-family-toggle";
 
+// Czyta zapisany tryb zakupów (indywidualny/rodzinny)
 function readShoppingMode() {
   try {
     const saved = localStorage.getItem(SHOPPING_MODE_KEY);
@@ -16,23 +19,18 @@ function readShoppingMode() {
 }
 
 function writeShoppingMode(mode) {
-  try {
-    localStorage.setItem(SHOPPING_MODE_KEY, mode);
-  } catch {}
+  try { localStorage.setItem(SHOPPING_MODE_KEY, mode); } catch {}
 }
 
 function readShowFamilyToggle() {
-  try {
-    return localStorage.getItem(SHOW_FAMILY_TOGGLE_KEY) === "true";
-  } catch { return false; }
+  try { return localStorage.getItem(SHOW_FAMILY_TOGGLE_KEY) === "true"; } catch { return false; }
 }
 
 function writeShowFamilyToggle(value) {
-  try {
-    localStorage.setItem(SHOW_FAMILY_TOGGLE_KEY, String(value));
-  } catch {}
+  try { localStorage.setItem(SHOW_FAMILY_TOGGLE_KEY, String(value)); } catch {}
 }
 
+// Formatuje kwotę na polski format (np. 10,50 zł)
 function formatMoney(value) {
   const num = Number(value || 0);
   const formatted = num.toFixed(2).replace(".", ",");
@@ -44,6 +42,7 @@ function formatQuantity(value) {
   return value.replace(".", ",");
 }
 
+// Kategorie produktów
 const SHOPPING_CATEGORIES = [
   { value: "veggies", emoji: "🥦", label: "Warzywa" },
   { value: "fruits", emoji: "🍎", label: "Owoce" },
@@ -60,6 +59,7 @@ function getCategory(cat) {
   return SHOPPING_CATEGORIES.find((c) => c.value === cat) || SHOPPING_CATEGORIES[8];
 }
 
+// Tworzy odznakę z ceną produktu
 function formatPriceBadge(item) {
   if (!(item.price > 0)) return null;
   const qty = item.quantity ? `${formatQuantity(item.quantity)} ${item.unit || "szt"} × ${formatMoney(item.price)} = ${formatMoney((parseFloat(item.quantity) || 0) * item.price)}` : formatMoney(item.price);
@@ -84,6 +84,7 @@ function formatLocalDateTime(dateString) {
   });
 }
 
+// GŁÓWNY KOMPONENT
 export default function ShoppingPanel({
   api,
   headers,
@@ -96,6 +97,7 @@ export default function ShoppingPanel({
   onFamilyChange,
   currentUserId
 }) {
+  // Stany formularza dodawania
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
   const [unit, setUnit] = useState("szt");
@@ -114,6 +116,7 @@ export default function ShoppingPanel({
   const [selectedMode, setSelectedMode] = useState(readShoppingMode);
   const [defaultCategory, setDefaultCategory] = useState("other");
 
+  // Zapisuje edytowany produkt
   const saveItem = async (id, form) => {
     if (!form.name?.trim()) return;
     if (!validateQuantity(form.qty, form.unit, onToast)) return;
@@ -138,10 +141,12 @@ export default function ShoppingPanel({
 
   const { editingId, editForm, setEditForm, startEdit, cancelEdit, saveEdit } = useEditItem(saveItem);
 
+  // Statystyki
   const boughtCount = items.filter((i) => i.bought).length;
   const leftCount = items.length - boughtCount;
   const percent = items.length ? Math.round((boughtCount / items.length) * 100) : 0;
 
+  // Filtrowanie produktów
   const filtered = useMemo(() => {
     let list = items;
     if (filter === "bought") list = list.filter((i) => i.bought);
@@ -153,16 +158,16 @@ export default function ShoppingPanel({
     return list;
   }, [items, filter, search]);
 
+  // Ładuje podsumowanie finansowe
   const loadSummary = async () => {
     try {
       const params = familyParams(familyId);
       const res = await axios.get(`${api}/shopping/summary`, { headers, params });
       setSummary(res.data);
-    } catch {
-
-    }
+    } catch {}
   };
 
+  // Ładuje listę zakupów
   const loadShoppingItems = async () => {
     try {
       const params = selectedMode === "family" && familyId ? { family_id: familyId } : {};
@@ -174,6 +179,7 @@ export default function ShoppingPanel({
     }
   };
 
+  // Ładuje dane przy starcie i przy zmianie rodziny
   useEffect(() => {
     loadShoppingItems();
     const interval = setInterval(() => {
@@ -185,16 +191,16 @@ export default function ShoppingPanel({
     return () => clearInterval(interval);
   }, [familyId, selectedMode]);
 
+  // Ładuje domyślną kategorię użytkownika
   const loadDefaultCategory = async () => {
     try {
       const res = await axios.get(`${api}/settings/default-category`, { headers });
       setDefaultCategory(res.data.category || "other");
       setCategory(res.data.category || "other");
-    } catch {
-
-    }
+    } catch {}
   };
 
+  // Dodaje produkt do listy
   const addItem = () => {
     if (!name.trim()) {
       onToast("Podaj nazwę produktu");
@@ -214,7 +220,6 @@ export default function ShoppingPanel({
         };
 
         await axios.post(`${api}/shopping`, payload, { headers });
-
         await loadShoppingItems();
 
         setName("");
@@ -232,13 +237,13 @@ export default function ShoppingPanel({
     });
   };
 
+  // Przełącza status kupiony/niekupiony
   const toggleBought = (item) => {
     const newBought = !item.bought;
 
     enqueueRequest(async () => {
       try {
         await axios.patch(`${api}/shopping/${item.id}`, { bought: newBought }, { headers });
-
         await loadShoppingItems();
 
         if (newBought) {
@@ -252,13 +257,12 @@ export default function ShoppingPanel({
     });
   };
 
+  // Usuwa produkt
   const deleteItem = (item) => {
     enqueueRequest(async () => {
       try {
         const res = await axios.delete(`${api}/shopping/${item.id}`, { headers });
-
         await loadShoppingItems();
-
         applyUserFromResponse(res.data, onUserUpdate);
         await loadSummary();
         onToast("🗑️ Usunięto produkt");
@@ -268,6 +272,7 @@ export default function ShoppingPanel({
     });
   };
 
+  // Rozpoczyna edycję produktu
   const startEditItem = (item) => {
     startEdit(item, {
       name: item.name,
@@ -278,14 +283,13 @@ export default function ShoppingPanel({
     });
   };
 
+  // Usuwa wszystkie kupione produkty
   const clearBought = () => {
     enqueueRequest(async () => {
       try {
         const params = familyParams(familyId);
         await axios.delete(`${api}/shopping/bought/clear`, { headers, params });
-
         await loadShoppingItems();
-
         await loadSummary();
         onToast("🗑️ Usunięto kupione produkty");
       } catch (err) {
@@ -294,6 +298,7 @@ export default function ShoppingPanel({
     });
   };
 
+  // Ładuje historię zakupów
   const loadHistory = async () => {
     try {
       const params = familyParams(familyId);
@@ -305,6 +310,7 @@ export default function ShoppingPanel({
     }
   };
 
+  // Wyświetla szczegóły historii
   const viewHistoryDetail = async (historyId) => {
     try {
       const res = await axios.get(`${api}/shopping/history/${historyId}`, { headers });
@@ -315,6 +321,7 @@ export default function ShoppingPanel({
     }
   };
 
+  // Usuwa historię
   const deleteHistory = async (historyId, canEdit) => {
     if (!canEdit) {
       onToast("Nie można usunąć tej listy (minęło więcej niż 24h)");
@@ -333,6 +340,7 @@ export default function ShoppingPanel({
     }
   };
 
+  // Wczytuje listę z historii
   const loadFromHistory = async (historyId) => {
     try {
       const res = await axios.post(`${api}/shopping/history/${historyId}/load`, {}, { headers });
@@ -349,6 +357,7 @@ export default function ShoppingPanel({
     }
   };
 
+  // Wyszukuje domyślne artykuły
   const searchDefaultArticles = async (query) => {
     if (query.length < 2) {
       setSuggestions([]);
@@ -359,10 +368,10 @@ export default function ShoppingPanel({
       const res = await axios.get(`${api}/default-articles/search?q=${encodeURIComponent(query)}`, { headers });
       setSuggestions(res.data);
       setShowSuggestions(res.data.length > 0);
-    } catch (err) {
-    }
+    } catch (err) {}
   };
 
+  // Wybiera sugerowany artykuł
   const selectSuggestion = (suggestion) => {
     setName(suggestion.name);
     setQty("");
@@ -373,6 +382,7 @@ export default function ShoppingPanel({
     setSuggestions([]);
   };
 
+  // Zaznacza wszystkie produkty jako kupione
   const selectAll = () => {
     setItems((prev) => prev.map((i) => ({ ...i, bought: true })));
     enqueueRequest(async () => {
@@ -392,6 +402,7 @@ export default function ShoppingPanel({
     });
   };
 
+  // Kończy listę zakupów i zapisuje w historii
   const completeShoppingList = async () => {
     const boughtItems = items.filter((i) => i.bought);
     if (boughtItems.length === 0) {
@@ -418,6 +429,7 @@ export default function ShoppingPanel({
     }
   };
 
+  // Obsługa wyboru rodziny
   const handleFamilySelected = (fid) => {
     onFamilyChange?.(fid);
     setShowFamilyToggle(true);
@@ -428,6 +440,7 @@ export default function ShoppingPanel({
 
   return (
     <div className="module-panel shopping-panel">
+      {/* Nagłówek z przełącznikiem trybu */}
       <div className="shopping-header">
         <h3>🛒 Lista zakupów</h3>
         <div className="family-toggle">
@@ -459,6 +472,7 @@ export default function ShoppingPanel({
         </div>
       </div>
 
+      {/* Panel rodziny (jeśli tryb rodzinny) */}
       {showFamilyToggle && (
         <FamilyPanel
           api={api}
@@ -470,6 +484,7 @@ export default function ShoppingPanel({
         />
       )}
 
+      {/* Podsumowanie finansowe */}
       {summary && (
         <div className="earnings-summary">
           <div className="earnings-stat">
@@ -494,6 +509,8 @@ export default function ShoppingPanel({
           </div>
         </div>
       )}
+
+      {/* Formularz dodawania produktu */}
       <div className="add-task">
         <h3>🛒 Dodaj produkt</h3>
         <div className="form-row-inline">
@@ -507,6 +524,7 @@ export default function ShoppingPanel({
               }}
               onKeyDown={(e) => e.key === "Enter" && addItem()}
             />
+            {/* Lista sugestii z domyślnych artykułów */}
             {showSuggestions && suggestions.length > 0 && (
               <div className="suggestions-dropdown">
                 {suggestions.map((s) => (
@@ -539,14 +557,17 @@ export default function ShoppingPanel({
         <button type="button" className="add-task-btn" onClick={addItem}>+ Dodaj do listy</button>
       </div>
 
+      {/* Wyszukiwarka */}
       <input className="search-input" placeholder="🔍 Szukaj produktu..." value={search} onChange={(e) => setSearch(e.target.value)} />
 
+      {/* Przyciski akcji */}
       <div className="import-export-row">
         <button type="button" className="icon-btn history-btn" onClick={selectAll} title="Zaznacz wszystkie">✅ Zaznacz wszystkie</button>
         <button type="button" className="icon-btn history-btn" onClick={loadHistory} title="Historia list">📜 Historia</button>
         <button type="button" className="icon-btn save-history-btn" onClick={completeShoppingList} title="Zakończ i zapisz do historii">💾 Zakończ listę</button>
       </div>
 
+      {/* Filtry i statystyki */}
       <div className="stats-bar">
         <div className="filter-group">
           {[
@@ -564,6 +585,7 @@ export default function ShoppingPanel({
         </div>
       </div>
 
+      {/* Pasek postępu */}
       {items.length > 0 && (
         <div className="progress-wrap">
           <div className="progress-bar"><div className="progress-fill" style={{ width: `${percent}%` }} /></div>
@@ -571,6 +593,7 @@ export default function ShoppingPanel({
         </div>
       )}
 
+      {/* Lista produktów */}
       <div className="product-list">
         {filtered.length === 0 && (
           <p className="empty">{items.length ? "Brak produktów pasujących do filtrów." : "Lista jest pusta. Dodaj pierwszy produkt! 🛒"}</p>
@@ -584,6 +607,7 @@ export default function ShoppingPanel({
                 {item.bought ? "✓" : ""}
               </button>
               {editing ? (
+                // Tryb edycji
                 <div className="edit-mode">
                   <input value={editForm.name || ""} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} placeholder="Nazwa" />
                   <input
@@ -607,6 +631,7 @@ export default function ShoppingPanel({
                   <button type="button" className="cancel-mini" onClick={cancelEdit}>✗</button>
                 </div>
               ) : (
+                // Widok normalny
                 <>
                   <div className="task-info">
                     <h4 className={item.bought ? "done" : ""}>{item.name}</h4>
@@ -627,10 +652,12 @@ export default function ShoppingPanel({
         })}
       </div>
 
+      {/* Przycisk usuwania kupionych */}
       {boughtCount > 0 && (
         <button type="button" className="danger-btn" onClick={clearBought}>🗑️ Usuń kupione ({boughtCount})</button>
       )}
 
+      {/* Panel historii zakupów */}
       {showHistory && (
         <div className="history-panel">
           <div className="history-header">
@@ -642,7 +669,6 @@ export default function ShoppingPanel({
           ) : (
             <div className="history-list">
               {history.map((h) => {
-
                 const completedAt = new Date(h.completed_at);
                 const now = new Date();
                 const hoursSinceCompletion = (now - completedAt) / (1000 * 60 * 60);
@@ -688,6 +714,7 @@ export default function ShoppingPanel({
         </div>
       )}
 
+      {/* Szczegóły wybranej historii */}
       {selectedHistory && historyDetail && (
         <div className="history-detail-panel">
           <div className="history-header">

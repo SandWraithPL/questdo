@@ -1,7 +1,12 @@
 /* global clients */
+
+// Nazwa cache - zmieniamy przy aktualizacji aplikacji
 const CACHE_NAME = 'questdo-v10';
+// Ikona i tytuł powiadomień
 const NOTIFICATION_ICON = '/notification-icon.svg';
 const NOTIFICATION_TITLE = 'QuestDo';
+
+// Statyczne pliki do cachowania przy instalacji
 const STATIC_ASSETS = [
   '/',
   '/index.html',
@@ -11,31 +16,40 @@ const STATIC_ASSETS = [
   '/favicon.ico'
 ];
 
+// ===== INSTALACJA =====
+// Gdy Service Worker jest instalowany - zapisujemy statyczne pliki w cache
 self.addEventListener('install', (event) => {
   event.waitUntil(
     caches.open(CACHE_NAME).then((cache) => cache.addAll(STATIC_ASSETS))
   );
+  // Aktywujemy od razu (nie czekamy na zamknięcie przeglądarki)
   self.skipWaiting();
 });
 
+// ===== AKTYWACJA =====
+// Gdy Service Worker staje się aktywny - usuwamy stare cache
 self.addEventListener('activate', (event) => {
   event.waitUntil(
+    // Usuwamy wszystkie cache oprócz obecnego
     caches.keys().then((keys) => Promise.all(
       keys.filter((key) => key !== CACHE_NAME).map((key) => caches.delete(key))
-    )).then(() => clients.claim())
+    )).then(() => clients.claim()) // Przejmujemy kontrolę nad stronami
   );
 });
 
+// ===== WIADOMOŚCI =====
+// Nasłuchuje na wiadomości od strony (np. "skip waiting")
 self.addEventListener('message', (event) => {
   if (event.data?.type === 'QUESTDO_SKIP_WAITING') {
-    self.skipWaiting();
+    self.skipWaiting(); // Aktywuje nową wersję SW
   }
 });
 
+// ===== PRZECHWYTYWANIE ZAPYTAŃ =====
 self.addEventListener('fetch', (event) => {
   const requestUrl = new URL(event.request.url);
 
-  // 🔥 NIE PRZECHWYTUJ ZAPYTAŃ DO API - PRZEPUŚĆ BEZ CACHE
+  // Zapytania do API NIGDY nie są cachowane - zawsze świeże dane
   if (requestUrl.hostname.includes('onrender.com') ||
       requestUrl.hostname.includes('azurewebsites.net') ||
       requestUrl.pathname.startsWith('/api') ||
@@ -58,13 +72,18 @@ self.addEventListener('fetch', (event) => {
     return;
   }
 
+  // Dla pozostałych zapytań - najpierw sprawdzamy cache
   event.respondWith(
     caches.match(event.request).then((cached) => {
+      // Jeśli jest w cache - zwracamy z cache
       if (cached) return cached;
+      
+      // Jeśli nie ma w cache - pobieramy z sieci
       return fetch(event.request).then((response) => {
-        // ⬇️ DODANY FILTER - tylko HTTP/HTTPS mogą być cache'owane
+        // Zapisujemy w cache tylko udane odpowiedzi (status 200) GET
         if (response && response.status === 200 && event.request.method === 'GET') {
           const url = new URL(event.request.url);
+          // Tylko HTTP/HTTPS mogą być cachowane
           if (url.protocol === 'http:' || url.protocol === 'https:') {
             const responseClone = response.clone();
             caches.open(CACHE_NAME).then((cache) => {
@@ -75,17 +94,22 @@ self.addEventListener('fetch', (event) => {
         return response;
       });
     }).catch(() => {
+      // Gdy offline - zwracamy stronę główną dla nawigacji
       if (event.request.mode === 'navigate') return caches.match('/');
+      // W przeciwnym razie - błąd 503 (usługa niedostępna)
       return new Response('', { status: 503, statusText: 'Offline' });
     })
   );
 });
 
+// ===== POWIADOMIENIA PUSH =====
+// Odbiera powiadomienia push z backendu
 self.addEventListener('push', (event) => {
   let title = NOTIFICATION_TITLE;
   let body = 'Masz nowe przypomnienie';
   let tag;
   let data = { url: '/' };
+
   try {
     if (event.data) {
       const parsed = event.data.json();
@@ -95,11 +119,13 @@ self.addEventListener('push', (event) => {
       data = parsed.data || { url: parsed.url || '/' };
     }
   } catch {
+    // Jeśli nie JSON - używamy tekstu jako treści
     if (event.data?.text()) {
       body = event.data.text();
     }
   }
 
+  // Wyświetlamy powiadomienie
   event.waitUntil(
     self.registration.showNotification(title, {
       body,
@@ -111,24 +137,33 @@ self.addEventListener('push', (event) => {
   );
 });
 
+// ===== KLIKNIĘCIE W POWIADOMIENIE =====
+// Otwiera aplikację po kliknięciu w powiadomienie
 function openAppFromNotification(event) {
   const targetUrl = event.notification?.data?.url || '/';
-  event.notification.close();
+  event.notification.close(); // Zamykamy powiadomienie
+
   event.waitUntil(
     clients.matchAll({ type: 'window', includeUncontrolled: true }).then((clientList) => {
+      // Szukamy istniejącego okna aplikacji
       for (const client of clientList) {
         if ('focus' in client) {
+          // Jeśli jest - przenosimy na odpowiednią stronę
           if ('navigate' in client && targetUrl !== '/') {
             return client.navigate(targetUrl).then(() => client.focus());
           }
           return client.focus();
         }
       }
+      // Jeśli nie ma okna - otwieramy nowe
       if (clients.openWindow) return clients.openWindow(targetUrl);
       return undefined;
     })
   );
 }
 
+// Nasłuchuje na kliknięcie w powiadomienie
 self.addEventListener('notificationclick', openAppFromNotification);
+
+// Puste nasłuchiwanie na zamknięcie powiadomienia (wymagane przez API)
 self.addEventListener('notificationclose', () => {});

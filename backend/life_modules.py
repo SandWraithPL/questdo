@@ -1,3 +1,4 @@
+# Importy potrzebne do obsługi modułów życia (zakupy, praca, harmonogram)
 from datetime import date, datetime
 from typing import Optional
 
@@ -5,13 +6,16 @@ import models
 from encryption import decrypt_field, encrypt_field
 from sqlalchemy.orm import Session
 
+# EXP przyznawane za zakupy i pracę (obecnie 0)
 SHOPPING_EXP = 0
 WORK_EXP = 0
+# Dostępne kategorie zakupów
 VALID_SHOPPING_CATEGORIES = {
     "veggies", "fruits", "dairy", "bread", "meat", "drinks", "chemicals", "sweets", "other",
 }
 
 
+# Parsuje czas w formacie HH:MM na godziny i minuty
 def parse_time_hm(value: str) -> tuple[int, int]:
     parts = (value or "00:00").strip().split(":")
     if len(parts) != 2:
@@ -23,6 +27,7 @@ def parse_time_hm(value: str) -> tuple[int, int]:
     return hour, minute
 
 
+# Oblicza liczbę godzin między dwoma czasami (obsługuje przejście przez północ)
 def hours_between(start_time: str, end_time: str) -> float:
     sh, sm = parse_time_hm(start_time)
     eh, em = parse_time_hm(end_time)
@@ -32,12 +37,16 @@ def hours_between(start_time: str, end_time: str) -> float:
         end_mins += 24 * 60
     return round((end_mins - start_mins) / 60, 2)
 
-
+# Konwertuje wpis harmonogramu na słownik (odszyfrowuje pola)
 def schedule_to_dict(entry: models.ScheduleEntry) -> dict:
+    """Przygotowuje dane harmonogramu do wysłania do frontendu."""
     return {
         "id": entry.id,
+        # Odszyfrowujemy pole tytułu
         "title": decrypt_field(entry.title),
+        # Odszyfrowujemy lokalizację
         "location": decrypt_field(entry.location),
+        # Odszyfrowujemy nazwę prowadzącego
         "lecturer": decrypt_field(entry.lecturer),
         "day_of_week": entry.day_of_week,
         "entry_date": str(entry.entry_date) if entry.entry_date else None,
@@ -51,10 +60,14 @@ def schedule_to_dict(entry: models.ScheduleEntry) -> dict:
     }
 
 
+# Konwertuje przedmiot zakupowy na słownik (odszyfrowuje pola)
 def shopping_to_dict(item: models.ShoppingItem) -> dict:
+    """Przygotowuje dane zakupów do wysłania do frontendu."""
     return {
         "id": item.id,
+        # Odszyfrowujemy nazwę produktu
         "name": decrypt_field(item.name),
+        # Odszyfrowujemy ilość
         "quantity": decrypt_field(item.quantity),
         "unit": item.unit or "szt",
         "category": item.category,
@@ -65,27 +78,39 @@ def shopping_to_dict(item: models.ShoppingItem) -> dict:
     }
 
 
+# Pobiera stawkę godzinową z wpisu pracy (odszyfrowuje i parsuje)
 def work_rate(entry: models.WorkEntry) -> float:
+    """Zwraca stawkę godzinową jako liczbę zmiennoprzecinkową."""
     raw = decrypt_field(entry.hourly_rate)
     try:
+        # Obsługujemy przecinki (polski format)
         return max(0.0, float(raw.replace(",", ".")))
     except ValueError:
         return 0.0
 
 
+# Oblicza zarobki z wpisu pracy (brutto, podatek, netto)
 def work_earnings(entry: models.WorkEntry) -> dict:
+    """Oblicza wszystkie wartości zarobków na podstawie wpisu."""
     try:
+        # Obliczamy liczbę godzin pracy
         hours = hours_between(entry.start_time, entry.end_time)
+        # Pobieramy stawkę godzinową
         rate = work_rate(entry)
+        # Brutto = godziny * stawka
         gross = round(hours * rate, 2)
+        # Podatek = brutto * procent (jeśli włączony)
         tax = round(gross * (entry.tax_percent / 100), 2) if entry.tax_enabled else 0.0
+        # Netto = brutto - podatek
         net = round(gross - tax, 2)
         return {"hours": hours, "gross": gross, "tax": tax, "net": net}
     except Exception as e:
         return {"hours": 0, "gross": 0, "tax": 0, "net": 0}
 
 
+# Konwertuje wpis pracy na słownik z obliczonymi zarobkami
 def work_to_dict(entry: models.WorkEntry) -> dict:
+    """Przygotowuje dane pracy do wysłania do frontendu z obliczonymi zarobkami."""
     earnings = work_earnings(entry)
     return {
         "id": entry.id,
@@ -106,6 +131,7 @@ def work_to_dict(entry: models.WorkEntry) -> dict:
     }
 
 
+# Sprawdza czy wpis harmonogramu pasuje do danej daty
 def schedule_matches_date(entry: models.ScheduleEntry, target: date) -> bool:
     if entry.start_date and target < entry.start_date:
         return False
@@ -116,6 +142,7 @@ def schedule_matches_date(entry: models.ScheduleEntry, target: date) -> bool:
     return entry.entry_date == target
 
 
+# Szyfruje pola wpisu harmonogramu przed zapisem do bazy
 def encrypt_schedule_fields(title: str, location: str = "", lecturer: str = "") -> dict:
     return {
         "title": encrypt_field(title.strip()),
@@ -124,6 +151,7 @@ def encrypt_schedule_fields(title: str, location: str = "", lecturer: str = "") 
     }
 
 
+# Szyfruje pola przedmiotu zakupowego przed zapisem do bazy
 def encrypt_shopping_fields(name: str, quantity: str = "") -> dict:
     return {
         "name": encrypt_field(name.strip()),
@@ -131,6 +159,7 @@ def encrypt_shopping_fields(name: str, quantity: str = "") -> dict:
     }
 
 
+# Szyfruje pola wpisu pracy przed zapisem do bazy
 def encrypt_work_fields(hourly_rate: float, notes: str = "") -> dict:
     return {
         "hourly_rate": encrypt_field(str(hourly_rate)),
@@ -138,6 +167,7 @@ def encrypt_work_fields(hourly_rate: float, notes: str = "") -> dict:
     }
 
 
+# Przyznaje EXP użytkownikowi i zwraca listę awansów na wyższe poziomy
 def award_small_exp(user: models.User, amount: int) -> list[dict]:
     if amount <= 0:
         return []
@@ -154,6 +184,7 @@ def award_small_exp(user: models.User, amount: int) -> list[dict]:
     return level_ups
 
 
+# Sumuje zarobki z listy wpisów pracy (opcjonalnie tylko ukończone)
 def sum_work_earnings(entries: list[models.WorkEntry], completed_only: bool = True) -> dict:
     total_gross = 0.0
     total_net = 0.0

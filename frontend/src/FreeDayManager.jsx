@@ -1,25 +1,38 @@
+// Importy React i bibliotek
 import { useState } from "react";
 import axios from "axios";
 
+// Etykiety dla typów dni wolnych
 const DAY_TYPE_LABELS = { holiday: "Święto", deans_day: "Dzień dziekański", rector_day: "Dzień rektorski" };
 
+// Konwertuje Date lub string na format YYYY-MM-DD
 function toDateStr(d) {
   if (d instanceof Date) return d.toISOString().slice(0, 10);
   return String(d).slice(0, 10);
 }
 
+// Komponent do zarządzania dniami wolnymi (święta, dni wolne, dzień dziekański)
 export default function FreeDayManager({ freeDays, setFreeDays, selectedDate, api, headers, onToast, enqueueRequest }) {
+  // Czy pokazać formularz dodania dnia wolnego
   const [open, setOpen] = useState(false);
+  // Typ dnia wolnego (holiday, deans_day, rector_day)
   const [freeDayType, setFreeDayType] = useState("holiday");
+  // Nazwa lub notatka dnia wolnego
   const [freeDayName, setFreeDayName] = useState("");
+  // Aktualnie wybrany dzień w formacie string
   const selectedStr = toDateStr(selectedDate);
+  // Sprawdzamy czy dla tego dnia już istnieje oznaczenie dnia wolnego
   const existing = freeDays.find((fd) => fd.date === selectedStr);
 
+  // Pomocnik do uruchamiania requesta (z kolejkowaniem jeśli dostępne)
   const run = (fn) => (enqueueRequest ? enqueueRequest(fn) : fn());
 
+  // Obsługuje dodanie nowego dnia wolnego
   const handleCreate = () => run(async () => {
     try {
+      // Wysyłamy POST do backendu z datą i typem
       const res = await axios.post(`${api}/free-days`, { date: selectedStr, day_type: freeDayType, notes: freeDayName }, { headers });
+      // Dodajemy nowy dzień do listy
       setFreeDays?.((prev) => [...prev, res.data]);
       setFreeDayName("");
       setOpen(false);
@@ -29,11 +42,14 @@ export default function FreeDayManager({ freeDays, setFreeDays, selectedDate, ap
     }
   });
 
+  // Obsługuje usuwanie dnia wolnego
   const handleDelete = () => {
     if (!existing) return;
     run(async () => {
       try {
+        // Wysyłamy DELETE do backendu
         await axios.delete(`${api}/free-days/${existing.id}`, { headers });
+        // Usuwamy dzień z listy
         setFreeDays?.((prev) => prev.filter((fd) => fd.id !== existing.id));
         onToast("🗑️ Usunięto oznaczenie dnia wolnego");
       } catch (err) {

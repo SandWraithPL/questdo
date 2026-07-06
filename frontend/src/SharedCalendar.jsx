@@ -1,9 +1,11 @@
-
+// Wspólny komponent kalendarza - używany w planie, zarobkach i innych modułach
 import { useState } from "react";
 
+// Nazwy dni tygodnia (skrócone i pełne)
 const WEEKDAYS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
 const WEEKDAYS_LONG = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"];
 
+// Kategorie eventów z emotkami
 const EVENT_CATEGORIES = [
   { value: "birthday", emoji: "🎂", label: "Urodziny" },
   { value: "anniversary", emoji: "💍", label: "Rocznica" },
@@ -11,10 +13,12 @@ const EVENT_CATEGORIES = [
   { value: "reminder", emoji: "🔔", label: "Przypomnienie" },
 ];
 
+// Znajduje emotkę dla kategorii eventu
 function getEventCategoryEmoji(cat) {
   return EVENT_CATEGORIES.find((c) => c.value === cat)?.emoji || "📅";
 }
 
+// Sprawdza czy cykliczny event występuje w danym dniu
 function recurringEventOccursOn(event, dateStr) {
   if (!event.interval_type || !event.start_date) return false;
 
@@ -28,6 +32,7 @@ function recurringEventOccursOn(event, dateStr) {
   }
 
   const iv = event.interval_value || 1;
+
   if (event.interval_type === "daily") {
     const diffDays = Math.floor((targetDate - start) / (1000 * 60 * 60 * 24));
     return diffDays % iv === 0;
@@ -49,10 +54,12 @@ function recurringEventOccursOn(event, dateStr) {
   return false;
 }
 
+// Zwraca kategorie eventów które występują w danym dniu
 function getRecurringCategoriesForDate(recurringEvents, dateStr) {
   return recurringEvents.filter(event => recurringEventOccursOn(event, dateStr)).map(event => event.category);
 }
 
+// Konwertuje datę na string YYYY-MM-DD
 function toDateStr(d) {
   if (!d) return new Date().toISOString().slice(0, 10);
   if (typeof d === "string") return d.slice(0, 10);
@@ -62,11 +69,7 @@ function toDateStr(d) {
   return `${y}-${m}-${day}`;
 }
 
-function weekdayIndex(dateStr) {
-  const d = new Date(`${dateStr}T12:00:00`);
-  return (d.getDay() + 6) % 7;
-}
-
+// Główny komponent kalendarza - wyświetla widoki miesiąca/tygodnia/dnia
 export default function SharedCalendar({
   items = [],
   selectedDate,
@@ -86,6 +89,7 @@ export default function SharedCalendar({
   recurringEvents = [],
   freeDayManager,
 }) {
+  // Stan kursora (aktualnie wyświetlany miesiąc/tydzień)
   const [cursor, setCursor] = useState(() => (selectedDate instanceof Date ? selectedDate : new Date()));
   const [view, setView] = useState("month");
   const [collapsed, setCollapsed] = useState(() => {
@@ -99,28 +103,33 @@ export default function SharedCalendar({
   const selectedStr = toDateStr(selectedDate);
   const selectedDateObj = selectedDate instanceof Date ? selectedDate : new Date(`${selectedStr}T12:00:00`);
 
+  // Znajduje typ dnia wolnego (święto, dzień dziekański itp)
   const getFreeDayType = (dateStr) => {
     const freeDay = freeDays.find(fd => fd.date === dateStr);
     return freeDay ? freeDay.day_type : null;
   };
 
+  // Pobiera elementy dla danej daty
   const getItemsForDate = (dateStr) => items.filter((item) => matchItemToDate(item, dateStr));
   const itemStats = (dateStr) => {
     const dayItems = getItemsForDate(dateStr);
     return { total: dayItems.length, done: dayItems.filter((item) => isItemCompleted(item)).length };
   };
 
+  // Wybiera dzień i aktualizuje kursor
   const selectDay = (dateStr) => {
     onDateSelect(dateStr);
     setCursor(new Date(`${dateStr}T12:00:00`));
   };
 
+  // Przechodzi do dzisiaj
   const goToday = () => {
     const today = new Date();
     setCursor(today);
     onDateSelect(toDateStr(today));
   };
 
+  // Przełącza zwinięcie kalendarza
   const toggleCollapsed = () => {
     setCollapsed((prev) => {
       const next = !prev;
@@ -131,6 +140,7 @@ export default function SharedCalendar({
     });
   };
 
+  // Przesuwa widok (miesiąc/tydzień/dzień)
   const shift = (delta) => {
     if (view === "month") setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1, 12, 0, 0));
     if (view === "week") {
@@ -145,12 +155,14 @@ export default function SharedCalendar({
     }
   };
 
+  // Renderuje widok miesiąca - siatka dni
   const renderMonthView = () => {
     const year = cursor.getFullYear();
     const month = cursor.getMonth();
     const daysInMonth = new Date(year, month + 1, 0).getDate();
     const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
     const days = [];
+
     for (let i = 0; i < firstWeekday; i++) days.push(<div key={`empty-${i}`} className="calendar-day empty" />);
     for (let day = 1; day <= daysInMonth; day++) {
       const dateStr = toDateStr(new Date(year, month, day, 12, 0, 0));
@@ -159,6 +171,7 @@ export default function SharedCalendar({
       const isToday = toDateStr(new Date()) === dateStr;
       const freeDayType = getFreeDayType(dateStr);
       const recurringCategories = getRecurringCategoriesForDate(recurringEvents, dateStr);
+
       days.push(
         <button key={dateStr} type="button" className={`calendar-day ${isSelected ? "selected" : ""} ${isToday ? "today" : ""} ${freeDayType ? `free-day free-day-${freeDayType}` : ""}`} onClick={() => selectDay(dateStr)}>
           <span className="day-number">{day}</span>
@@ -167,8 +180,8 @@ export default function SharedCalendar({
           {freeDayType === "rector_day" && <span className="free-day-icon">🏛️</span>}
           {recurringCategories.length > 0 && (
             <div className="day-event-icons">
-              {recurringCategories.slice(0, 3).map((cat, idx) => (
-                <span key={idx} className="event-icon">{getEventCategoryEmoji(cat)}</span>
+              {recurringCategories.slice(0, 3).map((cat) => (
+                <span key={cat} className="event-icon">{getEventCategoryEmoji(cat)}</span>
               ))}
               {recurringCategories.length > 3 && <span className="event-icon-more">+</span>}
             </div>
@@ -180,11 +193,13 @@ export default function SharedCalendar({
     return days;
   };
 
+  // Renderuje widok tygodnia
   const renderWeekView = () => {
     const startOfWeek = new Date(selectedDateObj);
     const mondayIndex = (selectedDateObj.getDay() + 6) % 7;
     startOfWeek.setDate(selectedDateObj.getDate() - mondayIndex);
     const days = [];
+
     for (let i = 0; i < 7; i++) {
       const d = new Date(startOfWeek);
       d.setDate(startOfWeek.getDate() + i);
@@ -195,6 +210,7 @@ export default function SharedCalendar({
       const isSelected = selectedStr === dateStr;
       const freeDayType = getFreeDayType(dateStr);
       const recurringCategories = getRecurringCategoriesForDate(recurringEvents, dateStr);
+
       days.push(
         <button key={dateStr} type="button" className={`week-day ${isSelected ? "week-day-selected" : ""} ${freeDayType ? `week-day-free week-day-free-${freeDayType}` : ""}`} onClick={() => selectDay(dateStr)}>
           <div className={`week-day-header ${isToday ? "today" : ""}`}>
@@ -206,8 +222,8 @@ export default function SharedCalendar({
             <div className="week-day-stats">
               {recurringCategories.length > 0 && (
                 <div className="week-event-icons">
-                  {recurringCategories.slice(0, 2).map((cat, idx) => (
-                    <span key={idx} className="event-icon">{getEventCategoryEmoji(cat)}</span>
+                  {recurringCategories.slice(0, 2).map((cat) => (
+                    <span key={cat} className="event-icon">{getEventCategoryEmoji(cat)}</span>
                   ))}
                   {recurringCategories.length > 2 && <span className="event-icon-more">+</span>}
                 </div>
@@ -231,12 +247,14 @@ export default function SharedCalendar({
     return days;
   };
 
+  // Renderuje widok dnia - lista elementów
   const renderDayView = () => {
     const dayItems = getItemsForDate(selectedStr);
     const freeDayType = getFreeDayType(selectedStr);
     const freeDay = freeDays.find(fd => fd.date === selectedStr);
     const holidayName = freeDay?.notes || null;
     const recurringCategories = getRecurringCategoriesForDate(recurringEvents, selectedStr);
+
     return (
       <div className="day-view">
         <h3>
@@ -251,8 +269,8 @@ export default function SharedCalendar({
           {freeDayType === "rector_day" && <span className="day-free-indicator"> 🏛️ Dzień rektorski</span>}
           {recurringCategories.length > 0 && (
             <span className="day-free-indicator">
-              {recurringCategories.map((cat, idx) => (
-                <span key={idx}>{getEventCategoryEmoji(cat)}</span>
+              {recurringCategories.map((cat) => (
+                <span key={cat}>{getEventCategoryEmoji(cat)}</span>
               ))}
             </span>
           )}
@@ -280,6 +298,7 @@ export default function SharedCalendar({
     );
   };
 
+  // Tytuł dla widoku tygodnia
   const weekTitle = (() => {
     const start = new Date(selectedDateObj);
     start.setDate(selectedDateObj.getDate() - ((selectedDateObj.getDay() + 6) % 7));
@@ -290,9 +309,7 @@ export default function SharedCalendar({
 
   const headerTitle = view === "month"
     ? cursor.toLocaleDateString("pl-PL", { month: "long", year: "numeric" })
-    : view === "week"
-      ? weekTitle
-      : selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" });
+    : view === "week" ? weekTitle : selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" });
 
   const selectedDayStats = itemStats(selectedStr);
   const selectedDayLabel = selectedDateObj.toLocaleDateString("pl-PL", { weekday: "short", day: "numeric", month: "short" });
@@ -344,4 +361,4 @@ export default function SharedCalendar({
   );
 }
 
-export { toDateStr, weekdayIndex, WEEKDAYS_LONG };
+export { toDateStr, WEEKDAYS_LONG };
