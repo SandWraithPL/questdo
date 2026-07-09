@@ -1148,6 +1148,24 @@ class ScheduleUpdate(BaseModel):
     completed: Optional[bool] = None
 
 
+class ScheduleImportEntry(BaseModel):
+    title: str
+    location: Optional[str] = ''
+    lecturer: Optional[str] = ''
+    start_time: Optional[str] = '08:00'
+    end_time: Optional[str] = '09:00'
+    entry_date: Optional[str] = None
+    is_recurring: Optional[bool] = False
+    day_of_week: Optional[int] = None
+    start_date: Optional[str] = None
+    end_date: Optional[str] = None
+    completed: Optional[bool] = False
+
+
+class ScheduleImport(BaseModel):
+    entries: List[ScheduleImportEntry]
+
+
 class ShoppingCreate(BaseModel):
     name: str
     quantity: Optional[str] = ''
@@ -2877,21 +2895,20 @@ def export_schedule(current_user: models.User = Depends(get_current_user), db: S
 
 # Importuje harmonogram z pliku tekstowego
 @app.post('/schedule/import')
-def import_schedule(payload: dict, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    entries_data = payload.get('entries', [])
+def import_schedule(payload: ScheduleImport, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     imported = 0
     errors = []
 
-    for entry_data in entries_data:
+    for entry_data in payload.entries:
         try:
-            title = entry_data.get('title', '').strip()
+            title = entry_data.title.strip()
             if not title:
                 continue
 
             enc = lm.encrypt_schedule_fields(
                 title,
-                entry_data.get('location', ''),
-                entry_data.get('lecturer', '')
+                entry_data.location or '',
+                entry_data.lecturer or ''
             )
 
             new_entry = models.ScheduleEntry(
@@ -2899,14 +2916,14 @@ def import_schedule(payload: dict, current_user: models.User = Depends(get_curre
                 title=enc['title'],
                 location=enc['location'],
                 lecturer=enc['lecturer'],
-                start_time=entry_data.get('start_time', '08:00'),
-                end_time=entry_data.get('end_time', '09:00'),
-                entry_date=parse_due_date(entry_data['entry_date']) if entry_data.get('entry_date') else None,
-                is_recurring=entry_data.get('is_recurring', False),
-                day_of_week=entry_data.get('day_of_week'),
-                start_date=parse_due_date(entry_data['start_date']) if entry_data.get('start_date') else None,
-                end_date=parse_due_date(entry_data['end_date']) if entry_data.get('end_date') else None,
-                completed=entry_data.get('completed', False)
+                start_time=entry_data.start_time or '08:00',
+                end_time=entry_data.end_time or '09:00',
+                entry_date=parse_due_date(entry_data.entry_date) if entry_data.entry_date else None,
+                is_recurring=entry_data.is_recurring or False,
+                day_of_week=entry_data.day_of_week,
+                start_date=parse_due_date(entry_data.start_date) if entry_data.start_date else None,
+                end_date=parse_due_date(entry_data.end_date) if entry_data.end_date else None,
+                completed=entry_data.completed or False
             )
             db.add(new_entry)
             imported += 1

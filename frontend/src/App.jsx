@@ -1784,7 +1784,7 @@ function Profile({
               {/* Lista odblokowanych osiągnięć */}
               <div className="achievements-list"><h4>Odznaczone 🏆 ({unlocked.length})</h4>{unlocked.length === 0 && <p className="muted">Jeszcze brak - pierwszy quest czeka!</p>}{unlocked.map(ach => (<div key={ach.slug || ach.title} className="achievement-item"><span>{ach.icon}</span><div><strong>{ach.title}</strong><p>{ach.description}</p></div></div>))}</div>
               {/* Lista znajdziek */}
-              <div className="rare-drops-list"><h4>Znajdźki ✨ ({rareDrops?.total_items || 0})</h4>{(!rareDrops?.items || rareDrops.items.length === 0) && <p className="muted">Jeszcze brak znajdziek - codziennie masz szansę!</p>}{rareDrops?.items?.map(drop => (<div key={drop.slug} className="rare-drop-item"><span className={`rare-drop-${drop.rarity}`}>{drop.icon}</span><div><strong>{drop.name}</strong><p>{drop.description}</p><p className="rare-drop-count">{drop.rarity.charAt(0).toUpperCase() + drop.rarity.slice(1)}</p></div></div>))}</div>
+              <div className="rare-drops-list"><h4>Znajdźki ✨ ({rareDrops?.total_items || 0})</h4>{(!rareDrops?.items || rareDrops.items.length === 0) && <p className="muted">Jeszcze brak znajdziek - codziennie masz szansę!</p>}{rareDrops?.items?.map(drop => (<div key={drop.slug} className="rare-drop-item"><span className={`rare-drop-${drop.rarity}`}>{drop.icon}</span><div><strong>{drop.name}</strong><p>{drop.description}</p><p className="rare-drop-count">• {drop.rarity.charAt(0).toUpperCase() + drop.rarity.slice(1)}</p></div></div>))}</div>
             </>
           ) : (
             // Historia gracza
@@ -2381,7 +2381,7 @@ export default function App() {
 
         if (data.earned_drop) {
           const drop = data.earned_drop;
-          showToast(`💎 Znalazłeś: ${drop.icon} ${drop.name} (${drop.rarity})!`);
+          showToast(`💎 Znalazłeś: ${drop.icon} ${drop.name} (• ${drop.rarity})!`);
         }
 
         if (data.daily_bonus > 0) {
