@@ -27,21 +27,48 @@ QuestDo to aplikacja do zarządzania zadaniami w stylu RPG. Ukończaj questy, zd
 - Exclusive Achievements
 - Ukończone zadania
 
+### 📚 Plan zajęć
+- Dodawanie zajęć (nazwa, prowadzący, dzień, godzina, sala, typ)
+- Widoki: dzień, tydzień, miesiąc
+- Eksport/Import planu
+
+### 🛒 Lista zakupów
+- Indywidualna i rodzinna lista zakupów
+- Historia zakupów
+- Domyślne artykuły
+
+### 💰 Zarobki
+- Śledzenie czasu pracy
+- Stawki godzinowe
+- Podatki
+
+### 📱 PWA (Progressive Web App)
+- Instalacja na urządzeniach mobilnych
+- Powiadomienia push
+- Tryb offline
+
+### 👨‍👩‍👧‍👦 Rodziny
+- Wspólne listy zakupów
+- Zapraszanie członków
+- Domyślne artykuły rodzinne
+
 ### 🔐 Bezpieczeństwo
 - Hashowanie haseł (bcrypt)
 - JWT autoryzacja
-- HTTPS (po wdrożeniu)
+- HTTPS (wbudowany SSL na Renderze)
+- Szyfrowanie danych (Fernet)
 
 ## 🛠️ Technologie
 
 | Warstwa | Technologia |
 |---------|-------------|
-| Backend | Python + FastAPI |
-| Baza danych | PostgreSQL |
-| Frontend | React + Vite |
+| Backend | Python 3.11 + FastAPI |
+| Baza danych | PostgreSQL 15 (Render PostgreSQL) |
+| Frontend | React 18 + Vite |
+| ORM | SQLAlchemy 2.0 |
 | Konteneryzacja | Docker + Docker Compose |
 | CI/CD | GitHub Actions |
-| Chmura | Microsoft Azure (ACR + App Service) |
+| Chmura | Render.com |
 
 ## 🚀 Uruchomienie lokalne
 
@@ -49,7 +76,7 @@ QuestDo to aplikacja do zarządzania zadaniami w stylu RPG. Ukończaj questy, zd
 - Docker i Docker Compose
 - Git
 
-### Instrukcja
+### Instrukcja (zalecane - Docker Compose)
 
 ```bash
 git clone https://github.com/SandWraithPL/questdo.git
