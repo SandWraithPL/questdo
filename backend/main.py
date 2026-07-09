@@ -815,12 +815,8 @@ def build_rare_drops_inventory(user_id: int, db: Session) -> dict:
                 'description': drop.rare_drop.description,
                 'icon': drop.rare_drop.icon,
                 'rarity': drop.rare_drop.rarity,
-                'count': 1,
-                'obtained_dates': [str(drop.obtained_date)]
+                'obtained_date': str(drop.obtained_date)
             }
-        else:
-            by_slug[slug]['obtained_dates'].append(str(drop.obtained_date))
-            by_slug[slug]['count'] += 1
 
     items = list(by_slug.values())
     # Liczymy ilość znajdziek według rzadkości
@@ -2837,6 +2833,92 @@ def delete_all_schedule(current_user: models.User = Depends(get_current_user), d
     return {
         'message': f'Usunięto {deleted} nieukończonych wpisów planu',
         'deleted': deleted
+    }
+
+
+# Eksportuje harmonogram do pliku tekstowego
+@app.post('/schedule/export')
+def export_schedule(current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    entries = db.query(models.ScheduleEntry).filter(
+        models.ScheduleEntry.owner_id == current_user.id
+    ).order_by(models.ScheduleEntry.entry_date, models.ScheduleEntry.start_time).all()
+
+    lines = []
+    for entry in entries:
+        lines.append("[ENTRY]")
+        lines.append(f"title:{lm.decrypt_field(entry.title)}")
+        if entry.location:
+            lines.append(f"location:{lm.decrypt_field(entry.location)}")
+        if entry.lecturer:
+            lines.append(f"lecturer:{lm.decrypt_field(entry.lecturer)}")
+        lines.append(f"start_time:{entry.start_time}")
+        lines.append(f"end_time:{entry.end_time}")
+        if entry.entry_date:
+            lines.append(f"entry_date:{entry.entry_date}")
+        if entry.is_recurring:
+            lines.append(f"is_recurring:true")
+            if entry.day_of_week is not None:
+                lines.append(f"day_of_week:{entry.day_of_week}")
+        if entry.start_date:
+            lines.append(f"start_date:{entry.start_date}")
+        if entry.end_date:
+            lines.append(f"end_date:{entry.end_date}")
+        lines.append(f"completed:{entry.completed}")
+        lines.append("")
+
+    content = "\n".join(lines)
+    filename = f"questdo-schedule-{date.today()}.txt"
+
+    return {
+        'content': content,
+        'filename': filename
+    }
+
+
+# Importuje harmonogram z pliku tekstowego
+@app.post('/schedule/import')
+def import_schedule(payload: dict, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    entries_data = payload.get('entries', [])
+    imported = 0
+    errors = []
+
+    for entry_data in entries_data:
+        try:
+            title = entry_data.get('title', '').strip()
+            if not title:
+                continue
+
+            enc = lm.encrypt_schedule_fields(
+                title,
+                entry_data.get('location', ''),
+                entry_data.get('lecturer', '')
+            )
+
+            new_entry = models.ScheduleEntry(
+                owner_id=current_user.id,
+                title=enc['title'],
+                location=enc['location'],
+                lecturer=enc['lecturer'],
+                start_time=entry_data.get('start_time', '08:00'),
+                end_time=entry_data.get('end_time', '09:00'),
+                entry_date=parse_due_date(entry_data['entry_date']) if entry_data.get('entry_date') else None,
+                is_recurring=entry_data.get('is_recurring', False),
+                day_of_week=entry_data.get('day_of_week'),
+                start_date=parse_due_date(entry_data['start_date']) if entry_data.get('start_date') else None,
+                end_date=parse_due_date(entry_data['end_date']) if entry_data.get('end_date') else None,
+                completed=entry_data.get('completed', False)
+            )
+            db.add(new_entry)
+            imported += 1
+        except Exception as e:
+            errors.append(str(e))
+
+    db.commit()
+    process_schedule_auto_completion()
+
+    return {
+        'imported': imported,
+        'errors': errors
     }
 
 

@@ -58,7 +58,6 @@ export default function SchedulePanel({
   const [endDate, setEndDate] = useState("");
   const [showAdd, setShowAdd] = useState(false);
   const [showImport, setShowImport] = useState(false);
-  const [importText, setImportText] = useState("");
   const [manualEntryDate, setManualEntryDate] = useState("");
   const [copyModal, setCopyModal] = useState(null);
   const [editingId, setEditingId] = useState(null);
@@ -259,14 +258,15 @@ export default function SchedulePanel({
   };
 
   // Importuje plan z pliku
-  const handleImport = async () => {
-    if (!importText.trim()) {
-      onToast("Wklej zawartość pliku");
+  const handleImport = async (file) => {
+    if (!file) {
+      onToast("Wybierz plik do importu");
       return;
     }
 
+    const text = await file.text();
     const entries = [];
-    const lines = importText.split("\n");
+    const lines = text.split("\n");
     let currentEntry = null;
 
     for (const line of lines) {
@@ -292,9 +292,9 @@ export default function SchedulePanel({
 
     try {
       const res = await axios.post(`${api}/schedule/import`, { entries: validEntries }, { headers });
-      setEntries((prev) => [...prev, ...Array(res.data.imported).fill({})]);
+      const entriesRes = await axios.get(`${api}/schedule`, { headers });
+      setEntries(entriesRes.data);
       setShowImport(false);
-      setImportText("");
       onToast(`📤 Zaimportowano ${res.data.imported} wpisów`);
       if (res.data.errors.length > 0) {
         onToast(`Błędy: ${res.data.errors.slice(0, 3).join(", ")}`);
@@ -482,14 +482,17 @@ export default function SchedulePanel({
       {showImport && (
         <div className="add-task">
           <h3>📤 Importuj plan zajęć</h3>
-          <textarea
-            placeholder="Wklej zawartość pliku eksportu tutaj..."
-            value={importText}
-            onChange={(e) => setImportText(e.target.value)}
-            rows={6}
+          <input
+            type="file"
+            accept=".txt"
+            onChange={(e) => {
+              const file = e.target.files[0];
+              if (file) {
+                handleImport(file);
+              }
+            }}
           />
           <div className="row">
-            <button type="button" className="add-task-btn" onClick={handleImport}>Importuj</button>
             <button type="button" className="cancel-btn" onClick={() => setShowImport(false)}>Anuluj</button>
           </div>
         </div>

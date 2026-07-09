@@ -1784,7 +1784,7 @@ function Profile({
               {/* Lista odblokowanych osiągnięć */}
               <div className="achievements-list"><h4>Odznaczone 🏆 ({unlocked.length})</h4>{unlocked.length === 0 && <p className="muted">Jeszcze brak - pierwszy quest czeka!</p>}{unlocked.map(ach => (<div key={ach.slug || ach.title} className="achievement-item"><span>{ach.icon}</span><div><strong>{ach.title}</strong><p>{ach.description}</p></div></div>))}</div>
               {/* Lista znajdziek */}
-              <div className="rare-drops-list"><h4>Znajdźki ✨ ({rareDrops?.total_items || 0})</h4>{(!rareDrops?.items || rareDrops.items.length === 0) && <p className="muted">Jeszcze brak znajdziek - codziennie masz szansę!</p>}{rareDrops?.items?.map(drop => (<div key={drop.slug} className="rare-drop-item"><span className={`rare-drop-${drop.rarity}`}>{drop.icon}</span><div><strong>{drop.name}</strong><p>{drop.description}</p><p className="rare-drop-count">x{drop.count} · {drop.rarity}</p></div></div>))}</div>
+              <div className="rare-drops-list"><h4>Znajdźki ✨ ({rareDrops?.total_items || 0})</h4>{(!rareDrops?.items || rareDrops.items.length === 0) && <p className="muted">Jeszcze brak znajdziek - codziennie masz szansę!</p>}{rareDrops?.items?.map(drop => (<div key={drop.slug} className="rare-drop-item"><span className={`rare-drop-${drop.rarity}`}>{drop.icon}</span><div><strong>{drop.name}</strong><p>{drop.description}</p><p className="rare-drop-count">{drop.rarity.charAt(0).toUpperCase() + drop.rarity.slice(1)}</p></div></div>))}</div>
             </>
           ) : (
             // Historia gracza
@@ -1978,11 +1978,19 @@ export default function App() {
 
   // Wyświetla toast (komunikat)
   const showToast = (msg) => {
-    const id = Date.now();
-    setToasts((prev) => [...prev, { id, message: msg }]);
-    setTimeout(() => {
-      setToasts((prev) => prev.filter((t) => t.id !== id));
-    }, 3000);
+    setToasts((prev) => {
+      // Prevent duplicate messages within 500ms
+      const recent = prev.slice(-3);
+      if (recent.some(t => t.message === msg)) {
+        return prev;
+      }
+      const id = Date.now();
+      const newToasts = [...prev, { id, message: msg }];
+      setTimeout(() => {
+        setToasts((current) => current.filter((t) => t.id !== id));
+      }, 3000);
+      return newToasts;
+    });
   };
 
   // Włącza powiadomienia
@@ -2342,10 +2350,7 @@ export default function App() {
             if (!prev) return { total_items: 1, items: [data.earned_drop] };
             const existingItem = prev.items?.find(i => i.slug === data.earned_drop.slug);
             if (existingItem) {
-              return {
-                ...prev,
-                items: prev.items.map(i => i.slug === data.earned_drop.slug ? { ...i, count: i.count + 1 } : i),
-              };
+              return prev;
             }
             return {
               ...prev,
