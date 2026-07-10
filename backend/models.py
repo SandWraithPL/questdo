@@ -1,5 +1,5 @@
 # Importy potrzebne do definicji modeli bazy danych
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Date, Float
+from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Date, Float, UniqueConstraint
 from sqlalchemy.orm import relationship
 from database import Base
 from datetime import datetime, date
@@ -117,6 +117,7 @@ class ExclusiveAchievement(Base):
 # Model ekskluzywnego osiągnięcia zdobytego przez gracza
 class PlayerExclusiveAchievement(Base):
     __tablename__ = "player_exclusive_achievements"
+    __table_args__ = (UniqueConstraint('user_id', 'exclusive_achievement_id', name='uq_user_exclusive_achievement'),)  # Zapobiega duplikatom
     id = Column(Integer, primary_key=True, index=True)  # Unikalne ID przypisania
     user_id = Column(Integer, ForeignKey("users.id"), index=True)  # ID użytkownika
     exclusive_achievement_id = Column(Integer, ForeignKey("exclusive_achievements.id"))  # ID osiągnięcia
