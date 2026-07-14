@@ -3080,6 +3080,7 @@ def shopping_summary(family_id: Optional[int] = None, current_user: models.User 
 
     # Oblicza koszt obecnej listy (wszystkie produkty)
     current_list_cost = 0.0
+    print(f"DEBUG: Processing {len(items)} items")
     for i in items:
         try:
             # Odszyfrowujemy quantity przed konwersją
@@ -3087,10 +3088,13 @@ def shopping_summary(family_id: Optional[int] = None, current_user: models.User 
             qty_str = decrypted_qty.replace(',', '.') if decrypted_qty else "0"
             qty = float(qty_str) if qty_str else 0
             price = float(i.price or 0)
-            current_list_cost += qty * price
-            print(f"DEBUG: Item {decrypt_field(i.name)}, qty={qty}, price={price}, total={qty*price}")
-        except (ValueError, TypeError) as e:
-            print(f"DEBUG: Error processing item: {e}")
+            item_total = qty * price
+            current_list_cost += item_total
+            print(f"DEBUG: Item {decrypt_field(i.name)}, raw_qty={i.quantity}, decrypted_qty={decrypted_qty}, qty={qty}, price={price}, item_total={item_total}")
+        except Exception as e:
+            print(f"DEBUG: Error processing item: {e}, type: {type(e)}")
+            import traceback
+            traceback.print_exc()
             pass
     print(f"DEBUG: Total current_list_cost = {current_list_cost}, items count = {len(items)}")
     
