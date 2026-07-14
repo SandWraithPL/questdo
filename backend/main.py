@@ -3079,7 +3079,18 @@ def shopping_summary(family_id: Optional[int] = None, current_user: models.User 
         ).all()
 
     # Oblicza koszt obecnej listy (wszystkie produkty)
-    current_list_cost = sum(float(i.price or 0) * float(i.quantity or 0) for i in items)
+    current_list_cost = 0.0
+    for i in items:
+        try:
+            qty_str = str(i.quantity).replace(',', '.') if i.quantity else "0"
+            qty = float(qty_str) if qty_str else 0
+            price = float(i.price or 0)
+            current_list_cost += qty * price
+            print(f"DEBUG: Item {i.name}, qty={qty}, price={price}, total={qty*price}")
+        except (ValueError, TypeError) as e:
+            print(f"DEBUG: Error processing item {i.name}: {e}")
+            pass
+    print(f"DEBUG: Total current_list_cost = {current_list_cost}, items count = {len(items)}")
     
     # Oblicza statystyki z historii
     now = datetime.now()
