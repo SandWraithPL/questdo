@@ -3078,8 +3078,8 @@ def shopping_summary(family_id: Optional[int] = None, current_user: models.User 
             models.ShoppingHistory.family_id.is_(None)
         ).all()
 
-    # Oblicza koszt obecnej listy (tylko kupione produkty)
-    current_list_cost = sum(float(i.price or 0) * float(i.quantity or 0) for i in items if i.bought)
+    # Oblicza koszt obecnej listy (wszystkie produkty)
+    current_list_cost = sum(float(i.price or 0) * float(i.quantity or 0) for i in items)
     
     # Oblicza statystyki z historii
     now = datetime.now()
