@@ -115,6 +115,7 @@ export default function ShoppingPanel({
   const [showFamilyToggle, setShowFamilyToggle] = useState(readShowFamilyToggle);
   const [selectedMode, setSelectedMode] = useState(readShoppingMode);
   const [defaultCategory, setDefaultCategory] = useState("other");
+  const [showDefaultImport, setShowDefaultImport] = useState(false);
 
   // Zapisuje edytowany produkt
   const saveItem = async (id, form) => {
@@ -318,6 +319,86 @@ export default function ShoppingPanel({
       setSelectedHistory(historyId);
     } catch (err) {
       onToast(err.response?.data?.detail || "Błąd ładowania szczegółów");
+    }
+  };
+
+  // Eksportuje historię zakupów do pliku
+  const exportHistory = async (historyId) => {
+    try {
+      const res = await axios.post(`${api}/shopping/history/export?history_id=${historyId}`, {}, { headers });
+      const blob = new Blob([res.data.content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      onToast("📥 Wyeksportowano listę zakupów");
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd eksportu");
+    }
+  };
+
+  // Eksportuje domyślne artykuły do pliku
+  const exportDefaultArticles = async () => {
+    try {
+      const params = familyParams(familyId);
+      const res = await axios.post(`${api}/default-articles/export`, {}, { headers, params });
+      const blob = new Blob([res.data.content], { type: "text/plain" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = res.data.filename;
+      a.click();
+      URL.revokeObjectURL(url);
+      onToast("📥 Wyeksportowano domyślne artykuły");
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd eksportu");
+    }
+  };
+
+  // Importuje domyślne artykuły z pliku
+  const importDefaultArticles = async (file) => {
+    if (!file) {
+      onToast("Wybierz plik do importu");
+      return;
+    }
+
+    const text = await file.text();
+    const entries = [];
+    const lines = text.split("\n");
+    let currentEntry = null;
+
+    for (const line of lines) {
+      if (line === "[ARTICLE]") {
+        currentEntry = {};
+      } else if (currentEntry && line.includes(":")) {
+        const [key, ...valueParts] = line.split(":");
+        const value = valueParts.join(":").trim();
+        currentEntry[key] = value;
+      } else if (line === "" && currentEntry) {
+        entries.push(currentEntry);
+        currentEntry = null;
+      }
+    }
+    if (currentEntry) entries.push(currentEntry);
+
+    if (entries.length === 0) {
+      onToast("Nie znaleziono żadnych artykułów w pliku");
+      return;
+    }
+
+    const validEntries = entries.filter(e => e.name && e.name.trim());
+
+    try {
+      const params = familyParams(familyId);
+      const res = await axios.post(`${api}/default-articles/import`, { entries: validEntries }, { headers, params });
+      onToast(`📤 Zaimportowano ${res.data.imported} artykułów`);
+      if (res.data.errors.length > 0) {
+        onToast(`Błędy: ${res.data.errors.slice(0, 3).join(", ")}`);
+      }
+    } catch (err) {
+      onToast(err.response?.data?.detail || "Błąd importu");
     }
   };
 
@@ -565,6 +646,8 @@ export default function ShoppingPanel({
         <button type="button" className="icon-btn history-btn" onClick={selectAll} title="Zaznacz wszystkie">✅ Zaznacz wszystkie</button>
         <button type="button" className="icon-btn history-btn" onClick={loadHistory} title="Historia list">📜 Historia</button>
         <button type="button" className="icon-btn save-history-btn" onClick={completeShoppingList} title="Zakończ i zapisz do historii">💾 Zakończ listę</button>
+        <button type="button" className="icon-btn" onClick={exportDefaultArticles} title="Eksportuj domyślne artykuły">📥</button>
+        <button type="button" className="icon-btn" onClick={() => setShowDefaultImport(!showDefaultImport)} title="Importuj domyślne artykuły">📤</button>
       </div>
 
       {/* Filtry i statystyki */}
@@ -697,6 +780,14 @@ export default function ShoppingPanel({
                       </button>
                       <button
                         type="button"
+                        className="icon-btn"
+                        onClick={() => exportHistory(h.id)}
+                        title="Eksportuj listę"
+                      >
+                        📥
+                      </button>
+                      <button
+                        type="button"
                         className="icon-btn delete"
                         onClick={() => deleteHistory(h.id, canEdit)}
                         title={canEdit ? "Usuń" : "Nie można usunąć (minęło 24h)"}
@@ -711,6 +802,27 @@ export default function ShoppingPanel({
               })}
             </div>
           )}
+        </div>
+      )}
+
+      {/* Modal importu domyślnych artykułów */}
+      {showDefaultImport && (
+        <div className="add-task">
+          <h3>📤 Importuj domyślne artykuły</h3>
+          <input
+            type="file"
+            accept=".txt"
+            onChange={(e) => {
+              const file = e.target.files[0];
+              if (file) {
+                importDefaultArticles(file);
+                setShowDefaultImport(false);
+              }
+            }}
+          />
+          <div className="row">
+            <button type="button" className="cancel-btn" onClick={() => setShowDefaultImport(false)}>Anuluj</button>
+          </div>
         </div>
       )}
 

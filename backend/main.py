@@ -1296,6 +1296,23 @@ class DefaultHourlyRateUpdate(BaseModel):
     rate: float
 
 
+class ShoppingHistoryExportResponse(BaseModel):
+    content: str
+    filename: str
+
+
+class DefaultArticleImportEntry(BaseModel):
+    name: str
+    quantity: Optional[str] = ''
+    unit: Optional[str] = 'szt'
+    category: Optional[str] = 'other'
+    default_price: float = 0.0
+
+
+class DefaultArticleImport(BaseModel):
+    entries: List[DefaultArticleImportEntry]
+
+
 # ===== FUNKCJE WALIDACYJNE =====
 
 def validate_schedule_payload(data: ScheduleCreate | ScheduleUpdate, is_create: bool = False) -> None:
@@ -3005,6 +3022,27 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
     db.commit()
     db.refresh(row)
 
+    # Auto-add to default articles if not exists
+    # Check if article with same name already exists in default articles
+    existing_article = db.query(models.DefaultArticle).filter(
+        models.DefaultArticle.name == enc['name'],
+        models.DefaultArticle.owner_id == current_user.id,
+        models.DefaultArticle.family_id == family_id
+    ).first()
+
+    if not existing_article:
+        default_article = models.DefaultArticle(
+            owner_id=current_user.id,
+            family_id=family_id,
+            name=enc['name'],
+            quantity=enc['quantity'],
+            unit=item.unit or 'szt',
+            category=validate_shopping_category(item.category or 'other'),
+            default_price=max(0.0, float(item.price or 0.0))
+        )
+        db.add(default_article)
+        db.commit()
+
     return lm.shopping_to_dict(row)
 
 
@@ -4011,6 +4049,101 @@ def delete_default_article(article_id: int, current_user: models.User = Depends(
     return {'message': 'Usunięto artykuł domyślny'}
 
 
+# Eksportuje domyślne artykuły do pliku tekstowego
+@app.post('/default-articles/export')
+def export_default_articles(family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if family_id is not None:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail='Nie jesteś członkiem tej rodziny')
+        articles = db.query(models.DefaultArticle).filter(
+            models.DefaultArticle.family_id == family_id
+        ).order_by(models.DefaultArticle.name).all()
+    else:
+        articles = db.query(models.DefaultArticle).filter(
+            models.DefaultArticle.owner_id == current_user.id,
+            models.DefaultArticle.family_id.is_(None)
+        ).order_by(models.DefaultArticle.name).all()
+
+    lines = []
+    for article in articles:
+        lines.append("[ARTICLE]")
+        lines.append(f"name:{lm.decrypt_field(article.name)}")
+        if article.quantity:
+            lines.append(f"quantity:{lm.decrypt_field(article.quantity)}")
+        lines.append(f"unit:{article.unit or 'szt'}")
+        lines.append(f"category:{article.category or 'other'}")
+        lines.append(f"default_price:{article.default_price or 0.0}")
+        lines.append("")
+
+    content = "\n".join(lines)
+    filename = f"questdo-default-articles-{date.today()}.txt"
+
+    return {
+        'content': content,
+        'filename': filename
+    }
+
+
+# Importuje domyślne artykuły z pliku tekstowego
+@app.post('/default-articles/import')
+def import_default_articles(payload: DefaultArticleImport, family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    if family_id is not None:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail='Nie jesteś członkiem tej rodziny')
+
+    imported = 0
+    errors = []
+
+    for entry_data in payload.entries:
+        try:
+            name = (entry_data.name or '').strip()
+            if not name:
+                continue
+
+            # Check if article with same name already exists
+            enc_name = encrypt_field(name)
+            existing_article = db.query(models.DefaultArticle).filter(
+                models.DefaultArticle.name == enc_name,
+                models.DefaultArticle.owner_id == current_user.id,
+                models.DefaultArticle.family_id == family_id
+            ).first()
+
+            if existing_article:
+                # Skip if already exists (don't create duplicates)
+                continue
+
+            enc = lm.encrypt_shopping_fields(name, entry_data.quantity)
+
+            new_article = models.DefaultArticle(
+                owner_id=current_user.id,
+                family_id=family_id,
+                name=enc['name'],
+                quantity=enc['quantity'],
+                unit=entry_data.unit or 'szt',
+                category=validate_shopping_category(entry_data.category or 'other'),
+                default_price=max(0.0, float(entry_data.default_price or 0.0))
+            )
+            db.add(new_article)
+            imported += 1
+        except Exception as e:
+            errors.append(str(e))
+
+    db.commit()
+
+    return {
+        'imported': imported,
+        'errors': errors
+    }
+
+
 # ===== ADMIN =====
 
 @app.get('/admin/users')
@@ -4228,6 +4361,53 @@ def load_shopping_from_history(history_id: int, current_user: models.User = Depe
     else:
         db.commit()
         return {'message': 'Wczytano listę jako szablon (tylko podgląd)', 'items': created_items, 'deleted_history': False}
+
+
+# Eksportuje historię zakupów do pliku tekstowego
+@app.post('/shopping/history/export')
+def export_shopping_history(history_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    history = db.query(models.ShoppingHistory).filter(models.ShoppingHistory.id == history_id).first()
+    if not history:
+        raise HTTPException(status_code=404, detail='Nie znaleziono historii')
+    if history.family_id is not None:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == history.family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail='Nie masz dostępu do tej historii')
+    elif history.owner_id != current_user.id:
+        raise HTTPException(status_code=403, detail='Nie masz dostępu do tej historii')
+
+    lines = []
+    lines.append(f"completed_at:{history.completed_at.isoformat()}")
+    lines.append(f"total_items:{history.total_items}")
+    lines.append(f"total_spent:{history.total_spent}")
+    if history.notes:
+        lines.append(f"notes:{history.notes}")
+    lines.append("")
+
+    items_data = json.loads(history.items_json)
+    for item in items_data:
+        lines.append("[ITEM]")
+        lines.append(f"name:{item.get('name', '')}")
+        if item.get('quantity'):
+            lines.append(f"quantity:{item.get('quantity', '')}")
+        if item.get('unit'):
+            lines.append(f"unit:{item.get('unit', 'szt')}")
+        if item.get('category'):
+            lines.append(f"category:{item.get('category', 'other')}")
+        if item.get('price'):
+            lines.append(f"price:{item.get('price', 0.0)}")
+        lines.append("")
+
+    content = "\n".join(lines)
+    filename = f"questdo-shopping-history-{history.completed_at.strftime('%Y-%m-%d-%H-%M')}.txt"
+
+    return {
+        'content': content,
+        'filename': filename
+    }
 
 
 # ===== USTAWIENIA =====
