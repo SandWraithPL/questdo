@@ -7,6 +7,13 @@ import os
 # URL do bazy danych PostgreSQL (z opcją domyślną na localhost)
 DATABASE_URL = os.getenv("DATABASE_URL", "postgresql+psycopg://questdo:questdo@db:5432/questdo")
 
+# If the environment provides a plain `postgresql://...` URL (common on hosts
+# like Render), SQLAlchemy will attempt to load the `psycopg2` DBAPI. In this
+# project we install the modern `psycopg` (v3) driver, so normalize the URL to
+# explicitly request the `psycopg` driver when no driver is specified.
+if DATABASE_URL.startswith("postgresql://") and "+" not in DATABASE_URL.split("://", 1)[1]:
+    DATABASE_URL = DATABASE_URL.replace("postgresql://", "postgresql+psycopg://", 1)
+
 # Tworzymy silnik bazy danych
 engine = create_engine(DATABASE_URL)
 
