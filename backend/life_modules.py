@@ -95,6 +95,9 @@ def work_earnings(entry: models.WorkEntry) -> dict:
     try:
         # Obliczamy liczbę godzin pracy
         hours = hours_between(entry.start_time, entry.end_time)
+        # Odliczamy niepłatną przerwę (minuty na godziny)
+        unpaid_break_hours = (entry.unpaid_break_minutes or 0) / 60
+        hours = max(0, hours - unpaid_break_hours)
         # Pobieramy stawkę godzinową
         rate = work_rate(entry)
         # Brutto = godziny * stawka
@@ -127,6 +130,7 @@ def work_to_dict(entry: models.WorkEntry) -> dict:
         "is_recurring": entry.is_recurring,
         "day_of_week": entry.day_of_week,
         "end_date": str(entry.end_date) if entry.end_date else None,
+        "unpaid_break_minutes": entry.unpaid_break_minutes or 0,
         **earnings,
     }
 

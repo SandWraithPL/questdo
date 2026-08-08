@@ -90,6 +90,7 @@ export default function EarningsPanel({
   const [notes, setNotes] = useState("");
   const [taxEnabled, setTaxEnabled] = useState(false);
   const [taxPercent, setTaxPercent] = useState("12");
+  const [unpaidBreakMinutes, setUnpaidBreakMinutes] = useState("0");
   const [defaultHourlyRate, setDefaultHourlyRate] = useState("");
   const [editingId, setEditingId] = useState(null);
   const [editDate, setEditDate] = useState("");
@@ -97,6 +98,7 @@ export default function EarningsPanel({
   const [editEndTime, setEditEndTime] = useState("");
   const [editRate, setEditRate] = useState("");
   const [editNotes, setEditNotes] = useState("");
+  const [editUnpaidBreakMinutes, setEditUnpaidBreakMinutes] = useState("0");
   const [isRecurring, setIsRecurring] = useState(false);
   const [dayOfWeek, setDayOfWeek] = useState(0);
   const [startDate, setStartDate] = useState("");
@@ -239,6 +241,7 @@ export default function EarningsPanel({
       notes,
       tax_enabled: taxEnabled,
       tax_percent: parseFloat(taxPercent) || 0,
+      unpaid_break_minutes: parseInt(unpaidBreakMinutes) || 0,
       is_recurring: isRecurring,
       day_of_week: isRecurring ? dayOfWeek : null,
       start_date: isRecurring ? startDate : null,
@@ -251,6 +254,7 @@ export default function EarningsPanel({
     setShowAdd(false);
     setHourlyRate(defaultHourlyRate || "");
     setNotes("");
+    setUnpaidBreakMinutes("0");
     setIsRecurring(false);
     setDayOfWeek(0);
     setStartDate("");
@@ -267,6 +271,7 @@ export default function EarningsPanel({
           notes,
           tax_enabled: taxEnabled,
           tax_percent: parseFloat(taxPercent) || 0,
+          unpaid_break_minutes: parseInt(unpaidBreakMinutes) || 0,
           is_recurring: isRecurring,
           day_of_week: isRecurring ? dayOfWeek : null,
           start_date: isRecurring ? startDate : null,
@@ -366,6 +371,7 @@ export default function EarningsPanel({
     setEditEndTime(entry.end_time);
     setEditRate(entry.hourly_rate.toFixed(2).replace(".", ","));
     setEditNotes(entry.notes || "");
+    setEditUnpaidBreakMinutes(String(entry.unpaid_break_minutes || 0));
     setEditIsRecurring(entry.is_recurring || false);
     setEditDayOfWeek(entry.day_of_week || 0);
     setEditStartDate(entry.start_date ? entry.start_date.slice(0, 10) : "");
@@ -414,6 +420,7 @@ export default function EarningsPanel({
           end_time: editEndTime,
           hourly_rate: rate,
           notes: editNotes,
+          unpaid_break_minutes: parseInt(editUnpaidBreakMinutes) || 0,
           is_recurring: editIsRecurring,
           day_of_week: editIsRecurring ? editDayOfWeek : null,
           start_date: editIsRecurring ? editStartDate : null,
@@ -550,6 +557,15 @@ export default function EarningsPanel({
                   <TimePicker value={editStartTime} onChange={setEditStartTime} />
                   <TimePicker value={editEndTime} onChange={setEditEndTime} />
                   <input type="text" placeholder="Stawka (zł)" value={editRate} onChange={(e) => setEditRate(e.target.value)} />
+                  <input
+                    type="number"
+                    min="0"
+                    max="1440"
+                    step="15"
+                    placeholder="Niepłatna przerwa (minuty)"
+                    value={editUnpaidBreakMinutes}
+                    onChange={(e) => setEditUnpaidBreakMinutes(e.target.value)}
+                  />
                   <input placeholder="Notatka" value={editNotes} onChange={(e) => setEditNotes(e.target.value)} />
                   <label className="important-toggle">
                     <input type="checkbox" checked={editIsRecurring} onChange={(e) => setEditIsRecurring(e.target.checked)} />
@@ -617,6 +633,16 @@ export default function EarningsPanel({
             <TimePicker value={startTime} onChange={setStartTime} label="Od:" />
             <TimePicker value={endTime} onChange={setEndTime} label="Do:" />
           </div>
+
+          <input
+            type="number"
+            min="0"
+            max="1440"
+            step="15"
+            placeholder="Niepłatna przerwa (minuty)"
+            value={unpaidBreakMinutes}
+            onChange={(e) => setUnpaidBreakMinutes(e.target.value)}
+          />
 
           <div className="rate-input-group">
             <input

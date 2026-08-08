@@ -252,6 +252,7 @@ class WorkEntry(Base):
     is_recurring = Column(Boolean, default=False)  # Czy wpis się powtarza
     day_of_week = Column(Integer, nullable=True)  # Dzień tygodnia dla cyklicznych
     end_date = Column(Date, nullable=True)  # Data końca cyklu
+    unpaid_break_minutes = Column(Integer, default=0)  # Minuty niepłatnej przerwy (np. lunch)
     owner = relationship("User")  # Relacja do użytkownika
 
 

@@ -245,6 +245,7 @@ def migrate_schema():
                 ('is_recurring', 'ALTER TABLE work_entries ADD COLUMN is_recurring BOOLEAN DEFAULT FALSE'),
                 ('day_of_week', 'ALTER TABLE work_entries ADD COLUMN day_of_week INTEGER'),
                 ('end_date', 'ALTER TABLE work_entries ADD COLUMN end_date DATE'),
+                ('unpaid_break_minutes', 'ALTER TABLE work_entries ADD COLUMN unpaid_break_minutes INTEGER DEFAULT 0'),
             ])
 
     # Dodajemy kolumny do default_articles
@@ -1192,6 +1193,7 @@ class WorkCreate(BaseModel):
     notes: Optional[str] = ''
     tax_enabled: Optional[bool] = False
     tax_percent: Optional[float] = 0.0
+    unpaid_break_minutes: Optional[int] = 0
     is_recurring: Optional[bool] = False
     day_of_week: Optional[int] = None
     end_date: Optional[str] = None
@@ -1205,6 +1207,7 @@ class WorkUpdate(BaseModel):
     notes: Optional[str] = None
     tax_enabled: Optional[bool] = None
     tax_percent: Optional[float] = None
+    unpaid_break_minutes: Optional[int] = None
     completed: Optional[bool] = None
     is_recurring: Optional[bool] = None
     day_of_week: Optional[int] = None
@@ -3404,6 +3407,7 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
                 notes=enc['notes'],
                 tax_enabled=bool(entry.tax_enabled),
                 tax_percent=max(0.0, min(100.0, float(entry.tax_percent or 0))),
+                unpaid_break_minutes=max(0, int(entry.unpaid_break_minutes or 0)),
                 completed=auto_complete
             )
             db.add(row)
@@ -3468,6 +3472,7 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
         notes=enc['notes'],
         tax_enabled=bool(entry.tax_enabled),
         tax_percent=max(0.0, min(100.0, float(entry.tax_percent or 0))),
+        unpaid_break_minutes=max(0, int(entry.unpaid_break_minutes or 0)),
         completed=auto_complete
     )
 
@@ -3496,6 +3501,75 @@ def create_work(entry: WorkCreate, current_user: models.User = Depends(get_curre
         db.commit()
 
     return lm.work_to_dict(row)
+
+
+# Aktualizuje wpis pracy
+@app.patch('/work/{entry_id}')
+def update_work(entry_id: int, body: WorkUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(models.WorkEntry).filter(
+        models.WorkEntry.id == entry_id,
+        models.WorkEntry.owner_id == current_user.id
+    ).first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail='Nie znaleziono wpisu')
+
+    if body.work_date is not None:
+        row.work_date = parse_due_date(body.work_date)
+    if body.start_time is not None:
+        row.start_time = body.start_time
+    if body.end_time is not None:
+        row.end_time = body.end_time
+    if body.hourly_rate is not None:
+        enc = lm.encrypt_work_fields(body.hourly_rate, row.notes)
+        row.hourly_rate = enc['hourly_rate']
+    if body.notes is not None:
+        enc = lm.encrypt_work_fields(row.hourly_rate, body.notes)
+        row.notes = enc['notes']
+    if body.tax_enabled is not None:
+        row.tax_enabled = body.tax_enabled
+    if body.tax_percent is not None:
+        row.tax_percent = max(0.0, min(100.0, float(body.tax_percent)))
+    if body.unpaid_break_minutes is not None:
+        row.unpaid_break_minutes = max(0, int(body.unpaid_break_minutes))
+    if body.completed is not None:
+        row.completed = body.completed
+    if body.is_recurring is not None:
+        row.is_recurring = body.is_recurring
+    if body.day_of_week is not None:
+        row.day_of_week = body.day_of_week
+
+    db.commit()
+    db.refresh(row)
+
+    process_work_auto_completion()
+
+    safe_broadcast({'type': 'work_updated', 'data': lm.work_to_dict(row)})
+    safe_broadcast({
+        'type': 'work_updated',
+        'data': {'id': row.id, 'action': 'completed', 'completed': row.completed}
+    })
+
+    return {'entry': lm.work_to_dict(row)}
+
+
+# Usuwa wpis pracy
+@app.delete('/work/{entry_id}')
+def delete_work(entry_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+    row = db.query(models.WorkEntry).filter(
+        models.WorkEntry.id == entry_id,
+        models.WorkEntry.owner_id == current_user.id
+    ).first()
+
+    if not row:
+        raise HTTPException(status_code=404, detail='Nie znaleziono wpisu')
+
+    db.delete(row)
+    db.commit()
+
+    safe_broadcast({'type': 'work_updated', 'data': {'id': entry_id, 'deleted': True}})
+
+    return {'message': 'Usunięto wpis pracy'}
 
 
 # ===== RODZINY (FAMILIES) =====
