@@ -343,6 +343,7 @@ export default function EarningsPanel({
           notes: original.notes || "",
           tax_enabled: original.tax_enabled || false,
           tax_percent: original.tax_percent || 0,
+          unpaid_break_minutes: original.unpaid_break_minutes || 0,
           is_recurring: false,
         };
 
