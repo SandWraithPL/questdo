@@ -1,5 +1,6 @@
 # Importy z FastAPI - do tworzenia API, endpointów, obsługi błędów, WebSocket
 from fastapi import FastAPI, Depends, HTTPException, status, Request, WebSocket, WebSocketDisconnect
+from fastapi.responses import FileResponse
 # Middleware do obsługi CORS - pozwala frontendowi łączyć się z backendem
 from fastapi.middleware.cors import CORSMiddleware
 # Autoryzacja OAuth2 - do logowania przez tokeny
@@ -1514,6 +1515,19 @@ def backup_scheduler_loop():
         except Exception as exc:
             logger.exception('Database backup failed: %s', exc)
         time.sleep(BACKUP_INTERVAL_MINUTES * 60)
+
+
+def _latest_backup_path() -> Optional[str]:
+    if not os.path.isdir(BACKUP_DIR):
+        return None
+    backup_files = [
+        os.path.join(BACKUP_DIR, name)
+        for name in os.listdir(BACKUP_DIR)
+        if name.endswith('.sql.gz')
+    ]
+    if not backup_files:
+        return None
+    return max(backup_files, key=os.path.getmtime)
 
 
 # Pobiera aktualnie zalogowanego użytkownika na podstawie tokena JWT
@@ -4672,7 +4686,22 @@ async def api_health_check():
 @app.post('/admin/database-backup')
 def trigger_database_backup(current_user: models.User = Depends(get_current_admin_user)):
     backup_path = create_database_backup('manual')
+    if not backup_path:
+        return {'message': 'Backup skipped because database is empty'}
     return {'message': 'Backup created', 'path': backup_path}
+
+
+@app.get('/admin/database-backup/latest')
+def download_latest_database_backup(current_user: models.User = Depends(get_current_admin_user)):
+    backup_path = _latest_backup_path()
+    if not backup_path:
+        raise HTTPException(status_code=404, detail='Nie znaleziono backupu')
+    filename = os.path.basename(backup_path)
+    return FileResponse(
+        backup_path,
+        media_type='application/gzip',
+        filename=filename,
+    )
 
 
 # Uruchomienie aplikacji

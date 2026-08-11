@@ -64,6 +64,7 @@ QuestDo to aplikacja do zarządzania zadaniami w stylu RPG. Ukończaj questy, zd
 - Domyślna ścieżka na Renderze to `/var/data/questdo-backups`
 - Jeśli wdrożenie nie ma trwałego dysku albo zewnętrznego storage, kopia zniknie po restarcie lub wyczyszczeniu środowiska
 - Dla pewnego odzysku warto wskazać `DB_BACKUP_DIR` na trwały wolumen albo przenieść pliki do S3 / R2 / innego storage
+- Backup można pobrać bez shell przez endpoint admina `GET /admin/database-backup/latest`
 
 ## 🛠️ Technologie
 
