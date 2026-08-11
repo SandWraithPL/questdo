@@ -2334,7 +2334,7 @@ export default function App() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || "Nie udało się pobrać backupu");
+        throw new Error(errorData.detail || `Nie udało się pobrać backupu (${response.status})`);
       }
 
       const blob = await response.blob();
