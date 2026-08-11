@@ -58,6 +58,12 @@ QuestDo to aplikacja do zarządzania zadaniami w stylu RPG. Ukończaj questy, zd
 - HTTPS (wbudowany SSL na Renderze)
 - Szyfrowanie danych (Fernet)
 
+### 💾 Kopie bazy danych
+- Backend tworzy cykliczne backupy logiczne bazy do plików `.json.gz`
+- Częstotliwość i retencja są sterowane przez `DB_BACKUP_INTERVAL_MINUTES` i `DB_BACKUP_RETENTION_COUNT`
+- Jeśli wdrożenie nie ma trwałego dysku albo zewnętrznego storage, kopia zniknie po restarcie lub wyczyszczeniu środowiska
+- Dla pewnego odzysku warto wskazać `DB_BACKUP_DIR` na trwały wolumen albo przenieść pliki do S3 / R2 / innego storage
+
 ## 🛠️ Technologie
 
 | Warstwa | Technologia |

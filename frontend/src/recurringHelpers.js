@@ -69,7 +69,9 @@ export function getRecurringCategoriesForDate(events, dateStr, tasksOnDate = [])
     .filter((t) => t.task_type === "event" && t.event_category)
     .map((t) => t.event_category);
   // Kategorie z recurring eventów
-  const fromRecurring = getRecurringEventsForDate(events, dateStr).map((e) => e.category);
+  const fromRecurring = getRecurringEventsForDate(events, dateStr)
+    .map((e) => e.category)
+    .filter(Boolean);
   // Usuwamy duplikaty
   const seen = new Set();
   return [...fromTasks, ...fromRecurring].filter(cat => cat && !seen.has(cat) && !seen.add(cat));
@@ -84,12 +86,13 @@ export function toVirtualRecurringTasks(events, dateStr, tasksOnDate = []) {
   const existingTitles = new Set(
     tasksOnDate
       .filter((t) => t.task_type === "event")
-      .map((t) => t.title.toLowerCase()),
+      .map((t) => String(t.title || "").toLowerCase())
+      .filter(Boolean),
   );
 
   // Tworzymy wirtualne zadania z recurring eventów które jeszcze nie istnieją
   return getRecurringEventsForDate(recurringEvents, dateStr)
-    .filter((e) => !existingTitles.has(e.title.toLowerCase()))
+    .filter((e) => String(e.title || "").trim() && !existingTitles.has(String(e.title || "").toLowerCase()))
     .map((e) => ({
       id: `recurring-${e.id}-${dateStr}`,
       title: e.title,

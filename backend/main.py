@@ -19,7 +19,7 @@ from pydantic import BaseModel
 # Nasze modele bazy danych
 import models
 # Połączenie z bazą danych
-from database import get_db, engine
+from database import get_db, engine, SessionLocal
 # Funkcje szyfrowania/odszyfrowania
 from encryption import encrypt_field, decrypt_field
 # Hashlib - do hashowania nazw użytkowników
@@ -39,6 +39,9 @@ import math
 import os
 import json
 import threading
+import gzip
+import base64
+from decimal import Decimal
 # Strefy czasowe
 from zoneinfo import ZoneInfo
 # Logowanie
@@ -204,6 +207,7 @@ def migrate_schema():
                 ('last_streak_date', 'ALTER TABLE users ADD COLUMN last_streak_date DATE'),
                 ('progress_reset_at', 'ALTER TABLE users ADD COLUMN progress_reset_at TIMESTAMP'),
                 ('exp_at_progress_reset', 'ALTER TABLE users ADD COLUMN exp_at_progress_reset INTEGER DEFAULT 0'),
+                ('last_active_at', 'ALTER TABLE users ADD COLUMN last_active_at TIMESTAMP'),
                 ('default_category', "ALTER TABLE users ADD COLUMN default_category VARCHAR DEFAULT 'other'"),
                 ('default_hourly_rate', 'ALTER TABLE users ADD COLUMN default_hourly_rate FLOAT'),
             ])
@@ -548,6 +552,8 @@ def startup_event():
     threading.Thread(target=reminder_scheduler_loop, daemon=True).start()
     # Startujemy daemon do keep-alive
     threading.Thread(target=keep_alive_loop, daemon=True).start()
+    # Startujemy automatyczny backup bazy
+    threading.Thread(target=backup_scheduler_loop, daemon=True).start()
 
 
 # WebSocket endpoint - dla real-time powiadomień
@@ -576,7 +582,7 @@ app.add_middleware(
 # Dane do autoryzacji JWT
 SECRET_KEY = 'supersecretkey123'
 ALGORITHM = 'HS256'
-ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 24 godziny
+ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 365  # Długi czas życia tokena, timeout obsługujemy aktywnością
 
 # Kontekst do hashowania haseł (bcrypt)
 pwd_context = CryptContext(schemes=['bcrypt'], deprecated='auto')
@@ -1342,6 +1348,47 @@ def validate_shopping_category(category: str) -> str:
     return cat
 
 
+def _serialize_default_article(article: models.DefaultArticle) -> dict:
+    return {
+        'id': article.id,
+        'name': decrypt_field(article.name),
+        'quantity': decrypt_field(article.quantity),
+        'unit': article.unit,
+        'category': article.category,
+        'default_price': article.default_price,
+        'family_id': article.family_id,
+        'created_at': article.created_at.isoformat(),
+    }
+
+
+def _default_articles_for_scope(db: Session, current_user: models.User, family_id: Optional[int] = None) -> list[models.DefaultArticle]:
+    if family_id is not None:
+        membership = db.query(models.FamilyMember).filter(
+            models.FamilyMember.family_id == family_id,
+            models.FamilyMember.user_id == current_user.id
+        ).first()
+        if not membership:
+            raise HTTPException(status_code=403, detail='Nie jesteś członkiem tej rodziny')
+        articles = db.query(models.DefaultArticle).filter(models.DefaultArticle.family_id == family_id).all()
+    else:
+        articles = db.query(models.DefaultArticle).filter(
+            models.DefaultArticle.owner_id == current_user.id,
+            models.DefaultArticle.family_id.is_(None)
+        ).all()
+
+    return sorted(articles, key=lambda article: (decrypt_field(article.name).lower(), article.id))
+
+
+def _find_default_article_by_name(db: Session, current_user: models.User, family_id: Optional[int], name: str):
+    target = (name or '').strip().lower()
+    if not target:
+        return None
+    for article in _default_articles_for_scope(db, current_user, family_id):
+        if decrypt_field(article.name).strip().lower() == target:
+            return article
+    return None
+
+
 # ===== FUNKCJE AUTORYZACJI I TOKENÓW =====
 
 def verify_password(plain, hashed):
@@ -1359,6 +1406,75 @@ def create_access_token(data: dict):
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
 
+def touch_user_activity(user: models.User, db: Session) -> None:
+    user.last_active_at = datetime.utcnow()
+    db.commit()
+
+
+BACKUP_DIR = os.getenv('DB_BACKUP_DIR', os.path.join(os.path.dirname(__file__), 'db_backups'))
+BACKUP_INTERVAL_MINUTES = max(15, int(os.getenv('DB_BACKUP_INTERVAL_MINUTES', '360')))
+BACKUP_RETENTION_COUNT = max(1, int(os.getenv('DB_BACKUP_RETENTION_COUNT', '30')))
+
+
+def _serialize_backup_value(value):
+    if isinstance(value, datetime):
+        return value.isoformat()
+    if isinstance(value, date):
+        return value.isoformat()
+    if isinstance(value, Decimal):
+        return float(value)
+    if isinstance(value, bytes):
+        return base64.b64encode(value).decode('ascii')
+    return value
+
+
+def _serialize_backup_row(row: dict) -> dict:
+    return {key: _serialize_backup_value(value) for key, value in row.items()}
+
+
+def create_database_backup(reason: str = 'scheduled') -> str:
+    os.makedirs(BACKUP_DIR, exist_ok=True)
+    timestamp = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
+    backup_path = os.path.join(BACKUP_DIR, f'questdo-backup-{timestamp}.json.gz')
+
+    inspector = inspect(engine)
+    backup_payload = {
+        'created_at': datetime.utcnow().isoformat() + 'Z',
+        'reason': reason,
+        'tables': {},
+    }
+
+    with SessionLocal() as db:
+        for table_name in sorted(inspector.get_table_names()):
+            rows = db.execute(text(f'SELECT * FROM "{table_name}"')).mappings().all()
+            backup_payload['tables'][table_name] = [_serialize_backup_row(dict(row)) for row in rows]
+
+    with gzip.open(backup_path, 'wt', encoding='utf-8') as handle:
+        json.dump(backup_payload, handle, ensure_ascii=False)
+
+    backup_files = sorted(
+        [os.path.join(BACKUP_DIR, name) for name in os.listdir(BACKUP_DIR) if name.endswith('.json.gz')],
+        key=os.path.getmtime,
+        reverse=True,
+    )
+    for old_path in backup_files[BACKUP_RETENTION_COUNT:]:
+        try:
+            os.remove(old_path)
+        except OSError:
+            pass
+
+    return backup_path
+
+
+def backup_scheduler_loop():
+    while True:
+        try:
+            create_database_backup('scheduled')
+        except Exception as exc:
+            logger.exception('Database backup failed: %s', exc)
+        time.sleep(BACKUP_INTERVAL_MINUTES * 60)
+
+
 # Pobiera aktualnie zalogowanego użytkownika na podstawie tokena JWT
 def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
     try:
@@ -1372,6 +1488,13 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
     user = db.query(models.User).filter(models.User.username == username).first()
     if user is None:
         raise HTTPException(status_code=401, detail='User not found')
+
+    now = datetime.utcnow()
+    if user.last_active_at and now - user.last_active_at > timedelta(hours=24):
+        raise HTTPException(status_code=401, detail='Session expired due to inactivity')
+
+    user.last_active_at = now
+    db.commit()
     return user
 
 
@@ -1651,6 +1774,8 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
     if not user or not verify_password(form_data.password, user.hashed_password):
         raise HTTPException(status_code=401, detail='Invalid credentials')
 
+    touch_user_activity(user, db)
+
     token = create_access_token({'sub': user.username})
     return {'access_token': token, 'token_type': 'bearer'}
 
@@ -1666,6 +1791,7 @@ def get_me(current_user: models.User = Depends(get_current_user), db: Session = 
     process_delayed_task_rewards(current_user, db)
     process_work_auto_completion()
     process_schedule_auto_completion()
+    touch_user_activity(current_user, db)
 
     # Generujemy recurring eventy na najbliższe 31 dni
     today = date.today()
@@ -3026,12 +3152,8 @@ def create_shopping(item: ShoppingCreate, current_user: models.User = Depends(ge
     db.refresh(row)
 
     # Auto-add to default articles if not exists
-    # Check if article with same name already exists in default articles
-    existing_article = db.query(models.DefaultArticle).filter(
-        models.DefaultArticle.name == enc['name'],
-        models.DefaultArticle.owner_id == current_user.id,
-        models.DefaultArticle.family_id == family_id
-    ).first()
+    # Sprawdzamy po odszyfrowanej nazwie, bo ciphertext dla tego samego tekstu zawsze jest inny
+    existing_article = _find_default_article_by_name(db, current_user, family_id, name)
 
     if not existing_article:
         default_article = models.DefaultArticle(
@@ -4018,31 +4140,19 @@ def generate_holidays_for_year(year: int, current_user: models.User = Depends(ge
 
 @app.get('/default-articles')
 def get_default_articles(family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
-    if family_id:
-        membership = db.query(models.FamilyMember).filter(
-            models.FamilyMember.family_id == family_id,
-            models.FamilyMember.user_id == current_user.id
-        ).first()
-        if not membership:
-            raise HTTPException(status_code=403, detail='Nie jesteś członkiem tej rodziny')
-        articles = db.query(models.DefaultArticle).filter(models.DefaultArticle.family_id == family_id).order_by(models.DefaultArticle.name).all()
-    else:
-        articles = db.query(models.DefaultArticle).filter(
-            models.DefaultArticle.owner_id == current_user.id,
-            models.DefaultArticle.family_id.is_(None)
-        ).order_by(models.DefaultArticle.name).all()
-    return [{'id': a.id, 'name': a.name, 'quantity': a.quantity, 'unit': a.unit, 'category': a.category, 'default_price': a.default_price, 'family_id': a.family_id, 'created_at': a.created_at.isoformat()} for a in articles]
+    articles = _default_articles_for_scope(db, current_user, family_id)
+    return [_serialize_default_article(a) for a in articles]
 
 @app.get('/default-articles/search')
-def search_default_articles(q: str, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
+def search_default_articles(q: str, family_id: Optional[int] = None, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
     if not q or len(q) < 2:
         return []
-    search_pattern = f'%{q.lower()}%'
-    articles = db.query(models.DefaultArticle).filter(
-        models.DefaultArticle.owner_id == current_user.id,
-        models.DefaultArticle.name.ilike(search_pattern)
-    ).order_by(models.DefaultArticle.name).limit(20).all()
-    return [{'id': a.id, 'name': a.name, 'quantity': a.quantity, 'unit': a.unit, 'category': a.category, 'default_price': a.default_price} for a in articles]
+    search_term = q.strip().lower()
+    articles = [
+        article for article in _default_articles_for_scope(db, current_user, family_id)
+        if search_term in decrypt_field(article.name).lower()
+    ][:20]
+    return [_serialize_default_article(a) for a in articles]
 
 @app.post('/default-articles')
 def create_default_article(data: DefaultArticleCreate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -4059,8 +4169,8 @@ def create_default_article(data: DefaultArticleCreate, current_user: models.User
     article = models.DefaultArticle(
         owner_id=current_user.id,
         family_id=data.family_id,
-        name=name,
-        quantity=data.quantity or '',
+        name=encrypt_field(name),
+        quantity=encrypt_field((data.quantity or '').strip()),
         unit=data.unit or 'szt',
         category=validate_shopping_category(data.category or 'other'),
         default_price=max(0.0, float(data.default_price or 0.0))
@@ -4068,7 +4178,9 @@ def create_default_article(data: DefaultArticleCreate, current_user: models.User
     db.add(article)
     db.commit()
     db.refresh(article)
-    return {'id': article.id, 'name': article.name, 'quantity': article.quantity, 'unit': article.unit, 'category': article.category, 'default_price': article.default_price, 'family_id': article.family_id, 'message': 'Dodano artykuł domyślny'}
+    payload = _serialize_default_article(article)
+    payload['message'] = 'Dodano artykuł domyślny'
+    return payload
 
 @app.patch('/default-articles/{article_id}')
 def update_default_article(article_id: int, data: DefaultArticleUpdate, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -4088,9 +4200,9 @@ def update_default_article(article_id: int, data: DefaultArticleUpdate, current_
     if not has_permission:
         raise HTTPException(status_code=403, detail='Nie masz uprawnień do edycji tego artykułu')
     if data.name is not None:
-        article.name = data.name.strip()
+        article.name = encrypt_field(data.name.strip())
     if data.quantity is not None:
-        article.quantity = data.quantity
+        article.quantity = encrypt_field((data.quantity or '').strip())
     if data.unit is not None:
         article.unit = data.unit
     if data.category is not None:
@@ -4099,7 +4211,9 @@ def update_default_article(article_id: int, data: DefaultArticleUpdate, current_
         article.default_price = max(0.0, float(data.default_price))
     db.commit()
     db.refresh(article)
-    return {'id': article.id, 'name': article.name, 'quantity': article.quantity, 'unit': article.unit, 'category': article.category, 'default_price': article.default_price, 'family_id': article.family_id, 'message': 'Zaktualizowano artykuł'}
+    payload = _serialize_default_article(article)
+    payload['message'] = 'Zaktualizowano artykuł'
+    return payload
 
 @app.delete('/default-articles/{article_id}')
 def delete_default_article(article_id: int, current_user: models.User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -4183,12 +4297,7 @@ def import_default_articles(payload: DefaultArticleImport, family_id: Optional[i
                 continue
 
             # Check if article with same name already exists
-            enc_name = encrypt_field(name)
-            existing_article = db.query(models.DefaultArticle).filter(
-                models.DefaultArticle.name == enc_name,
-                models.DefaultArticle.owner_id == current_user.id,
-                models.DefaultArticle.family_id == family_id
-            ).first()
+            existing_article = _find_default_article_by_name(db, current_user, family_id, name)
 
             if existing_article:
                 # Skip if already exists (don't create duplicates)
@@ -4517,6 +4626,12 @@ async def health_check():
 @app.get('/api/health')
 async def api_health_check():
     return {'status': 'ok', 'database': 'connected'}
+
+
+@app.post('/admin/database-backup')
+def trigger_database_backup(current_user: models.User = Depends(get_current_admin_user)):
+    backup_path = create_database_backup('manual')
+    return {'message': 'Backup created', 'path': backup_path}
 
 
 # Uruchomienie aplikacji

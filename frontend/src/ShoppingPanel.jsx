@@ -446,7 +446,8 @@ export default function ShoppingPanel({
       return;
     }
     try {
-      const res = await axios.get(`${api}/default-articles/search?q=${encodeURIComponent(query)}`, { headers });
+      const params = selectedMode === "family" && familyId ? { q: query, family_id: familyId } : { q: query };
+      const res = await axios.get(`${api}/default-articles/search`, { headers, params });
       setSuggestions(res.data);
       setShowSuggestions(res.data.length > 0);
     } catch (err) {}

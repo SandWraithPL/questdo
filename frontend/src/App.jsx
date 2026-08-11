@@ -724,7 +724,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
   
   // Oblicza statystyki dla dnia (ile questów, ile ukończonych, eventy)
   const taskStats = (dateStr) => {
-    const dayTasks = tasks.filter((t) => t.due_date === dateStr);
+    const dayTasks = getTasksForDate(dateStr);
     const quests = dayTasks.filter((t) => t.task_type !== "event");
     const events = dayTasks.filter((t) => t.task_type === "event");
     const eventCategories = getRecurringCategoriesForDate(recurringEvents, dateStr, dayTasks);
@@ -2336,31 +2336,8 @@ export default function App() {
           });
         });
 
-        // Nowe osiągnięcia
-        if (data.new_achievements && data.new_achievements.length > 0) {
-          setAchievements(prev => ({
-            ...prev,
-            unlocked: [...(prev.unlocked || []), ...data.new_achievements],
-          }));
-        }
-
-        // Nowa znajdźka
-        if (data.earned_drop) {
-          setRareDrops(prev => {
-            if (!prev) return { total_items: 1, items: [data.earned_drop] };
-            const existingItem = prev.items?.find(i => i.slug === data.earned_drop.slug);
-            if (existingItem) {
-              return prev;
-            }
-            return {
-              ...prev,
-              total_items: (prev.total_items || 0) + 1,
-              items: [...(prev.items || []), data.earned_drop],
-            };
-          });
-        }
-
         if (data.achievements) setAchievements(data.achievements);
+        if (data.rare_drops) setRareDrops(data.rare_drops);
         if (data.history) setHistory(data.history);
 
         // Komunikaty
@@ -2491,24 +2468,6 @@ export default function App() {
               !data.revoked_achievements.some(rev => rev.slug === ach.slug || rev.title === ach.title)
             ),
           }));
-        }
-
-        if (data.earned_drop) {
-          setRareDrops(prev => {
-            if (!prev) return { total_items: 1, items: [data.earned_drop] };
-            const existingItem = prev.items?.find(i => i.slug === data.earned_drop.slug);
-            if (existingItem) {
-              return {
-                ...prev,
-                items: prev.items.map(i => i.slug === data.earned_drop.slug ? { ...i, count: i.count + 1 } : i),
-              };
-            }
-            return {
-              ...prev,
-              total_items: (prev.total_items || 0) + 1,
-              items: [...(prev.items || []), data.earned_drop],
-            };
-          });
         }
 
         if (data.history) setHistory(data.history);

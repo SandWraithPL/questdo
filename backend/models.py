@@ -15,6 +15,7 @@ class User(Base):
     last_streak_date = Column(Date, nullable=True)  # Data ostatniego dnia w serii
     progress_reset_at = Column(DateTime, nullable=True)  # Kiedy resetowano postęp
     exp_at_progress_reset = Column(Integer, default=0)  # EXP w momencie resetu
+    last_active_at = Column(DateTime, nullable=True)  # Ostatnia aktywność użytkownika
     default_category = Column(String, default="other")  # Domyślna kategoria zadań
     default_hourly_rate = Column(Float, nullable=True)  # Domyślna stawka godzinowa
     tasks = relationship("Task", back_populates="owner")  # Relacja do zadań użytkownika

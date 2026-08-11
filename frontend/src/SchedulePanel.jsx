@@ -79,10 +79,15 @@ export default function SchedulePanel({
   const dayEntries = useMemo(() => {
     const dayEntries = entries.filter((e) => e.entry_date === selectedStr);
     const virtual = toVirtualRecurringTasks(recurringEvents, selectedStr, dayEntries);
-    return [...dayEntries, ...virtual];
+    return [...dayEntries, ...virtual].sort((a, b) => {
+      if (a.isRecurringVirtual && !b.isRecurringVirtual) return -1;
+      if (!a.isRecurringVirtual && b.isRecurringVirtual) return 1;
+      if (a.isRecurringVirtual && b.isRecurringVirtual) return 0;
+      return String(a.start_time || "").localeCompare(String(b.start_time || ""));
+    });
   }, [entries, selectedStr, recurringEvents]);
 
-  const sortedDayEntries = [...dayEntries].sort((a, b) => a.start_time.localeCompare(b.start_time));
+  const sortedDayEntries = dayEntries;
 
   // Dodaje nowy wpis do planu
   const addEntry = () => {
