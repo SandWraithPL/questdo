@@ -727,7 +727,7 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
     const dayTasks = getTasksForDate(dateStr);
     const quests = dayTasks.filter((t) => t.task_type !== "event");
     const events = dayTasks.filter((t) => t.task_type === "event");
-    const eventCategories = getRecurringCategoriesForDate(recurringEvents, dateStr, dayTasks);
+    const eventCategories = getRecurringCategoriesForDate(recurringEvents, dateStr);
     return {
       total: quests.length,
       done: quests.filter((t) => t.completed).length,
