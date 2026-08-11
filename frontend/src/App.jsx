@@ -15,6 +15,7 @@ import CategoriesPanel from "./CategoriesPanel"; // Ustawienia i kategorie
 import RecurringPanel from "./RecurringPanel"; // Cykliczne wydarzenia
 import FamilyInvitationsBanner from "./FamilyInvitationsBanner"; // Zaproszenia do rodziny
 import FreeDayManager from "./FreeDayManager"; // Zarządzanie dniami wolnymi
+import SharedCalendar from "./SharedCalendar";
 
 // Importy helpersów - funkcje pomocnicze
 import { getRecurringCategoriesForDate, toVirtualRecurringTasks } from "./recurringHelpers";
@@ -703,298 +704,45 @@ function readCalendarCollapsedPreference() {
 
 // Komponent Kalendarza - wyświetla zadania w widoku miesiąca, tygodnia lub dnia
 function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onTaskToggle, onTaskDelete, freeDays = [], onFreeDayChange, headers }) {
-  const [cursor, setCursor] = useState(() => selectedDate instanceof Date ? selectedDate : new Date());
-  const [view, setView] = useState("month"); // month, week, day
-  const [collapsed, setCollapsed] = useState(readCalendarCollapsedPreference);
-  const selectedStr = toDateStr(selectedDate);
-  const selectedDateObj = selectedDate instanceof Date ? selectedDate : new Date(selectedStr + "T12:00:00");
-
-  // Znajduje typ dnia wolnego dla danej daty (holiday, deans_day, rector_day)
-  const getFreeDayType = (dateStr) => {
-    const freeDay = freeDays.find(fd => fd.date === dateStr);
-    return freeDay ? freeDay.day_type : null;
-  };
-
-  // Pobiera zadania dla danej daty (zwykłe + wirtualne z recurring)
-  const getTasksForDate = (dateStr) => {
-    const dayTasks = tasks.filter((t) => t.due_date === dateStr);
-    const virtual = toVirtualRecurringTasks(recurringEvents, dateStr, dayTasks);
-    return [...dayTasks, ...virtual];
-  };
-  
-  // Oblicza statystyki dla dnia (ile questów, ile ukończonych, eventy)
-  const taskStats = (dateStr) => {
-    const dayTasks = getTasksForDate(dateStr);
-    const quests = dayTasks.filter((t) => t.task_type !== "event");
-    const events = dayTasks.filter((t) => t.task_type === "event");
-    const eventCategories = getRecurringCategoriesForDate(recurringEvents, dateStr);
-    return {
-      total: quests.length,
-      done: quests.filter((t) => t.completed).length,
-      events,
-      eventCategories,
-    };
-  };
-
-  // Wybiera dzień - aktualizuje stan i przesuwa kursor
-  const selectDay = (dateStr) => {
-    onDateSelect(dateStr);
-    setCursor(new Date(dateStr + "T12:00:00"));
-  };
-
-  // Przechodzi do dzisiejszego dnia
-  const goToday = () => {
-    const today = new Date();
-    setCursor(today);
-    onDateSelect(toDateStr(today));
-  };
-
-  // Przełącza zwinięcie kalendarza
-  const toggleCollapsed = () => {
-    setCollapsed((prev) => {
-      const next = !prev;
-      try {
-        localStorage.setItem(CALENDAR_COLLAPSED_KEY, String(next));
-      } catch {}
-      return next;
-    });
-  };
-
-  // Przesuwa widok o delta (miesiąc, tydzień lub dzień)
-  const shift = (delta) => {
-    if (view === "month") setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + delta, 1, 12, 0, 0));
-    if (view === "week") {
-      const next = new Date(selectedDateObj);
-      next.setDate(selectedDateObj.getDate() + delta * 7);
-      selectDay(toDateStr(next));
-    }
-    if (view === "day") {
-      const next = new Date(selectedDateObj);
-      next.setDate(selectedDateObj.getDate() + delta);
-      selectDay(toDateStr(next));
-    }
-  };
-
-  // Renderuje widok miesiąca - siatka dni z badge'ami
-  const renderMonthView = () => {
-    const year = cursor.getFullYear();
-    const month = cursor.getMonth();
-    const daysInMonth = new Date(year, month + 1, 0).getDate();
-    const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
-    const days = [];
-    // Puste dni przed pierwszym dniem miesiąca
-    for (let i = 0; i < firstWeekday; i++) days.push(<div key={`empty-${i}`} className="calendar-day empty" />);
-    // Dni miesiąca
-    for (let day = 1; day <= daysInMonth; day++) {
-      const dateStr = toDateStr(new Date(year, month, day, 12, 0, 0));
-      const stats = taskStats(dateStr);
-      const isSelected = selectedStr === dateStr;
-      const isToday = toDateStr(new Date()) === dateStr;
-      const freeDayType = getFreeDayType(dateStr);
-      days.push(
-        <button key={dateStr} type="button" className={`calendar-day ${isSelected ? "selected" : ""} ${isToday ? "today" : ""} ${freeDayType ? `free-day free-day-${freeDayType}` : ""}`} onClick={() => selectDay(dateStr)}>
-          <span className="day-number">{day}</span>
-          {/* Ikony dni wolnych */}
-          {freeDayType === "holiday" && <span className="free-day-icon">🎉</span>}
-          {freeDayType === "deans_day" && <span className="free-day-icon">🎓</span>}
-          {freeDayType === "rector_day" && <span className="free-day-icon">🏛️</span>}
-          {/* Ikony eventów na ten dzień */}
-          {stats.eventCategories.length > 0 && (
-            <div className="day-event-icons">
-              {stats.eventCategories.slice(0, 3).map((cat, idx) => (
-                <span key={idx} className="event-icon">{getEventCategoryEmoji(cat)}</span>
-              ))}
-              {stats.eventCategories.length > 3 && <span className="event-icon-more">+</span>}
-            </div>
-          )}
-          {/* Badge z ilością zadań */}
-          {stats.total > 0 && <span className={`day-badge ${stats.done === stats.total ? "done" : ""}`}>{stats.done}/{stats.total}</span>}
-        </button>
-      );
-    }
-    return days;
-  };
-
-  // Renderuje widok tygodnia - 7 kolumn z zadaniami
-  const renderWeekView = () => {
-    const startOfWeek = new Date(selectedDateObj);
-    const mondayIndex = (selectedDateObj.getDay() + 6) % 7;
-    startOfWeek.setDate(selectedDateObj.getDate() - mondayIndex);
-    const days = [];
-    for (let i = 0; i < 7; i++) {
-      const d = new Date(startOfWeek);
-      d.setDate(startOfWeek.getDate() + i);
-      const dateStr = toDateStr(d);
-      const dayTasks = getTasksForDate(dateStr);
-      const stats = taskStats(dateStr);
-      const isToday = dateStr === toDateStr(new Date());
-      const isSelected = selectedStr === dateStr;
-      const freeDayType = getFreeDayType(dateStr);
-      days.push(
-        <button key={dateStr} type="button" className={`week-day ${isSelected ? "week-day-selected" : ""} ${freeDayType ? `week-day-free week-day-free-${freeDayType}` : ""}`} onClick={() => selectDay(dateStr)}>
-          <div className={`week-day-header ${isToday ? "today" : ""}`}>
-            <span>{WEEKDAYS_LONG[i]}</span>
-            <strong>{d.getDate()}</strong>
-            {/* Ikony dni wolnych */}
-            {freeDayType === "holiday" && <span className="week-free-icon">🎉</span>}
-            {freeDayType === "deans_day" && <span className="week-free-icon">🎓</span>}
-            {freeDayType === "rector_day" && <span className="week-free-icon">🏛️</span>}
-            <div className="week-day-stats">
-              {/* Ikony eventów */}
-              {stats.eventCategories.length > 0 && (
-                <div className="week-event-icons">
-                  {stats.eventCategories.slice(0, 2).map((cat, idx) => (
-                    <span key={idx} className="event-icon">{getEventCategoryEmoji(cat)}</span>
-                  ))}
-                  {stats.eventCategories.length > 2 && <span className="event-icon-more">+</span>}
-                </div>
-              )}
-              <em>{stats.total ? `${stats.done}/${stats.total}` : "0"}</em>
-            </div>
-          </div>
-          {/* Lista zadań na dany dzień (max 4) */}
-          <div className="week-day-tasks">
-            {dayTasks.length === 0 && <span className="week-empty">Brak questów</span>}
-            {dayTasks.slice(0, 4).map(task => (
-              <div key={task.id} className={`week-task ${task.completed ? "completed" : ""} ${task.important ? "important" : ""} ${task.task_type === "event" ? "event" : ""}`}>
-                <span className="week-task-dot" />
-                <span>{task.title}</span>
-              </div>
-            ))}
-            {dayTasks.length > 4 && <span className="week-more">+{dayTasks.length - 4} więcej</span>}
-          </div>
-        </button>
-      );
-    }
-    return days;
-  };
-
-  // Renderuje widok dnia - lista zadań z opisami
-  const renderDayView = () => {
-    const dayTasks = getTasksForDate(selectedStr);
-    const freeDayType = getFreeDayType(selectedStr);
-    return (
-      <div className="day-view">
-        <h3>
-          {selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}
-          {freeDayType === "holiday" && <span className="day-free-indicator"> 🎉 {freeDays.find(fd => fd.date === selectedStr)?.notes || "Święto"}</span>}
-          {freeDayType === "deans_day" && <span className="day-free-indicator"> 🎓 Dzień dziekański</span>}
-          {freeDayType === "rector_day" && <span className="day-free-indicator"> 🏛️ Dzień rektorski</span>}
-        </h3>
-        {dayTasks.length === 0 && <p className="empty">Brak zadań na ten dzień</p>}
-        {dayTasks.map(task => {
-          const isEvent = task.task_type === "event";
-          const isVirtual = task.isRecurringVirtual;
-          return (
-            <div key={task.id} className={`day-task ${task.completed ? "completed" : ""} ${isEvent ? "event" : ""}`}>
-              {/* Checkbox dla questów */}
-              {!isEvent && (task.completed ? <div className="task-check checked locked">✓</div> : (
-                <button type="button" className="task-check" onClick={() => onTaskToggle(task)} />
-              ))}
-              {isEvent && <div className="task-check event-indicator">{getEventCategoryEmoji(task.event_category)}</div>}
-              <div className="day-task-info">
-                <strong>{isEvent && <span className="event-mark">{getEventCategoryEmoji(task.event_category)} </span>}{task.important ? "Ważne · " : ""}{task.title}</strong>
-                {task.description && <p>{task.description}</p>}
-                <div className="task-meta">
-                  {isEvent && <span className="badge event-type">{getEventCategoryLabel(task.event_category)}</span>}
-                  {!isEvent && <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>}
-                  {!isEvent && <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>}
-                  {isEvent && task.recurring_pattern && <span className="badge recurring">{task.recurring_pattern === "yearly" ? "🔄 Co rok" : task.recurring_pattern === "monthly" ? "🔄 Co miesiąc" : "🔄 Co tydzień"}</span>}
-                  {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
-                </div>
-              </div>
-              {!isVirtual && <button type="button" className="icon-btn delete" onClick={() => onTaskDelete(task)}>🗑</button>}
-            </div>
-          );
-        })}
-      </div>
-    );
-  };
-
-  // Tytuł dla danego widoku (miesiąc, tydzień, dzień)
-  const weekTitle = (() => {
-    const start = new Date(selectedDateObj);
-    start.setDate(selectedDateObj.getDate() - ((selectedDateObj.getDay() + 6) % 7));
-    const end = new Date(start);
-    end.setDate(start.getDate() + 6);
-    return `${start.toLocaleDateString("pl-PL", { day: "numeric", month: "short" })} - ${end.toLocaleDateString("pl-PL", { day: "numeric", month: "short" })}`;
-  })();
-  const headerTitle = view === "month"
-    ? cursor.toLocaleDateString("pl-PL", { month: "long", year: "numeric" })
-    : view === "week"
-      ? weekTitle
-      : selectedDateObj.toLocaleDateString("pl-PL", { weekday: "long", day: "numeric", month: "long" });
-
-  // Meta informacja o wybranym dniu
-  const selectedDayStats = taskStats(selectedStr);
-  const selectedDayLabel = selectedDateObj.toLocaleDateString("pl-PL", {
-    weekday: "short",
-    day: "numeric",
-    month: "short",
-  });
-  const selectedDayMeta = selectedDayStats.total > 0
-    ? `${selectedDayStats.done}/${selectedDayStats.total} questów`
-    : "brak questów";
+  const selectedStr = selectedDate instanceof Date ? selectedDate.toISOString().slice(0, 10) : String(selectedDate).slice(0, 10);
+  const freeDayManager = onFreeDayChange ? (
+    <FreeDayManager
+      freeDays={freeDays}
+      setFreeDays={onFreeDayChange}
+      selectedDate={selectedDate}
+      api={API}
+      headers={headers}
+      onToast={() => {}}
+      enqueueRequest={null}
+    />
+  ) : null;
 
   return (
-    <section className={`calendar-section ${collapsed ? "calendar-section--collapsed" : "calendar-section--expanded"}`}>
-      <div className="calendar-section-bar">
-        <button
-          type="button"
-          className="calendar-section-toggle"
-          onClick={toggleCollapsed}
-          aria-expanded={!collapsed}
-          aria-controls="questdo-calendar-body"
-        >
-          <span className="calendar-section-title">📅 Kalendarz</span>
-          <span className="calendar-section-meta">{selectedDayLabel} · {selectedDayMeta}</span>
-          <span className="calendar-section-chevron" aria-hidden="true">{collapsed ? "▼" : "▲"}</span>
-        </button>
-        {collapsed && (
-          <button type="button" className="calendar-section-today" onClick={goToday}>
-            Dzisiaj
-          </button>
-        )}
-      </div>
-      {!collapsed && (
-      <div id="questdo-calendar-body" className="calendar-container">
-      <div className="calendar-header">
-        <div className="calendar-nav">
-          <button type="button" onClick={() => shift(-1)} aria-label="Poprzedni zakres">◀</button>
-          <h2>{headerTitle}</h2>
-          <button type="button" onClick={() => shift(1)} aria-label="Następny zakres">▶</button>
+    <SharedCalendar
+      items={tasks}
+      selectedDate={selectedDate}
+      onDateSelect={onDateSelect}
+      matchItemToDate={(item, dateStr) => item.due_date === dateStr}
+      getItemLabel={(item) => item.title}
+      isItemCompleted={(item) => !!item.completed}
+      renderItemMeta={(item) => (
+        <div className="task-meta">
+          {item.task_type === "event" && <span className="badge event-type">{getEventCategoryLabel(item.event_category)}</span>}
+          {item.task_type !== "event" && <span className={`badge ${item.difficulty}`}>{item.difficulty === "easy" ? "Łatwe" : item.difficulty === "medium" ? "Średnie" : "Trudne"}</span>}
+          {item.task_type !== "event" && <span className="badge category">{getCategoryEmoji(item.category)} {item.category}</span>}
+          {item.task_type === "event" && item.recurring_pattern && <span className="badge recurring">{item.recurring_pattern === "yearly" ? "🔄 Co rok" : item.recurring_pattern === "monthly" ? "🔄 Co miesiąc" : "🔄 Co tydzień"}</span>}
+          {item.reminder_offset_days !== null && item.reminder_offset_days !== undefined && <span className="badge reminder">{getReminderLabel(item.reminder_offset_days)}</span>}
         </div>
-        <div className="view-buttons">
-          <button type="button" onClick={() => setView("month")} className={view === "month" ? "active" : ""}>Miesiąc</button>
-          <button type="button" onClick={() => setView("week")} className={view === "week" ? "active" : ""}>Tydzień</button>
-          <button type="button" onClick={() => setView("day")} className={view === "day" ? "active" : ""}>Dzień</button>
-        </div>
-        {view === "month" && <button type="button" className="calendar-today" onClick={goToday}>Dzisiaj</button>}
-        {onFreeDayChange && (
-          <FreeDayManager
-            freeDays={freeDays}
-            setFreeDays={onFreeDayChange}
-            selectedDate={selectedDate}
-            api={API}
-            headers={headers}
-            onToast={() => {}}
-            enqueueRequest={null}
-          />
-        )}
-      </div>
-      <div className="calendar-grid">
-        {view === "month" && (
-          <>
-            <div className="calendar-weekdays">{WEEKDAYS.map(day => <div key={day} className="weekday">{day}</div>)}</div>
-            <div className="calendar-days">{renderMonthView()}</div>
-          </>
-        )}
-        {view === "week" && <div className="week-view">{renderWeekView()}</div>}
-        {view === "day" && renderDayView()}
-      </div>
-      </div>
       )}
-    </section>
+      onItemToggle={onTaskToggle}
+      onItemDelete={onTaskDelete}
+      sectionTitle="📅 Kalendarz"
+      emptyLabel="Brak zadań na ten dzień"
+      itemNoun="zadań"
+      freeDays={freeDays}
+      recurringEvents={recurringEvents}
+      freeDayManager={freeDayManager}
+    />
   );
 }
 
@@ -1681,6 +1429,7 @@ function PwaInstallBanner({ standalonePwa, onShowToast, onDismissForever }) {
 function Profile({
   user,
   onLogout,
+  onDownloadBackup,
   onDeleteAccount,
   achievements,
   rareDrops,
@@ -1793,6 +1542,7 @@ function Profile({
           
           {/* Przyciski administracyjne */}
           {isAdmin && <button type="button" onClick={onOpenAdmin} className="admin-btn">🔧 Panel Admina</button>}
+          {isAdmin && <button type="button" onClick={onDownloadBackup} className="admin-btn">⬇️ Pobierz backup bazy</button>}
           <button type="button" onClick={onLogout} className="logout-btn">Wyloguj</button>
           <button type="button" onClick={() => setChangePasswordMode(!changePasswordMode)} className="change-password-btn">
             🔑 Zmień hasło
@@ -2575,6 +2325,35 @@ export default function App() {
 
   // Wylogowuje użytkownika
   const logout = () => { localStorage.removeItem("token"); setToken(null); setUser(null); };
+
+  const downloadDatabaseBackup = async () => {
+    try {
+      const response = await fetch(`${API}/admin/database-backup/latest`, {
+        headers: { Authorization: `Bearer ${token}` },
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || "Nie udało się pobrać backupu");
+      }
+
+      const blob = await response.blob();
+      const disposition = response.headers.get("content-disposition") || "";
+      const match = disposition.match(/filename\*=UTF-8''([^;]+)|filename="?([^";]+)"?/i);
+      const fileName = decodeURIComponent(match?.[1] || match?.[2] || "questdo-backup.sql.gz");
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      showToast("✅ Backup pobrany");
+    } catch (err) {
+      showToast(err.message || "Nie udało się pobrać backupu");
+    }
+  };
   
   // Obsługa logowania
   const handleLogin = () => { const newToken = localStorage.getItem("token"); setToken(newToken); if (newToken) setTimeout(fetchData, 100); };
@@ -2604,6 +2383,7 @@ export default function App() {
         <Profile
           user={user}
           onLogout={logout}
+          onDownloadBackup={downloadDatabaseBackup}
           onDeleteAccount={deleteAccount}
           achievements={achievements}
           rareDrops={rareDrops}
