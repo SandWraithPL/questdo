@@ -20,7 +20,13 @@ function getEventCategoryEmoji(cat) {
 
 // Sprawdza czy cykliczny event występuje w danym dniu
 function recurringEventOccursOn(event, dateStr) {
-  if (!event.interval_type || !event.start_date) return false;
+  if (!event.interval_type || !event.start_date) {
+    if (event.month && event.day) {
+      const legacyTarget = new Date(`${dateStr}T12:00:00`);
+      return legacyTarget.getMonth() + 1 === Number(event.month) && legacyTarget.getDate() === Number(event.day);
+    }
+    return false;
+  }
 
   const targetDate = new Date(`${dateStr}T12:00:00`);
   const start = new Date(`${event.start_date}T12:00:00`);

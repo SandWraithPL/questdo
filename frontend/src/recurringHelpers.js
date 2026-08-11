@@ -54,6 +54,11 @@ export function recurringEventOccursOn(event, dateStr) {
     }
     return false;
   }
+  // Legacy format: month/day bez interval_type i start_date
+  if (event.month && event.day) {
+    const target = parseDateStr(dateStr);
+    return target.getMonth() + 1 === Number(event.month) && target.getDate() === Number(event.day);
+  }
   return false;
 }
 
