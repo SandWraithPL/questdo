@@ -1411,7 +1411,7 @@ def touch_user_activity(user: models.User, db: Session) -> None:
     db.commit()
 
 
-BACKUP_DIR = os.getenv('DB_BACKUP_DIR', os.path.join(os.path.dirname(__file__), 'db_backups'))
+BACKUP_DIR = os.getenv('DB_BACKUP_DIR', '/var/data/questdo-backups')
 BACKUP_INTERVAL_MINUTES = max(15, int(os.getenv('DB_BACKUP_INTERVAL_MINUTES', '360')))
 BACKUP_RETENTION_COUNT = max(1, int(os.getenv('DB_BACKUP_RETENTION_COUNT', '30')))
 
@@ -1432,28 +1432,69 @@ def _serialize_backup_row(row: dict) -> dict:
     return {key: _serialize_backup_value(value) for key, value in row.items()}
 
 
-def create_database_backup(reason: str = 'scheduled') -> str:
+def _copy_text_value(value) -> str:
+    if value is None:
+        return '\\N'
+    if isinstance(value, bool):
+        return 't' if value else 'f'
+    if isinstance(value, bytes):
+        return '\\x' + value.hex()
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    text_value = str(value)
+    return text_value.replace('\\', '\\\\').replace('\t', '\\t').replace('\n', '\\n').replace('\r', '\\r')
+
+
+def _build_copy_block(table_name: str, rows: list[dict]) -> str:
+    if not rows:
+        return ''
+
+    column_names = list(rows[0].keys())
+    header = f'COPY "{table_name}" ({", ".join(f"\"{col}\"" for col in column_names)}) FROM stdin;'
+    lines = [header]
+    for row in rows:
+        lines.append('\t'.join(_copy_text_value(row.get(column)) for column in column_names))
+    lines.append('\\.')
+    return '\n'.join(lines)
+
+
+def create_database_backup(reason: str = 'scheduled') -> str | None:
     os.makedirs(BACKUP_DIR, exist_ok=True)
     timestamp = datetime.utcnow().strftime('%Y%m%dT%H%M%SZ')
-    backup_path = os.path.join(BACKUP_DIR, f'questdo-backup-{timestamp}.json.gz')
+    backup_path = os.path.join(BACKUP_DIR, f'questdo-backup-{timestamp}.sql.gz')
 
     inspector = inspect(engine)
-    backup_payload = {
-        'created_at': datetime.utcnow().isoformat() + 'Z',
-        'reason': reason,
-        'tables': {},
-    }
+    dump_blocks = [
+        '-- QuestDo database backup',
+        f'-- created_at: {datetime.utcnow().isoformat()}Z',
+        f'-- reason: {reason}',
+        'BEGIN;'
+    ]
+    total_rows = 0
 
     with SessionLocal() as db:
         for table_name in sorted(inspector.get_table_names()):
             rows = db.execute(text(f'SELECT * FROM "{table_name}"')).mappings().all()
-            backup_payload['tables'][table_name] = [_serialize_backup_row(dict(row)) for row in rows]
+            if not rows:
+                continue
+            serialized_rows = [_serialize_backup_row(dict(row)) for row in rows]
+            total_rows += len(serialized_rows)
+            dump_blocks.append(f'-- Table: {table_name}')
+            dump_blocks.append(_build_copy_block(table_name, serialized_rows))
+            dump_blocks.append('')
+
+    if total_rows == 0:
+        logger.info('Database backup skipped because the database is empty')
+        return None
+
+    dump_blocks.append('COMMIT;')
+    dump_content = '\n'.join(block for block in dump_blocks if block is not None)
 
     with gzip.open(backup_path, 'wt', encoding='utf-8') as handle:
-        json.dump(backup_payload, handle, ensure_ascii=False)
+        handle.write(dump_content)
 
     backup_files = sorted(
-        [os.path.join(BACKUP_DIR, name) for name in os.listdir(BACKUP_DIR) if name.endswith('.json.gz')],
+        [os.path.join(BACKUP_DIR, name) for name in os.listdir(BACKUP_DIR) if name.endswith('.sql.gz')],
         key=os.path.getmtime,
         reverse=True,
     )
