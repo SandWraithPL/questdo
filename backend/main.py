@@ -4693,9 +4693,11 @@ def trigger_database_backup(current_user: models.User = Depends(get_current_admi
 
 @app.get('/admin/database-backup/latest')
 def download_latest_database_backup(current_user: models.User = Depends(get_current_admin_user)):
-    backup_path = _latest_backup_path()
+    backup_path = create_database_backup('manual')
     if not backup_path:
-        raise HTTPException(status_code=404, detail='Nie znaleziono backupu')
+        backup_path = _latest_backup_path()
+    if not backup_path:
+        raise HTTPException(status_code=404, detail='Nie znaleziono backupu. Najpierw utwórz backup lub sprawdź, czy katalog backupów jest dostępny.')
     filename = os.path.basename(backup_path)
     return FileResponse(
         backup_path,
