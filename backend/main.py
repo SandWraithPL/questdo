@@ -572,10 +572,15 @@ async def websocket_endpoint(websocket: WebSocket):
 
 
 # CORS - zezwalamy na requesty z innych domen (dla frontendu)
+allowed_origins = os.getenv(
+    'CORS_ALLOWED_ORIGINS',
+    'https://questdo-frontend.onrender.com,http://localhost:5173,http://localhost:3000'
+).split(',')
+allowed_origins = [origin.strip() for origin in allowed_origins if origin.strip()]
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=['*'],
-    allow_credentials=True,
+    allow_origins=allowed_origins,
+    allow_credentials=False,
     allow_methods=['*'],
     allow_headers=['*']
 )
@@ -1412,7 +1417,7 @@ def touch_user_activity(user: models.User, db: Session) -> None:
     db.commit()
 
 
-BACKUP_DIR = os.getenv('DB_BACKUP_DIR', '/var/data/questdo-backups')
+BACKUP_DIR = os.getenv('DB_BACKUP_DIR', '/tmp/questdo-backups')
 BACKUP_INTERVAL_MINUTES = max(15, int(os.getenv('DB_BACKUP_INTERVAL_MINUTES', '360')))
 BACKUP_RETENTION_COUNT = max(1, int(os.getenv('DB_BACKUP_RETENTION_COUNT', '30')))
 
@@ -4693,17 +4698,23 @@ def trigger_database_backup(current_user: models.User = Depends(get_current_admi
 
 @app.get('/admin/database-backup/latest')
 def download_latest_database_backup(current_user: models.User = Depends(get_current_admin_user)):
-    backup_path = create_database_backup('manual')
-    if not backup_path:
-        backup_path = _latest_backup_path()
-    if not backup_path:
-        raise HTTPException(status_code=404, detail='Nie znaleziono backupu. Najpierw utwórz backup lub sprawdź, czy katalog backupów jest dostępny.')
-    filename = os.path.basename(backup_path)
-    return FileResponse(
-        backup_path,
-        media_type='application/gzip',
-        filename=filename,
-    )
+    try:
+        backup_path = create_database_backup('manual')
+        if not backup_path:
+            backup_path = _latest_backup_path()
+        if not backup_path:
+            raise HTTPException(status_code=404, detail='Nie znaleziono backupu. Najpierw utwórz backup lub sprawdź, czy katalog backupów jest dostępny.')
+        filename = os.path.basename(backup_path)
+        return FileResponse(
+            backup_path,
+            media_type='application/gzip',
+            filename=filename,
+        )
+    except HTTPException:
+        raise
+    except Exception as exc:
+        logger.exception('Database backup download failed: %s', exc)
+        raise HTTPException(status_code=500, detail=f'Backup failed: {str(exc)}')
 
 
 # Uruchomienie aplikacji
