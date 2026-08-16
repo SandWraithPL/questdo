@@ -7,6 +7,7 @@ import DatePicker from "./DatePicker";
 import FreeDayManager from "./FreeDayManager";
 import { applyUserFromResponse } from "./helpers";
 import { toVirtualRecurringTasks } from "./recurringHelpers";
+import { useLanguage } from "./i18n.jsx";
 
 // Kategorie eventów
 const EVENT_CATEGORIES = [
@@ -82,6 +83,8 @@ export default function EarningsPanel({
   setFreeDays,
   recurringEvents = [],
 }) {
+  const { t } = useLanguage();
+
   // Stany formularza
   const [showAdd, setShowAdd] = useState(false);
   const [startTime, setStartTime] = useState("08:00");
@@ -474,13 +477,12 @@ export default function EarningsPanel({
             {item.tax_enabled && <span className="badge timing-late">Podatek {item.tax_percent}%</span>}
             {item.is_recurring && <span className="badge category">🔁 {getWeekdaysLong()[item.day_of_week]}</span>}
             {item.end_date && <span className="badge timing-late">Do {item.end_date}</span>}
-            {item.completed && <span className="badge exp">Potwierdzone</span>}
           </div>
         )}
         onItemDelete={deleteEntry}
-        sectionTitle="💰 Kalendarz zarobków"
-        emptyLabel="Brak pracy"
-        itemNoun="wpisów"
+        sectionTitle={`💰 ${t("earningsCalendarTitle")}`}
+        emptyLabel={t("earningsEmpty")}
+        itemNoun={t("earningsEntries")}
         collapsedStorageKey="questdo-earnings-calendar-collapsed"
         defaultCollapsed={false}
         freeDays={freeDays}

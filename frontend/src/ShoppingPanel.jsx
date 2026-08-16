@@ -4,6 +4,7 @@ import axios from "axios";
 import FamilyPanel from "./FamilyPanel";
 import { applyUserFromResponse, validateQuantity, isValidQtyInput } from "./helpers";
 import { useEditItem } from "./hooks/useEditItem";
+import { useLanguage } from "./i18n.jsx";
 
 // Klucze do localStorage dla trybu zakupów
 const SHOPPING_MODE_KEY = "questdo-shopping-mode";
@@ -97,6 +98,8 @@ export default function ShoppingPanel({
   onFamilyChange,
   currentUserId
 }) {
+  const { t } = useLanguage();
+
   // Stany formularza dodawania
   const [name, setName] = useState("");
   const [qty, setQty] = useState("");
@@ -644,10 +647,10 @@ export default function ShoppingPanel({
 
       {/* Przyciski akcji */}
       <div className="import-export-row">
-        <button type="button" className="icon-btn history-btn" onClick={selectAll} title="Zaznacz wszystkie">✅ Zaznacz wszystkie</button>
-        <button type="button" className="icon-btn history-btn" onClick={loadHistory} title="Historia list">📜 Historia</button>
-        <button type="button" className="icon-btn save-history-btn" onClick={completeShoppingList} title="Zakończ i zapisz do historii">💾 Zakończ listę</button>
-        <button type="button" className="icon-btn" onClick={exportDefaultArticles} title="Eksportuj domyślne artykuły">📥</button>
+        <button type="button" className="icon-btn history-btn" onClick={selectAll} title={t("selectAll")}>✅ {t("selectAll")}</button>
+        <button type="button" className="icon-btn history-btn" onClick={loadHistory} title={t("historyList")}>📜 {t("historyList")}</button>
+        <button type="button" className="icon-btn save-history-btn" onClick={completeShoppingList} title={t("completeList")}>💾 {t("completeList")}</button>
+        <button type="button" className="icon-btn" onClick={exportDefaultArticles} title={t("exportDefault")}>📥</button>
         <button type="button" className="icon-btn" onClick={() => setShowDefaultImport(!showDefaultImport)} title="Importuj domyślne artykuły">📤</button>
       </div>
 
@@ -655,9 +658,9 @@ export default function ShoppingPanel({
       <div className="stats-bar">
         <div className="filter-group">
           {[
-            { id: "all", label: "Wszystkie" },
-            { id: "unbought", label: "Niekupione" },
-            { id: "bought", label: "Kupione" },
+            { id: "all", label: t("filterAll") },
+            { id: "unbought", label: t("filterUnbought") },
+            { id: "bought", label: t("filterBought") },
           ].map((f) => (
             <button key={f.id} type="button" className={`filter-btn ${filter === f.id ? "active" : ""}`} onClick={() => setFilter(f.id)}>{f.label}</button>
           ))}

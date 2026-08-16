@@ -751,21 +751,23 @@ function Calendar({ tasks, recurringEvents = [], selectedDate, onDateSelect, onT
 
 // Komponent podsumowania gracza - avatar, poziom, EXP, seria
 function PlayerSummary({ user, progress }) {
+  const { t } = useLanguage();
+
   return (
     <div className="profile-card profile-card--top">
       <div className="avatar">{user.username[0].toUpperCase()}</div>
       <div className="profile-info">
-        <h2>Poziom {user.level}</h2>
+        <h2>{t("level")} {user.level}</h2>
         <div className="title">{user.title}</div>
         <div className="exp-bar-bg"><div className="exp-bar" style={{ width: `${progress}%` }} /></div>
-        <div className="exp-text">{user.exp} EXP</div>
-        {user.next_level_title && <div className="level-next-hint">Do &quot;{user.next_level_title}&quot;: {user.next_level_exp} EXP</div>}
+        <div className="exp-text">{user.exp} {t("exp")}</div>
+        {user.next_level_title && <div className="level-next-hint">{t("toNextLevel")} &quot;{user.next_level_title}&quot;: {user.next_level_exp} {t("exp")}</div>}
         {user.exp_tip && <p className="exp-tip">{user.exp_tip}</p>}
       </div>
       <div className="streak">
         <div className="flame">🔥</div>
         <div className="count">{user.streak}</div>
-        <div className="label">seria</div>
+        <div className="label">{t("streakDays")}</div>
       </div>
     </div>
   );
@@ -1105,14 +1107,14 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
 
       {/* Filtry statusu */}
       <div className="filter-group">
-        {["all", "active", "done"].map(f => <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "all" ? "Wszystkie" : f === "active" ? "Aktywne" : "Ukończone"}</button>)}
+        {["all", "active", "done"].map(f => <button key={f} className={`filter-btn ${filter === f ? "active" : ""}`} onClick={() => setFilter(f)}>{f === "all" ? t("filterAll") : f === "active" ? t("filterActive") : t("filterCompleted")}</button>)}
       </div>
 
       {/* Filtry typu */}
       <div className="filter-group" style={{ marginTop: '8px' }}>
-        {["all", "quest", "event"].map(f => <button key={f} className={`filter-btn ${typeFilter === f ? "active" : ""}`} onClick={() => setTypeFilter(f)}>{f === "all" ? "Wszystkie typy" : f === "quest" ? "⚔️ Questy" : "📅 Wydarzenia"}</button>)}
+        {["all", "quest", "event"].map(f => <button key={f} className={`filter-btn ${typeFilter === f ? "active" : ""}`} onClick={() => setTypeFilter(f)}>{f === "all" ? t("filterAllTypes") : f === "quest" ? t("filterTypeQuests") : t("filterTypeEvents")}</button>)}
       </div>
-      <input className="search-input" style={{ marginTop: '12px' }} type="search" placeholder="🔍 Szukaj questa..." value={search} onChange={(e) => setSearch(e.target.value)} />
+      <input className="search-input" style={{ marginTop: '12px' }} type="search" placeholder={t("searchPlaceholder")} value={search} onChange={(e) => setSearch(e.target.value)} />
       
       {/* Pasek postępu */}
       {questCount > 0 && (<div className="progress-wrap"><div className="progress-bar"><div className="progress-fill" style={{ width: `${percent}%` }} /></div><span>{percent}% ukończone ({doneCount}/{questCount})</span></div>)}
@@ -1444,6 +1446,7 @@ function Profile({
   pwaHintDismissed,
   onToggleNotifications,
 }) {
+  const { t } = useLanguage();
   const [showAchievements, setShowAchievements] = useState(false);
   const [activeTab, setActiveTab] = useState("achievements");
   const [deleteMode, setDeleteMode] = useState(false);
@@ -1495,7 +1498,7 @@ function Profile({
       </div>
       {showAchievements && (
         <div className="profile-menu">
-          <div className="profile-info-dropdown"><p><strong>{user.username}</strong></p><p>Poziom {user.level} - {user.title}</p><p>{user.exp} EXP | 🔥 {user.streak} dni</p></div>
+          <div className="profile-info-dropdown"><p><strong>{user.username}</strong></p><p>{t("level")} {user.level} - {user.title}</p><p>{user.exp} {t("exp")} | 🔥 {user.streak} {t("streakDays")}</p></div>
           
           {/* Sekcja powiadomień */}
           <div className="profile-notifications-block">
@@ -1508,14 +1511,11 @@ function Profile({
               }}
               disabled={notificationsUnsupported}
             >
-              {notificationsEnabled ? "🔕 Wyłącz powiadomienia" : "🔔 Włącz powiadomienia"}
+              {notificationsEnabled ? `🔕 ${t("disableNotifications")}` : `🔔 ${t("enableNotifications")}`}
             </button>
             {!notificationsUnsupported && (
               <p className="profile-notifications-hint">
-                {notificationsEnabled && standalonePwa && "Przypomnienia o 09:00 — także gdy aplikacja jest zamknięta."}
-                {notificationsEnabled && !standalonePwa && !pwaHintDismissed && "Przypomnienia lokalne o 09:00 działają w tle. Zainstaluj aplikację — baner na stronie głównej."}
-                {notificationsEnabled && !standalonePwa && pwaHintDismissed && "Przypomnienia o 09:00, gdy aplikacja jest otwarta lub w tle."}
-                {!notificationsEnabled && "Włącz powiadomienia, aby dostawać przypomnienia o questach o 09:00."}
+                {notificationsEnabled ? t("disableNotificationsDesc") : t("enableNotificationsDesc")}
               </p>
             )}
             {notificationsUnsupported && (
@@ -1525,24 +1525,24 @@ function Profile({
           
           {/* Zakładki - osiągnięcia / historia */}
           <div className="profile-tabs">
-            <button type="button" className={activeTab === "achievements" ? "active" : ""} onClick={() => setActiveTab("achievements")}>Osiągnięcia</button>
-            <button type="button" className={activeTab === "history" ? "active" : ""} onClick={() => setActiveTab("history")}>Historia</button>
+            <button type="button" className={activeTab === "achievements" ? "active" : ""} onClick={() => setActiveTab("achievements")}>{t("achievementsTitle")}</button>
+            <button type="button" className={activeTab === "history" ? "active" : ""} onClick={() => setActiveTab("history")}>{t("historyTitle")}</button>
           </div>
           
           {activeTab === "achievements" ? (
             <>
               {/* Następne osiągnięcie */}
-              {nextAch && (<div className="next-achievement"><h4>Następne osiągnięcie 🎯</h4><div className="achievement-item next"><span>{nextAch.icon}</span><div><strong>{nextAch.title}</strong><p>{nextAch.description}</p><p className="ach-progress">Postęp: {nextAch.progress}</p></div></div></div>)}
+              {nextAch && (<div className="next-achievement"><h4>{t("nextAchievement")}</h4><div className="achievement-item next"><span>{nextAch.icon}</span><div><strong>{nextAch.title}</strong><p>{nextAch.description}</p><p className="ach-progress">{t("achievementProgress")}: {nextAch.progress}</p></div></div></div>)}
               {/* Lista odblokowanych osiągnięć */}
-              <div className="achievements-list"><h4>Odznaczone 🏆 ({unlocked.length})</h4>{unlocked.length === 0 && <p className="muted">Jeszcze brak - pierwszy quest czeka!</p>}{unlocked.map(ach => (<div key={ach.slug || ach.title} className="achievement-item"><span>{ach.icon}</span><div><strong>{ach.title}</strong><p>{ach.description}</p></div></div>))}</div>
+              <div className="achievements-list"><h4>{t("achievementUnlocked")} ({unlocked.length})</h4>{unlocked.length === 0 && <p className="muted">Jeszcze brak - pierwszy quest czeka!</p>}{unlocked.map(ach => (<div key={ach.slug || ach.title} className="achievement-item"><span>{ach.icon}</span><div><strong>{ach.title}</strong><p>{ach.description}</p></div></div>))}</div>
               {/* Lista znajdziek */}
-              <div className="rare-drops-list"><h4>Znajdźki ✨ ({rareDrops?.total_items || 0})</h4>{(!rareDrops?.items || rareDrops.items.length === 0) && <p className="muted">Jeszcze brak znajdziek - codziennie masz szansę!</p>}{rareDrops?.items?.map(drop => (<div key={drop.slug} className="rare-drop-item"><span className={`rare-drop-${drop.rarity}`}>{drop.icon}</span><div><strong>{drop.name}</strong><p>{drop.description}</p><p className="rare-drop-count">• {drop.rarity.charAt(0).toUpperCase() + drop.rarity.slice(1)}</p></div></div>))}</div>
+              <div className="rare-drops-list"><h4>{t("rareDropsTitle")} ({rareDrops?.total_items || 0})</h4>{(!rareDrops?.items || rareDrops.items.length === 0) && <p className="muted">Jeszcze brak znajdziek - codziennie masz szansę!</p>}{rareDrops?.items?.map(drop => (<div key={drop.slug} className="rare-drop-item"><span className={`rare-drop-${drop.rarity}`}>{drop.icon}</span><div><strong>{drop.name}</strong><p>{drop.description}</p><p className="rare-drop-count">• {t(`rarity${drop.rarity.charAt(0).toUpperCase() + drop.rarity.slice(1)}`)}</p></div></div>))}</div>
             </>
           ) : (
             // Historia gracza
-            <div className="history-list"><h4>Dziennik zdobyczy</h4>{(!history || history.length === 0) && <p className="muted">Historia pojawi się po zdobyciu nagród.</p>}{history?.map(entry => (<div key={entry.id} className="history-item"><span><strong>{formatHistoryDate(entry.occurred_at)}</strong> - {entry.message}</span></div>))}</div>
+            <div className="history-list"><h4>{t("historyLootTitle")}</h4>{(!history || history.length === 0) && <p className="muted">Historia pojawi się po zdobyciu nagród.</p>}{history?.map(entry => (<div key={entry.id} className="history-item"><span><strong>{formatHistoryDate(entry.occurred_at)}</strong> - {entry.message}</span></div>))}</div>
           )}
-          
+
           {/* Przyciski administracyjne */}
           {isAdmin && <button type="button" onClick={onOpenAdmin} className="admin-btn">🔧 Panel Admina</button>}
           {isAdmin && <button type="button" onClick={onDownloadBackup} className="admin-btn">⬇️ Pobierz backup bazy</button>}

@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import axios from "axios";
 import DatePicker from "./DatePicker";
+import { useLanguage } from "./i18n.jsx";
 
 // Kategorie wydarzeń
 const EVENT_CATEGORIES = [
@@ -49,6 +50,8 @@ function formatDisplayDate(dateStr) {
 }
 
 export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
+  const { t } = useLanguage();
+
   const [recurringEvents, setRecurringEvents] = useState([]);
   const [showAdd, setShowAdd] = useState(false);
   const [title, setTitle] = useState("");
@@ -198,12 +201,12 @@ export default function RecurringPanel({ api, headers, onToast, onRefresh }) {
     <div className="module-panel recurring-panel">
       <div className="day-tasks-panel">
         <div className="tasks-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '12px' }}>
-          <h3>🔄 Wydarzenia cykliczne</h3>
+          <h3>🔄 {t("recurringEventsTitle")}</h3>
           <button type="button" className="danger-btn danger-btn--inline" onClick={deleteAllRecurringEvents}>
-            🗑️ Usuń wszystkie
+            🗑️ {t("deleteAll")}
           </button>
         </div>
-        <p className="panel-hint">Dodaj wydarzenia powtarzające się w regularnych odstępach (urodziny, rocznice, przypomnienia).</p>
+        <p className="panel-hint">{t("recurringHint")}</p>
       </div>
 
       {/* Formularz dodawania */}

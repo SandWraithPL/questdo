@@ -1,13 +1,16 @@
 // Komponent wyboru daty - wyświetla kalendarz z widokami dni/miesięcy/lat
 import { useState, useEffect, useRef } from "react";
+import { useLanguage, t as globalT } from "./i18n.jsx";
 
-// Skróty dni tygodnia w języku polskim
-const WEEKDAYS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
+// Skróty dni tygodnia - funkcja dla i18n
+const getWeekdays = () => [globalT("mon"), globalT("tue"), globalT("wed"), globalT("thu"), globalT("fri"), globalT("sat"), globalT("sun")];
 
-// Nazwy miesięcy po polsku
-const MONTHS = [
-  "Styczeń", "Luty", "Marzec", "Kwiecień", "Maj", "Czerwiec",
-  "Lipiec", "Sierpień", "Wrzesień", "Październik", "Listopad", "Grudzień",
+// Nazwy miesięcy - funkcja dla i18n
+const getMonths = () => [
+  globalT("monthJanuary"), globalT("monthFebruary"), globalT("monthMarch"),
+  globalT("monthApril"), globalT("monthMay"), globalT("monthJune"),
+  globalT("monthJuly"), globalT("monthAugust"), globalT("monthSeptember"),
+  globalT("monthOctober"), globalT("monthNovember"), globalT("monthDecember"),
 ];
 
 // Parsuje string daty (YYYY-MM-DD) na obiekt Date
@@ -40,6 +43,8 @@ function formatDisplay(value) {
 
 // Główny komponent wyboru daty
 export default function DatePicker({ value, onChange, label = "Termin" }) {
+  const { t } = useLanguage();
+
   // Czy kalendarz jest otwarty
   const [open, setOpen] = useState(false);
   // Aktualny widok: "days" (dni), "months" (miesiące), "years" (lata)
@@ -98,6 +103,8 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
   const month = cursor.getMonth();
   const todayIso = toIso(new Date());
   const selectedIso = value || "";
+  const WEEKDAYS = getWeekdays();
+  const MONTHS = getMonths();
 
   // Generuje dni dla aktualnego miesiąca
   const firstWeekday = (new Date(year, month, 1).getDay() + 6) % 7;
@@ -155,7 +162,7 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
         <div
           className="date-picker-popup"
           style={{
-            zIndex: 999999,
+            zIndex: 9999999,
             position: 'fixed',
             top: '50%',
             left: '50%',
@@ -229,7 +236,7 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
                   setOpen(false);
                 }}
               >
-                Dziś
+                {t("today")}
               </button>
             </>
           )}

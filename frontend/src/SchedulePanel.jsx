@@ -6,6 +6,7 @@ import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
 import FreeDayManager from "./FreeDayManager";
 import { toVirtualRecurringTasks } from "./recurringHelpers";
+import { useLanguage } from "./i18n.jsx";
 
 // Kategorie eventów
 const EVENT_CATEGORIES = [
@@ -46,6 +47,8 @@ export default function SchedulePanel({
   setFreeDays,
   recurringEvents = [],
 }) {
+  const { t } = useLanguage();
+
   // Stany formularza
   const [title, setTitle] = useState("");
   const [location, setLocation] = useState("");
@@ -380,9 +383,9 @@ export default function SchedulePanel({
           </div>
         )}
         onItemDelete={deleteEntry}
-        sectionTitle="📚 Plan zajęć"
-        emptyLabel="Brak zajęć"
-        itemNoun="zajęć"
+        sectionTitle={`📚 ${t("scheduleCalendarTitle")}`}
+        emptyLabel={t("scheduleEmpty")}
+        itemNoun={t("scheduleEntries")}
         collapsedStorageKey="questdo-schedule-calendar-collapsed"
         defaultCollapsed={false}
         freeDays={freeDays}
@@ -416,9 +419,9 @@ export default function SchedulePanel({
             })()}
           </h3>
           <div className="import-export-buttons">
-            <button type="button" className="icon-btn" onClick={handleExport} title="Eksportuj plan">📥</button>
-            <button type="button" className="icon-btn" onClick={() => setShowImport(!showImport)} title="Importuj plan">📤</button>
-            <button type="button" className="danger-btn danger-btn--inline" onClick={handleDeleteAll} title="Usuń nieukończone zajęcia">🗑️ Usuń nieukończone</button>
+            <button type="button" className="icon-btn" onClick={handleExport} title={t("exportSchedule")}>📥</button>
+            <button type="button" className="icon-btn" onClick={() => setShowImport(!showImport)} title={t("importSchedule")}>📤</button>
+            <button type="button" className="danger-btn danger-btn--inline" onClick={handleDeleteAll} title={t("deleteUnfinished")}>🗑️ {t("deleteUnfinished")}</button>
           </div>
         </div>
 
@@ -486,7 +489,7 @@ export default function SchedulePanel({
       {/* Modal importu */}
       {showImport && (
         <div className="add-task">
-          <h3>📤 Importuj plan zajęć</h3>
+          <h3>📤 {t("importSchedule")}</h3>
           <input
             type="file"
             accept=".txt"
@@ -546,8 +549,8 @@ export default function SchedulePanel({
             <DatePicker value={manualEntryDate} onChange={setManualEntryDate} label="Data" />
           )}
           <div className="row">
-            <button type="button" className="add-task-btn" onClick={addEntry}>Dodaj do planu</button>
-            <button type="button" className="cancel-btn" onClick={() => setShowAdd(false)}>Anuluj</button>
+            <button type="button" className="add-task-btn" onClick={addEntry}>{t("addToSchedule")}</button>
+            <button type="button" className="cancel-btn" onClick={() => setShowAdd(false)}>{t("cancel")}</button>
           </div>
         </div>
       )}
