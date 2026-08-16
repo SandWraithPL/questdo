@@ -1,7 +1,7 @@
 // Panel zarobków - śledzenie czasu pracy, stawki, podatki
 import { useMemo, useState, useEffect, useRef } from "react";
 import axios from "axios";
-import SharedCalendar, { WEEKDAYS_LONG } from "./SharedCalendar";
+import SharedCalendar, { getWeekdaysLong } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
 import FreeDayManager from "./FreeDayManager";
@@ -472,7 +472,7 @@ export default function EarningsPanel({
           <div className="task-meta">
             <span className="badge category">{item.hours}h × {formatRate(item.hourly_rate)}</span>
             {item.tax_enabled && <span className="badge timing-late">Podatek {item.tax_percent}%</span>}
-            {item.is_recurring && <span className="badge category">🔁 {WEEKDAYS_LONG[item.day_of_week]}</span>}
+            {item.is_recurring && <span className="badge category">🔁 {getWeekdaysLong()[item.day_of_week]}</span>}
             {item.end_date && <span className="badge timing-late">Do {item.end_date}</span>}
             {item.completed && <span className="badge exp">Potwierdzone</span>}
           </div>
@@ -575,7 +575,7 @@ export default function EarningsPanel({
                   {editIsRecurring ? (
                     <>
                       <select value={editDayOfWeek} onChange={(e) => setEditDayOfWeek(Number(e.target.value))}>
-                        {WEEKDAYS_LONG.map((day, idx) => (
+                        {getWeekdaysLong().map((day, idx) => (
                           <option key={day} value={idx}>{day}</option>
                         ))}
                       </select>
@@ -597,7 +597,7 @@ export default function EarningsPanel({
                       <span className="badge exp">Brutto {formatMoney(entry.gross)}</span>
                       {entry.tax_enabled && <span className="badge timing-late">Podatek {entry.tax_percent}% (−{formatMoney(entry.tax)})</span>}
                       <span className="badge category">Netto {formatMoney(entry.net)}</span>
-                      {entry.is_recurring && <span className="badge category">🔁 {WEEKDAYS_LONG[entry.day_of_week]}</span>}
+                      {entry.is_recurring && <span className="badge category">🔁 {getWeekdaysLong()[entry.day_of_week]}</span>}
                       {entry.end_date && <span className="badge timing-late">Do {entry.end_date}</span>}
                     </div>
                   </div>
@@ -680,7 +680,7 @@ export default function EarningsPanel({
           {isRecurring ? (
             <>
               <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))}>
-                {WEEKDAYS_LONG.map((day, idx) => (
+                {getWeekdaysLong().map((day, idx) => (
                   <option key={day} value={idx}>{day}</option>
                 ))}
               </select>

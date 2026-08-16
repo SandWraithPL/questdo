@@ -1,7 +1,7 @@
 // Panel planu zajęć - zarządzanie harmonogramem, import/export
 import { useMemo, useState, useEffect } from "react";
 import axios from "axios";
-import SharedCalendar, { WEEKDAYS_LONG } from "./SharedCalendar";
+import SharedCalendar, { getWeekdaysLong } from "./SharedCalendar";
 import TimePicker from "./TimePicker";
 import DatePicker from "./DatePicker";
 import FreeDayManager from "./FreeDayManager";
@@ -373,7 +373,7 @@ export default function SchedulePanel({
         renderItemMeta={(item) => (
           <div className="task-meta">
             <span className="badge category">🕐 {item.start_time}–{item.end_time}</span>
-            {item.is_recurring && <span className="badge category">🔁 {WEEKDAYS_LONG[item.day_of_week]}</span>}
+            {item.is_recurring && <span className="badge category">🔁 {getWeekdaysLong()[item.day_of_week]}</span>}
             {item.location && <span className="badge category">📍 {item.location}</span>}
             {item.lecturer && <span className="badge category">👤 {item.lecturer}</span>}
             {item.completed && <span className="badge exp">✅ Ukończone</span>}
@@ -465,7 +465,7 @@ export default function SchedulePanel({
                     <h4 className={entry.completed ? "done" : ""}>{entry.title}</h4>
                     <div className="task-meta">
                       <span className="badge category">🕐 {entry.start_time}–{entry.end_time}</span>
-                      {entry.is_recurring && <span className="badge category">🔁 {WEEKDAYS_LONG[entry.day_of_week]}</span>}
+                      {entry.is_recurring && <span className="badge category">🔁 {getWeekdaysLong()[entry.day_of_week]}</span>}
                       {entry.location && <span className="badge category">📍 {entry.location}</span>}
                       {entry.lecturer && <span className="badge category">👤 {entry.lecturer}</span>}
                       {entry.completed && <span className="badge exp">✅ Ukończone</span>}
@@ -535,7 +535,7 @@ export default function SchedulePanel({
           {isRecurring ? (
             <>
               <select value={dayOfWeek} onChange={(e) => setDayOfWeek(Number(e.target.value))}>
-                {WEEKDAYS_LONG.map((day, idx) => (
+                {getWeekdaysLong().map((day, idx) => (
                   <option key={day} value={idx}>{day}</option>
                 ))}
               </select>
