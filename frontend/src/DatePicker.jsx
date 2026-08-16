@@ -230,9 +230,9 @@ export default function DatePicker({ value, onChange, label = "Termin" }) {
                 type="button"
                 className="dp-today-btn"
                 onClick={() => {
-                  const t = toIso(new Date());
-                  onChange(t);
-                  setCursor(parseValue(t));
+                  const todayIso = toIso(new Date());
+                  onChange(todayIso);
+                  setCursor(parseValue(todayIso));
                   setOpen(false);
                 }}
               >

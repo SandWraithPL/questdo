@@ -928,7 +928,7 @@ function LeaderboardPanel({ currentUser }) {
 
   return (
     <div className="leaderboard-panel">
-      <button type="button" className="leaderboard-toggle" onClick={toggleOpen}>🏅 Rankingi {open ? "▲" : "▼"}</button>
+      <button type="button" className="leaderboard-toggle" onClick={toggleOpen}>🏅 {t("rankings")} {open ? "▲" : "▼"}</button>
       {open && (
         <div className="leaderboard-content">
           <div className="leaderboard-categories">
@@ -1214,7 +1214,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
                   {!isVirtual && !isEvent && <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>}
                   {!isEvent && !isVirtual && <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>}
                   {task.exp_awarded && task.exp_timing && !isVirtual && (() => { const info = getExpTimingLabels()[task.exp_timing]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
-                  {!task.exp_awarded && !isEvent && !isVirtual && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = getExpTimingLabels()[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
+                  {!task.exp_awarded && !isEvent && !isVirtual && (() => { const timing = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = getExpTimingLabels()[timing]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
                   {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && !isVirtual && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
                   {isEvent && task.recurring_pattern && !isVirtual && <span className="badge recurring">{task.recurring_pattern === "yearly" ? "🔄 Co rok" : task.recurring_pattern === "monthly" ? "🔄 Co miesiąc" : "🔄 Co tydzień"}</span>}
                   {checkState.showUncheckBadge && <span className="badge uncheck-badge">↩️ Można odznaczyć (24h)</span>}

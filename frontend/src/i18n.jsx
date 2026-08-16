@@ -266,6 +266,14 @@ const translations = {
     importSchedule: "Importuj plan",
     deleteUnfinished: "Usuń nieukończone",
     addToSchedule: "Dodaj do planu",
+    // Rankingi
+    rankings: "Rankingi",
+    exp: "EXP",
+    streak: "Seria",
+    achievements: "Osiągnięcia",
+    rareDrops: "Znajdźki",
+    exclusive: "Ekskluzywne",
+    completed: "Ukończone",
   },
   en: {
     // Header
@@ -531,6 +539,14 @@ const translations = {
     importSchedule: "Import schedule",
     deleteUnfinished: "Delete unfinished",
     addToSchedule: "Add to schedule",
+    // Rankings
+    rankings: "Rankings",
+    exp: "EXP",
+    streak: "Streak",
+    achievements: "Achievements",
+    rareDrops: "Loot",
+    exclusive: "Exclusive",
+    completed: "Completed",
   },
   es: {
     // Header
@@ -796,6 +812,14 @@ const translations = {
     importSchedule: "Importar horario",
     deleteUnfinished: "Eliminar sin terminar",
     addToSchedule: "Agregar al horario",
+    // Rankings
+    rankings: "Rankings",
+    exp: "EXP",
+    streak: "Racha",
+    achievements: "Logros",
+    rareDrops: "Botín",
+    exclusive: "Exclusivo",
+    completed: "Completado",
   },
 };
 
