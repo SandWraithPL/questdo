@@ -1,6 +1,6 @@
 // Wspólny komponent kalendarza - używany w planie, zarobkach i innych modułach
 import { useState } from "react";
-import { t } from "./i18n";
+import { t } from "./i18n.jsx";
 
 // Nazwy dni tygodnia (skrócone i pełne) - funkcje aby były dynamiczne
 const getWeekdays = () => [t("mon"), t("tue"), t("wed"), t("thu"), t("fri"), t("sat"), t("sun")];

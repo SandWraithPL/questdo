@@ -5,7 +5,7 @@ import axios from "axios";
 // Główny plik stylów aplikacji
 import "./index.css";
 // System i18n
-import { useLanguage } from "./i18n";
+import { useLanguage } from "./i18n.jsx";
 
 // Importy komponentów - każdy odpowiada za jedną sekcję aplikacji
 import DatePicker from "./DatePicker"; // Komponent wyboru daty
