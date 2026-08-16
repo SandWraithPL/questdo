@@ -5,7 +5,7 @@ import axios from "axios";
 // Główny plik stylów aplikacji
 import "./index.css";
 // System i18n
-import { useLanguage } from "./i18n.jsx";
+import { useLanguage, t as globalT } from "./i18n.jsx";
 
 // Importy komponentów - każdy odpowiada za jedną sekcję aplikacji
 import DatePicker from "./DatePicker"; // Komponent wyboru daty
@@ -71,23 +71,23 @@ const EXP_MAP = { easy: 10, medium: 25, hard: 50 };
 // Etykiety dla czasu wykonania zadania (wcześnie/na czas/spóźnione)
 // Używane do wyświetlania informacji o bonusu/kary za termin
 const getExpTimingLabels = () => ({
-  early: { text: t("earlyBonus"), className: "timing-early" },
-  ontime: { text: t("onTime"), className: "timing-ontime" },
-  late: { text: t("latePenalty"), className: "timing-late" },
+  early: { text: globalT("earlyBonus"), className: "timing-early" },
+  ontime: { text: globalT("onTime"), className: "timing-ontime" },
+  late: { text: globalT("latePenalty"), className: "timing-late" },
 });
 
 // Skróty dni tygodnia (do kalendarza) - funkcje dla i18n
-const getWeekdays = () => [t("mon"), t("tue"), t("wed"), t("thu"), t("fri"), t("sat"), t("sun")];
+const getWeekdays = () => [globalT("mon"), globalT("tue"), globalT("wed"), globalT("thu"), globalT("fri"), globalT("sat"), globalT("sun")];
 // Pełne nazwy dni tygodnia - funkcje dla i18n
-const getWeekdaysLong = () => [t("monday"), t("tuesday"), t("wednesday"), t("thursday"), t("friday"), t("saturday"), t("sunday")];
+const getWeekdaysLong = () => [globalT("monday"), globalT("tuesday"), globalT("wednesday"), globalT("thursday"), globalT("friday"), globalT("saturday"), globalT("sunday")];
 
 // Opcje dla przypomnienia o zadaniach - ile dni przed terminem
 const getReminderOptions = () => [
-  { value: "", label: t("reminderNone") },
-  { value: "0", label: t("reminderSameDay") },
-  { value: "1", label: t("reminderOneDay") },
-  { value: "3", label: t("reminderThreeDays") },
-  { value: "7", label: t("reminderOneWeek") },
+  { value: "", label: globalT("reminderNone") },
+  { value: "0", label: globalT("reminderSameDay") },
+  { value: "1", label: globalT("reminderOneDay") },
+  { value: "3", label: globalT("reminderThreeDays") },
+  { value: "7", label: globalT("reminderOneWeek") },
 ];
 
 // Klucze do cache'owania poziomów w localStorage
@@ -201,7 +201,7 @@ function getEventCategoryLabel(cat) {
 // Znajduje etykietę dla opcji przypomnienia na podstawie wartości
 function getReminderLabel(value) {
   const normalized = value === null || value === undefined ? "" : String(value);
-  return getReminderOptions().find((o) => o.value === normalized)?.label || t("reminder");
+  return getReminderOptions().find((o) => o.value === normalized)?.label || globalT("reminder");
 }
 
 // Konwertuje wartość z formularza na numer lub null (dla przypomnień)

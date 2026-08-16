@@ -1,4 +1,4 @@
-import { t } from "./i18n.jsx";
+import { useLanguage } from "./i18n.jsx";
 
 // Lista wszystkich dostępnych zakładek w aplikacji
 const TABS = [
@@ -26,6 +26,8 @@ export function readMainTab() {
 
 // Komponent paska nawigacji (zakładki) - pokazuje dostępne sekcje
 export default function AppTabs({ activeTab, onTabChange }) {
+  const { t } = useLanguage();
+
   return (
     <nav className="app-tabs" aria-label="Sekcje aplikacji">
       {TABS.map((tab) => (

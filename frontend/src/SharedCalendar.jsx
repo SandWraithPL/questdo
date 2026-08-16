@@ -1,10 +1,10 @@
 // Wspólny komponent kalendarza - używany w planie, zarobkach i innych modułach
 import { useState } from "react";
-import { t } from "./i18n.jsx";
+import { useLanguage, t as globalT } from "./i18n.jsx";
 
 // Nazwy dni tygodnia (skrócone i pełne) - funkcje aby były dynamiczne
-const getWeekdays = () => [t("mon"), t("tue"), t("wed"), t("thu"), t("fri"), t("sat"), t("sun")];
-const getWeekdaysLong = () => [t("monday"), t("tuesday"), t("wednesday"), t("thursday"), t("friday"), t("saturday"), t("sunday")];
+const getWeekdays = () => [globalT("mon"), globalT("tue"), globalT("wed"), globalT("thu"), globalT("fri"), globalT("sat"), globalT("sun")];
+const getWeekdaysLong = () => [globalT("monday"), globalT("tuesday"), globalT("wednesday"), globalT("thursday"), globalT("friday"), globalT("saturday"), globalT("sunday")];
 
 // Kategorie eventów z emotkami
 const EVENT_CATEGORIES = [
@@ -96,6 +96,8 @@ export default function SharedCalendar({
   recurringEvents = [],
   freeDayManager,
 }) {
+  const { t } = useLanguage();
+
   // Stan kursora (aktualnie wyświetlany miesiąc/tydzień)
   const [cursor, setCursor] = useState(() => (selectedDate instanceof Date ? selectedDate : new Date()));
   const [view, setView] = useState("month");
