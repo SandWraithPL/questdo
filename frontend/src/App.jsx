@@ -5,7 +5,7 @@ import axios from "axios";
 // Główny plik stylów aplikacji
 import "./index.css";
 // System i18n
-import { initLanguage, t } from "./i18n";
+import { useLanguage } from "./i18n";
 
 // Importy komponentów - każdy odpowiada za jedną sekcję aplikacji
 import DatePicker from "./DatePicker"; // Komponent wyboru daty
@@ -201,7 +201,7 @@ function getEventCategoryLabel(cat) {
 // Znajduje etykietę dla opcji przypomnienia na podstawie wartości
 function getReminderLabel(value) {
   const normalized = value === null || value === undefined ? "" : String(value);
-  return REMINDER_OPTIONS.find((o) => o.value === normalized)?.label || "Przypomnienie";
+  return getReminderOptions().find((o) => o.value === normalized)?.label || t("reminder");
 }
 
 // Konwertuje wartość z formularza na numer lub null (dla przypomnień)
@@ -1179,7 +1179,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
                   <span>Ważne</span>
                 </label>
                 <select value={editForm.reminder_offset_days ?? ""} onChange={(e) => setEditForm({ ...editForm, reminder_offset_days: e.target.value })}>
-                  {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  {getReminderOptions().map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               <div className="edit-row-inline">
@@ -1976,10 +1976,6 @@ export default function App() {
     }
   }, []);
 
-  // Inicjalizacja języka przy starcie
-  useEffect(() => {
-    initLanguage();
-  }, []);
 
   // Ping do backendu co 5 minut (utrzymuje sesję)
   useEffect(() => {
@@ -2374,11 +2370,14 @@ export default function App() {
   // Obsługa zmiany daty
   const handleDateSelect = (dateStr) => setSelectedDate(new Date(`${dateStr}T12:00:00`));
 
+  // Używamy hooka i18n
+  const { t } = useLanguage();
+
   // Jeśli brak tokenu - pokaż ekran logowania
   if (!token) return <Auth onLogin={handleLogin} />;
   
   // Jeśli brak danych użytkownika - pokaż spinner
-  if (!user) return <div className="app"><LoadingSpinner label="Ładowanie aplikacji…" /></div>;
+  if (!user) return <div className="app"><LoadingSpinner label={t("loading")} /></div>;
 
   // Oblicz postęp gracza
   const { progress } = getGamificationFromExp(user.exp, levelsMeta, levelThresholds);

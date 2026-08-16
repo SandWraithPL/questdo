@@ -1,4 +1,6 @@
 // Prosty system i18n bez zewnętrznych zależności
+import { createContext, useContext, useState, useEffect } from 'react';
+
 const translations = {
   pl: {
     // Nagłówek
@@ -109,6 +111,63 @@ const translations = {
     polish: "Polski",
     english: "English",
     spanish: "Español",
+    // Rangi/tytuły
+    rankCadet: "Kadet",
+    rankRecruit: "Rekrut",
+    rankScout: "Zwiadowca",
+    rankSoldier: "Żołnierz",
+    rankAce: "As",
+    rankTactician: "Taktyk",
+    rankRival: "Rywal",
+    rankVeteranOnWay: "Weteran w drodze",
+    rankInTraining: "W treningu",
+    rankRhythmMaster: "Mistrz rytmu",
+    rankApprentice: "Uczeń",
+    rankKnight: "Rycerz",
+    rankInProgress: "W przebiegu",
+    rankGuardian: "Strażnik",
+    rankInShadow: "W cieniu",
+    rankArchitect: "Architekt",
+    rankTheorist: "Teoretyk",
+    rankDecider: "Decydent",
+    rankWithinReach: "W zasięgu",
+    rankLegend: "Legenda",
+    // Profil
+    level: "Poziom",
+    exp: "EXP",
+    nextLevel: "Następny poziom",
+    totalExp: "Całkowite EXP",
+    completedQuests: "Ukończone questy",
+    currentStreak: "Aktualna seria",
+    longestStreak: "Najdłuższa seria",
+    notificationsEnabled: "Powiadomienia włączone",
+    notificationsDisabled: "Powiadomienia wyłączone",
+    enableNotifications: "Włącz powiadomienia",
+    disableNotifications: "Wyłącz powiadomienia",
+    // Osiągnięcia
+    achievements: "Osiągnięcia",
+    noAchievements: "Brak osiągnięć",
+    // Opisy
+    important: "Ważne",
+    recurringWeekly: "Cykliczne (co tydzień)",
+    recurring: "Cykliczne",
+    completed: "Ukończone",
+    confirmed: "Potwierdzone",
+    gross: "Brutto",
+    net: "Netto",
+    tax: "Podatek",
+    hourlyRate: "Stawka godzinowa",
+    unpaidBreak: "Niepłatna przerwa",
+    notes: "Notatka",
+    location: "Sala / budynek",
+    lecturer: "Prowadzący",
+    importSchedule: "Importuj plan",
+    // Komunikaty
+    saveChanges: "Zapisz zmiany",
+    cancelEdit: "Anuluj edycję",
+    editTask: "Edytuj zadanie",
+    copyTask: "Kopiuj zadanie",
+    deleteTask: "Usuń zadanie",
   },
   en: {
     // Header
@@ -219,6 +278,63 @@ const translations = {
     polish: "Polish",
     english: "English",
     spanish: "Spanish",
+    // Ranks/titles
+    rankCadet: "Cadet",
+    rankRecruit: "Recruit",
+    rankScout: "Scout",
+    rankSoldier: "Soldier",
+    rankAce: "Ace",
+    rankTactician: "Tactician",
+    rankRival: "Rival",
+    rankVeteranOnWay: "Veteran on the way",
+    rankInTraining: "In training",
+    rankRhythmMaster: "Rhythm master",
+    rankApprentice: "Apprentice",
+    rankKnight: "Knight",
+    rankInProgress: "In progress",
+    rankGuardian: "Guardian",
+    rankInShadow: "In shadow",
+    rankArchitect: "Architect",
+    rankTheorist: "Theorist",
+    rankDecider: "Decider",
+    rankWithinReach: "Within reach",
+    rankLegend: "Legend",
+    // Profile
+    level: "Level",
+    exp: "EXP",
+    nextLevel: "Next level",
+    totalExp: "Total EXP",
+    completedQuests: "Completed quests",
+    currentStreak: "Current streak",
+    longestStreak: "Longest streak",
+    notificationsEnabled: "Notifications enabled",
+    notificationsDisabled: "Notifications disabled",
+    enableNotifications: "Enable notifications",
+    disableNotifications: "Disable notifications",
+    // Achievements
+    achievements: "Achievements",
+    noAchievements: "No achievements",
+    // Descriptions
+    important: "Important",
+    recurringWeekly: "Recurring (weekly)",
+    recurring: "Recurring",
+    completed: "Completed",
+    confirmed: "Confirmed",
+    gross: "Gross",
+    net: "Net",
+    tax: "Tax",
+    hourlyRate: "Hourly rate",
+    unpaidBreak: "Unpaid break",
+    notes: "Notes",
+    location: "Room / building",
+    lecturer: "Lecturer",
+    importSchedule: "Import schedule",
+    // Messages
+    saveChanges: "Save changes",
+    cancelEdit: "Cancel edit",
+    editTask: "Edit task",
+    copyTask: "Copy task",
+    deleteTask: "Delete task",
   },
   es: {
     // Header
@@ -329,6 +445,63 @@ const translations = {
     polish: "Polaco",
     english: "Inglés",
     spanish: "Español",
+    // Rangos/títulos
+    rankCadet: "Cadete",
+    rankRecruit: "Recluta",
+    rankScout: "Explorador",
+    rankSoldier: "Soldado",
+    rankAce: "As",
+    rankTactician: "Táctico",
+    rankRival: "Rival",
+    rankVeteranOnWay: "Veterano en camino",
+    rankInTraining: "En entrenamiento",
+    rankRhythmMaster: "Maestro del ritmo",
+    rankApprentice: "Aprendiz",
+    rankKnight: "Caballero",
+    rankInProgress: "En progreso",
+    rankGuardian: "Guardián",
+    rankInShadow: "En sombra",
+    rankArchitect: "Arquitecto",
+    rankTheorist: "Teórico",
+    rankDecider: "Decisor",
+    rankWithinReach: "Al alcance",
+    rankLegend: "Leyenda",
+    // Perfil
+    level: "Nivel",
+    exp: "EXP",
+    nextLevel: "Siguiente nivel",
+    totalExp: "EXP total",
+    completedQuests: "Misiones completadas",
+    currentStreak: "Racha actual",
+    longestStreak: "Racha más larga",
+    notificationsEnabled: "Notificaciones activadas",
+    notificationsDisabled: "Notificaciones desactivadas",
+    enableNotifications: "Activar notificaciones",
+    disableNotifications: "Desactivar notificaciones",
+    // Logros
+    achievements: "Logros",
+    noAchievements: "Sin logros",
+    // Descripciones
+    important: "Importante",
+    recurringWeekly: "Recurrente (semanal)",
+    recurring: "Recurrente",
+    completed: "Completado",
+    confirmed: "Confirmado",
+    gross: "Bruto",
+    net: "Neto",
+    tax: "Impuesto",
+    hourlyRate: "Tarifa por hora",
+    unpaidBreak: "Pausa no pagada",
+    notes: "Notas",
+    location: "Aula / edificio",
+    lecturer: "Profesor",
+    importSchedule: "Importar horario",
+    // Mensajes
+    saveChanges: "Guardar cambios",
+    cancelEdit: "Cancelar edición",
+    editTask: "Editar tarea",
+    copyTask: "Copiar tarea",
+    deleteTask: "Eliminar tarea",
   },
 };
 
@@ -364,3 +537,36 @@ export const initLanguage = () => {
 };
 
 export const translationsObj = translations;
+
+// React Context for i18n
+const LanguageContext = createContext();
+
+export const LanguageProvider = ({ children }) => {
+  const [language, setLanguageState] = useState(initLanguage());
+
+  const changeLanguage = (lang) => {
+    if (translations[lang]) {
+      setLanguageState(lang);
+      currentLanguage = lang; // Sync with global state for helper functions
+      localStorage.setItem('questdo-language', lang);
+    }
+  };
+
+  const translate = (key) => {
+    return translations[language][key] || translations['en'][key] || key;
+  };
+
+  return (
+    <LanguageContext.Provider value={{ language, changeLanguage, t: translate }}>
+      {children}
+    </LanguageContext.Provider>
+  );
+};
+
+export const useLanguage = () => {
+  const context = useContext(LanguageContext);
+  if (!context) {
+    throw new Error('useLanguage must be used within a LanguageProvider');
+  }
+  return context;
+};

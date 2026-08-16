@@ -3,6 +3,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
+import { LanguageProvider } from './i18n'
 import './index.css'
 import App from './App.jsx'
 
@@ -26,7 +27,9 @@ createRoot(document.getElementById('root')).render(
   <StrictMode>
     {/* Dostarczamy QueryClient do całej aplikacji */}
     <QueryClientProvider client={queryClient}>
-      <App />
+      <LanguageProvider>
+        <App />
+      </LanguageProvider>
       {/* Devtools do debugowania zapytań */}
       <ReactQueryDevtools initialIsOpen={false} />
     </QueryClientProvider>

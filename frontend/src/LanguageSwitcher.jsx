@@ -1,21 +1,7 @@
-import { useState, useEffect } from "react";
-import { setLanguage, getLanguage, t } from "./i18n";
+import { useLanguage } from "./i18n";
 
 export default function LanguageSwitcher() {
-  const [currentLang, setCurrentLang] = useState(getLanguage());
-
-  useEffect(() => {
-    const handleLanguageChange = () => {
-      setCurrentLang(getLanguage());
-    };
-    window.addEventListener('languagechange', handleLanguageChange);
-    return () => window.removeEventListener('languagechange', handleLanguageChange);
-  }, []);
-
-  const handleLanguageChange = (lang) => {
-    setLanguage(lang);
-    setCurrentLang(lang);
-  };
+  const { language, changeLanguage, t } = useLanguage();
 
   const languages = [
     { code: 'pl', label: 'PL' },
@@ -29,8 +15,8 @@ export default function LanguageSwitcher() {
         <button
           key={lang.code}
           type="button"
-          className={`lang-btn ${currentLang === lang.code ? 'active' : ''}`}
-          onClick={() => handleLanguageChange(lang.code)}
+          className={`lang-btn ${language === lang.code ? 'active' : ''}`}
+          onClick={() => changeLanguage(lang.code)}
           title={t(lang.code === 'pl' ? 'polish' : lang.code === 'en' ? 'english' : 'spanish')}
         >
           {lang.label}
