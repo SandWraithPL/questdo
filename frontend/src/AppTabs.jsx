@@ -1,11 +1,13 @@
+import { t } from "./i18n";
+
 // Lista wszystkich dostępnych zakładek w aplikacji
 const TABS = [
-  { id: "tasks", label: "Questy", icon: "⚔️" },
-  { id: "recurring", label: "Cykliczne", icon: "🔄" },
-  { id: "schedule", label: "Plan", icon: "📚" },
-  { id: "shopping", label: "Zakupy", icon: "🛒" },
-  { id: "earnings", label: "Zarobki", icon: "💰" },
-  { id: "settings", label: "Ustawienia", icon: "⚙️" },
+  { id: "tasks", labelKey: "tabQuests", icon: "⚔️" },
+  { id: "recurring", labelKey: "tabRecurring", icon: "🔄" },
+  { id: "schedule", labelKey: "tabSchedule", icon: "📚" },
+  { id: "shopping", labelKey: "tabShopping", icon: "🛒" },
+  { id: "earnings", labelKey: "tabEarnings", icon: "💰" },
+  { id: "settings", labelKey: "tabSettings", icon: "⚙️" },
 ];
 
 // Klucz do przechowywania aktywnej zakładki w localStorage
@@ -45,7 +47,7 @@ export default function AppTabs({ activeTab, onTabChange }) {
           {/* Ikona zakładki */}
           <span className="app-tab-icon" aria-hidden="true">{tab.icon}</span>
           {/* Etykieta zakładki */}
-          <span className="app-tab-label">{tab.label}</span>
+          <span className="app-tab-label">{t(tab.labelKey)}</span>
         </button>
       ))}
     </nav>

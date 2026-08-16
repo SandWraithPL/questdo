@@ -4,6 +4,8 @@ import { useState, useEffect, useMemo, useRef } from "react";
 import axios from "axios";
 // Główny plik stylów aplikacji
 import "./index.css";
+// System i18n
+import { initLanguage, t } from "./i18n";
 
 // Importy komponentów - każdy odpowiada za jedną sekcję aplikacji
 import DatePicker from "./DatePicker"; // Komponent wyboru daty
@@ -16,6 +18,7 @@ import RecurringPanel from "./RecurringPanel"; // Cykliczne wydarzenia
 import FamilyInvitationsBanner from "./FamilyInvitationsBanner"; // Zaproszenia do rodziny
 import FreeDayManager from "./FreeDayManager"; // Zarządzanie dniami wolnymi
 import SharedCalendar from "./SharedCalendar";
+import LanguageSwitcher from "./LanguageSwitcher";
 
 // Importy helpersów - funkcje pomocnicze
 import { getRecurringCategoriesForDate, toVirtualRecurringTasks } from "./recurringHelpers";
@@ -66,25 +69,25 @@ const NOTIFICATIONS_PREF_KEY = "questdo-notifications-enabled";
 const EXP_MAP = { easy: 10, medium: 25, hard: 50 };
 
 // Etykiety dla czasu wykonania zadania (wcześnie/na czas/spóźnione)
-// Używane do wyświetlania informacji o bonusie/kary za termin
-const EXP_TIMING_LABELS = {
-  early: { text: "Wcześnie +50%", className: "timing-early" },
-  ontime: { text: "Na czas", className: "timing-ontime" },
-  late: { text: "Spóźnione -50%", className: "timing-late" },
-};
+// Używane do wyświetlania informacji o bonusu/kary za termin
+const getExpTimingLabels = () => ({
+  early: { text: t("earlyBonus"), className: "timing-early" },
+  ontime: { text: t("onTime"), className: "timing-ontime" },
+  late: { text: t("latePenalty"), className: "timing-late" },
+});
 
-// Skróty dni tygodnia (do kalendarza)
-const WEEKDAYS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
-// Pełne nazwy dni tygodnia
-const WEEKDAYS_LONG = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"];
+// Skróty dni tygodnia (do kalendarza) - funkcje dla i18n
+const getWeekdays = () => [t("mon"), t("tue"), t("wed"), t("thu"), t("fri"), t("sat"), t("sun")];
+// Pełne nazwy dni tygodnia - funkcje dla i18n
+const getWeekdaysLong = () => [t("monday"), t("tuesday"), t("wednesday"), t("thursday"), t("friday"), t("saturday"), t("sunday")];
 
 // Opcje dla przypomnienia o zadaniach - ile dni przed terminem
-const REMINDER_OPTIONS = [
-  { value: "", label: "Bez przypomnienia" },
-  { value: "0", label: "W dniu zadania" },
-  { value: "1", label: "Dzień wcześniej" },
-  { value: "3", label: "3 dni wcześniej" },
-  { value: "7", label: "Tydzień wcześniej" },
+const getReminderOptions = () => [
+  { value: "", label: t("reminderNone") },
+  { value: "0", label: t("reminderSameDay") },
+  { value: "1", label: t("reminderOneDay") },
+  { value: "3", label: t("reminderThreeDays") },
+  { value: "7", label: t("reminderOneWeek") },
 ];
 
 // Klucze do cache'owania poziomów w localStorage
@@ -1208,8 +1211,8 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
                   {!isEvent && <span className={`badge ${task.difficulty}`}>{task.difficulty === "easy" ? "Łatwe" : task.difficulty === "medium" ? "Średnie" : "Trudne"}</span>}
                   {!isVirtual && !isEvent && <span className="badge category">{getCategoryEmoji(task.category)} {task.category}</span>}
                   {!isEvent && !isVirtual && <span className="badge exp">{task.exp_awarded ? `✓ +${task.exp_awarded_amount || EXP_MAP[task.difficulty]} EXP` : `+${task.exp_preview ?? getExpPreview(task.difficulty, task.due_date).amount} EXP`}</span>}
-                  {task.exp_awarded && task.exp_timing && !isVirtual && (() => { const info = EXP_TIMING_LABELS[task.exp_timing]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
-                  {!task.exp_awarded && !isEvent && !isVirtual && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = EXP_TIMING_LABELS[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
+                  {task.exp_awarded && task.exp_timing && !isVirtual && (() => { const info = getExpTimingLabels()[task.exp_timing]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
+                  {!task.exp_awarded && !isEvent && !isVirtual && (() => { const t = task.exp_timing_preview ?? getExpPreview(task.difficulty, task.due_date).timing; const info = getExpTimingLabels()[t]; return info ? <span className={`badge timing ${info.className}`}>{info.text}</span> : null; })()}
                   {task.reminder_offset_days !== null && task.reminder_offset_days !== undefined && !isVirtual && <span className="badge reminder">{getReminderLabel(task.reminder_offset_days)}</span>}
                   {isEvent && task.recurring_pattern && !isVirtual && <span className="badge recurring">{task.recurring_pattern === "yearly" ? "🔄 Co rok" : task.recurring_pattern === "monthly" ? "🔄 Co miesiąc" : "🔄 Co tydzień"}</span>}
                   {checkState.showUncheckBadge && <span className="badge uncheck-badge">↩️ Można odznaczyć (24h)</span>}
@@ -1973,6 +1976,11 @@ export default function App() {
     }
   }, []);
 
+  // Inicjalizacja języka przy starcie
+  useEffect(() => {
+    initLanguage();
+  }, []);
+
   // Ping do backendu co 5 minut (utrzymuje sesję)
   useEffect(() => {
     if (!token) return;
@@ -2380,21 +2388,24 @@ export default function App() {
       {/* Nagłówek */}
       <div className="header">
         <h1>⚔️ QuestDo</h1>
-        <Profile
-          user={user}
-          onLogout={logout}
-          onDownloadBackup={downloadDatabaseBackup}
-          onDeleteAccount={deleteAccount}
-          achievements={achievements}
-          rareDrops={rareDrops}
-          history={history}
-          onOpenAdmin={() => setShowAdminPanel(true)}
-          notificationsEnabled={notificationsEnabled}
-          notificationsUnsupported={notificationsUnsupported}
-          isStandalonePwa={standalonePwa}
-          pwaHintDismissed={pwaHintDismissed}
-          onToggleNotifications={toggleNotifications}
-        />
+        <div className="header-right">
+          <LanguageSwitcher />
+          <Profile
+            user={user}
+            onLogout={logout}
+            onDownloadBackup={downloadDatabaseBackup}
+            onDeleteAccount={deleteAccount}
+            achievements={achievements}
+            rareDrops={rareDrops}
+            history={history}
+            onOpenAdmin={() => setShowAdminPanel(true)}
+            notificationsEnabled={notificationsEnabled}
+            notificationsUnsupported={notificationsUnsupported}
+            isStandalonePwa={standalonePwa}
+            pwaHintDismissed={pwaHintDismissed}
+            onToggleNotifications={toggleNotifications}
+          />
+        </div>
       </div>
       
       {/* Baner instalacji PWA */}
@@ -2491,12 +2502,12 @@ export default function App() {
                   <span>Ważne</span>
                 </label>
                 <select value={reminderOffset} onChange={(e) => setReminderOffset(e.target.value)}>
-                  {REMINDER_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  {getReminderOptions().map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                 </select>
               </div>
               
               {/* Podgląd EXP */}
-              {taskType === "quest" && (() => { const p = getExpPreview(difficulty, taskDate); const info = EXP_TIMING_LABELS[p.timing]; return <p className="exp-preview-hint">Ukończ dziś: <strong>+{p.amount} EXP</strong> ({info.text})</p>; })()}
+              {taskType === "quest" && (() => { const p = getExpPreview(difficulty, taskDate); const info = getExpTimingLabels()[p.timing]; return <p className="exp-preview-hint">Ukończ dziś: <strong>+{p.amount} EXP</strong> ({info.text})</p>; })()}
               {taskType === "event" && <p className="exp-preview-hint">📅 Wydarzenie kalendarzowe - bez EXP, tylko informacja</p>}
               
               <div className="row">

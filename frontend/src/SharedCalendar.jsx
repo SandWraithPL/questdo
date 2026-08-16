@@ -1,9 +1,10 @@
 // Wspólny komponent kalendarza - używany w planie, zarobkach i innych modułach
 import { useState } from "react";
+import { t } from "./i18n";
 
-// Nazwy dni tygodnia (skrócone i pełne)
-const WEEKDAYS = ["Pn", "Wt", "Śr", "Cz", "Pt", "So", "Nd"];
-const WEEKDAYS_LONG = ["Poniedziałek", "Wtorek", "Środa", "Czwartek", "Piątek", "Sobota", "Niedziela"];
+// Nazwy dni tygodnia (skrócone i pełne) - funkcje aby były dynamiczne
+const getWeekdays = () => [t("mon"), t("tue"), t("wed"), t("thu"), t("fri"), t("sat"), t("sun")];
+const getWeekdaysLong = () => [t("monday"), t("tuesday"), t("wednesday"), t("thursday"), t("friday"), t("saturday"), t("sunday")];
 
 // Kategorie eventów z emotkami
 const EVENT_CATEGORIES = [
@@ -205,6 +206,7 @@ export default function SharedCalendar({
     const mondayIndex = (selectedDateObj.getDay() + 6) % 7;
     startOfWeek.setDate(selectedDateObj.getDate() - mondayIndex);
     const days = [];
+    const weekdaysLong = getWeekdaysLong();
 
     for (let i = 0; i < 7; i++) {
       const d = new Date(startOfWeek);
@@ -220,7 +222,7 @@ export default function SharedCalendar({
       days.push(
         <button key={dateStr} type="button" className={`week-day ${isSelected ? "week-day-selected" : ""} ${freeDayType ? `week-day-free week-day-free-${freeDayType}` : ""}`} onClick={() => selectDay(dateStr)}>
           <div className={`week-day-header ${isToday ? "today" : ""}`}>
-            <span>{WEEKDAYS_LONG[i]}</span>
+            <span>{weekdaysLong[i]}</span>
             <strong>{d.getDate()}</strong>
             {freeDayType === "holiday" && <span className="week-free-icon">🎉</span>}
             {freeDayType === "deans_day" && <span className="week-free-icon">🎓</span>}
@@ -332,7 +334,7 @@ export default function SharedCalendar({
           <span className="calendar-section-chevron" aria-hidden="true">{collapsed ? "▼" : "▲"}</span>
         </button>
         {collapsed && (
-          <button type="button" className="calendar-section-today" onClick={goToday}>Dzisiaj</button>
+          <button type="button" className="calendar-section-today" onClick={goToday}>{t("today")}</button>
         )}
       </div>
       {!collapsed && (
@@ -344,17 +346,17 @@ export default function SharedCalendar({
               <button type="button" onClick={() => shift(1)} aria-label="Następny zakres">▶</button>
             </div>
             <div className="view-buttons">
-              <button type="button" onClick={() => setView("month")} className={view === "month" ? "active" : ""}>Miesiąc</button>
-              <button type="button" onClick={() => setView("week")} className={view === "week" ? "active" : ""}>Tydzień</button>
-              <button type="button" onClick={() => setView("day")} className={view === "day" ? "active" : ""}>Dzień</button>
+              <button type="button" onClick={() => setView("month")} className={view === "month" ? "active" : ""}>{t("monthView")}</button>
+              <button type="button" onClick={() => setView("week")} className={view === "week" ? "active" : ""}>{t("weekView")}</button>
+              <button type="button" onClick={() => setView("day")} className={view === "day" ? "active" : ""}>{t("dayView")}</button>
             </div>
-            {view === "month" && <button type="button" className="calendar-today" onClick={goToday}>Dzisiaj</button>}
+            {view === "month" && <button type="button" className="calendar-today" onClick={goToday}>{t("today")}</button>}
             {freeDayManager}
           </div>
           <div className="calendar-grid">
             {view === "month" && (
               <>
-                <div className="calendar-weekdays">{WEEKDAYS.map((day) => <div key={day} className="weekday">{day}</div>)}</div>
+                <div className="calendar-weekdays">{getWeekdays().map((day) => <div key={day} className="weekday">{day}</div>)}</div>
                 <div className="calendar-days">{renderMonthView()}</div>
               </>
             )}
@@ -367,4 +369,4 @@ export default function SharedCalendar({
   );
 }
 
-export { toDateStr, WEEKDAYS_LONG };
+export { toDateStr, getWeekdaysLong };
