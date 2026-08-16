@@ -965,6 +965,7 @@ function LeaderboardPanel({ currentUser }) {
 
 // Komponent panelu zadań dla wybranego dnia
 function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, onDelete, onSave, onToast, onUncheck, loadingTaskIds, deletingTaskIds, api, headers, onRefresh, freeDays = [] }) {
+  const { t } = useLanguage();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState("all");
   const [typeFilter, setTypeFilter] = useState("all");
