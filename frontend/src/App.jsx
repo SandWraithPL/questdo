@@ -393,13 +393,13 @@ async function processMissedTaskReminders(tasks) {
   if (!readNotificationsPreference()) return;
   if (!("Notification" in window) || Notification.permission !== "granted") return;
   const now = Date.now();
-  for (const task of tasks) {
-    if (task.completed) continue;
-    const fireAt = getReminderFireTime(task);
+  for (const currentTask of tasks) {
+    if (currentTask.completed) continue;
+    const fireAt = getReminderFireTime(currentTask);
     if (!fireAt) continue;
     const fireTime = fireAt.getTime();
     if (!isWithinReminderGracePeriod(fireTime, now)) continue;
-    await fireTaskReminder(task);
+    await fireTaskReminder(currentTask);
   }
 }
 
@@ -408,25 +408,25 @@ function scheduleTaskReminders(tasks) {
   if (!readNotificationsPreference()) return [];
   const timers = [];
   const now = Date.now();
-  tasks.forEach((task) => {
-    if (task.completed) return;
-    const fireAt = getReminderFireTime(task);
+  tasks.forEach((currentTask) => {
+    if (currentTask.completed) return;
+    const fireAt = getReminderFireTime(currentTask);
     if (!fireAt) return;
     const fireTime = fireAt.getTime();
-    const storageKey = getReminderStorageKey(task);
+    const storageKey = getReminderStorageKey(currentTask);
     if (localStorage.getItem(storageKey)) return;
 
     // Jeśli czas przypomnienia w przyszłości - ustawiamy timeout
     if (fireTime > now) {
       const delay = fireTime - now;
       if (delay > 0 && delay <= 2147483647) { // max dla setTimeout
-        timers.push(setTimeout(() => { fireTaskReminder(task); }, delay));
+        timers.push(setTimeout(() => { fireTaskReminder(currentTask); }, delay));
       }
       return;
     }
     // Jeśli w oknie czasowym - wysyłamy od razu
     if (isWithinReminderGracePeriod(fireTime, now)) {
-      fireTaskReminder(task);
+      fireTaskReminder(currentTask);
     }
   });
   return timers;
@@ -857,6 +857,8 @@ function ChallengesBar({ challenges }) {
 
 // Komponent rankingu - pokazuje top graczy w różnych kategoriach
 function LeaderboardPanel({ currentUser }) {
+  const { t } = useLanguage();
+
   const [open, setOpen] = useState(false);
   const [rankType, setRankType] = useState("exp");
   const [allRankings, setAllRankings] = useState({});
@@ -865,12 +867,12 @@ function LeaderboardPanel({ currentUser }) {
 
   // Kategorie rankingów
   const categories = [
-    { id: "exp", label: "🏆 EXP" },
-    { id: "streak", label: "🔥 Seria" },
-    { id: "achievements", label: "🏅 Osiągnięcia" },
-    { id: "rare_drops", label: "✨ Znajdźki" },
-    { id: "exclusive", label: "👑 Ekskluzywne" },
-    { id: "completed", label: "✅ Ukończone" },
+    { id: "exp", label: `🏆 ${t("exp")}` },
+    { id: "streak", label: `🔥 ${t("streak")}` },
+    { id: "achievements", label: `🏅 ${t("achievements")}` },
+    { id: "rare_drops", label: `✨ ${t("rareDrops")}` },
+    { id: "exclusive", label: `👑 ${t("exclusive")}` },
+    { id: "completed", label: `✅ ${t("completed")}` },
   ];
 
   // Normalizuje dane z API do spójnego formatu
@@ -972,7 +974,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
   const saveItem = async (id, form) => {
     if (!form.title?.trim()) { onToast("Tytuł jest wymagany"); return; }
     try {
-      const task = tasks.find(t => t.id === id);
+      const task = tasks.find(item => item.id === id);
       const payload = {
         title: form.title.trim(),
         description: form.description,
@@ -1024,7 +1026,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
 
   // Kopiuje zadanie na inny dzień
   const copyTask = async (taskId, targetDate) => {
-    const original = tasks.find(t => t.id === taskId);
+    const original = tasks.find(item => item.id === taskId);
     if (!original) return;
 
     try {
@@ -1054,7 +1056,7 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
   const dateStr = toDateStr(selectedDate);
   const dateLabel = new Date(dateStr + "T12:00:00").toLocaleDateString("pl-PL", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
-  const baseDayTasks = useMemo(() => tasks.filter((t) => t.due_date === dateStr), [tasks, dateStr]);
+  const baseDayTasks = useMemo(() => tasks.filter((task) => task.due_date === dateStr), [tasks, dateStr]);
   const virtualRecurring = useMemo(
     () => toVirtualRecurringTasks(recurringEvents, dateStr, baseDayTasks),
     [recurringEvents, dateStr, baseDayTasks],
@@ -1064,13 +1066,13 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
   // Filtrowanie zadań według filtrów i wyszukiwania
   const dayTasks = useMemo(() => {
     let list = allTasksForDay;
-    if (filter === "done") list = list.filter((t) => t.completed);
-    if (filter === "active") list = list.filter((t) => !t.completed);
-    if (typeFilter === "quest") list = list.filter((t) => t.task_type !== "event");
-    if (typeFilter === "event") list = list.filter((t) => t.task_type === "event");
+    if (filter === "done") list = list.filter((task) => task.completed);
+    if (filter === "active") list = list.filter((task) => !task.completed);
+    if (typeFilter === "quest") list = list.filter((task) => task.task_type !== "event");
+    if (typeFilter === "event") list = list.filter((task) => task.task_type === "event");
     if (search.trim()) {
       const q = search.toLowerCase();
-      list = list.filter((t) => t.title.toLowerCase().includes(q) || (t.description || "").toLowerCase().includes(q) || (t.category || "").toLowerCase().includes(q));
+      list = list.filter((task) => task.title.toLowerCase().includes(q) || (task.description || "").toLowerCase().includes(q) || (task.category || "").toLowerCase().includes(q));
     }
     list = list.map(task => ({
       ...task,
@@ -1152,13 +1154,13 @@ function DayTasksPanel({ selectedDate, tasks, recurringEvents = [], onToggle, on
                   <option value="quest">⚔️ Quest (do wykonania)</option>
                   <option value="event">📅 Wydarzenie (urodziny, notatka)</option>
                 </select>
-                {editForm.task_type !== "event" && !tasks.find(t => t.id === task.id)?.exp_awarded && (
+                {editForm.task_type !== "event" && !tasks.find(item => item.id === task.id)?.exp_awarded && (
                   <select value={editForm.difficulty || "easy"} onChange={(e) => setEditForm({ ...editForm, difficulty: e.target.value })}>
                     <option value="easy">⚔️ Łatwe (+10 EXP)</option><option value="medium">🗡️ Średnie (+25 EXP)</option><option value="hard">💀 Trudne (+50 EXP)</option>
                   </select>
                 )}
               </div>
-              {editForm.task_type !== "event" && !tasks.find(t => t.id === task.id)?.exp_awarded && (
+              {editForm.task_type !== "event" && !tasks.find(item => item.id === task.id)?.exp_awarded && (
                 <div className="edit-row-inline">
                   <select value={editForm.category || "Inne"} onChange={(e) => setEditForm({ ...editForm, category: e.target.value })}>
                     {CATEGORIES.map(c => <option key={c.value} value={c.value}>{c.emoji} {c.value}</option>)}
@@ -1734,13 +1736,13 @@ export default function App() {
     setToasts((prev) => {
       // Prevent duplicate messages within 500ms
       const recent = prev.slice(-3);
-      if (recent.some(t => t.message === msg)) {
+      if (recent.some(toast => toast.message === msg)) {
         return prev;
       }
       const id = Date.now();
       const newToasts = [...prev, { id, message: msg }];
       setTimeout(() => {
-        setToasts((current) => current.filter((t) => t.id !== id));
+        setToasts((current) => current.filter((toast) => toast.id !== id));
       }, 3000);
       return newToasts;
     });
@@ -2078,7 +2080,7 @@ export default function App() {
         // Aktualizacja listy zadań
         setTasks(prev => {
           const sorted = [...prev];
-          const idx = sorted.findIndex(t => t.id === data.task.id);
+          const idx = sorted.findIndex(item => item.id === data.task.id);
           if (idx !== -1) {
             sorted[idx] = data.task;
           }
@@ -2136,11 +2138,11 @@ export default function App() {
 
   // Zapisuje zmiany w zadaniu (edycja)
   const saveTask = async (id, updates) => {
-    const task = tasks.find(t => t.id === id);
+    const task = tasks.find(item => item.id === id);
     if (!task) return;
 
     const originalTask = { ...task };
-    setTasks(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
+    setTasks(prev => prev.map(item => item.id === id ? { ...item, ...updates } : item));
 
     enqueueRequest(async () => {
       try {
@@ -2160,7 +2162,7 @@ export default function App() {
         }
 
         if (data.task) {
-          setTasks(prev => prev.map(t => t.id === id ? data.task : t));
+          setTasks(prev => prev.map(item => item.id === id ? data.task : item));
         }
 
         if (data.achievements) setAchievements(data.achievements);
@@ -2169,7 +2171,7 @@ export default function App() {
         showToast("✅ Zadanie zapisane");
       } catch (err) {
         // Przywracamy oryginalne zadanie w razie błędu
-        setTasks(prev => prev.map(t => t.id === id ? originalTask : t));
+        setTasks(prev => prev.map(item => item.id === id ? originalTask : item));
         showToast(err.response?.data?.detail || "Błąd zapisu – spróbuj ponownie");
       }
     });
@@ -2202,7 +2204,7 @@ export default function App() {
 
         setTasks(prev => {
           const sorted = [...prev];
-          const idx = sorted.findIndex(t => t.id === data.task.id);
+          const idx = sorted.findIndex(item => item.id === data.task.id);
           if (idx !== -1) {
             sorted[idx] = data.task;
           }
@@ -2299,21 +2301,16 @@ export default function App() {
           ...prev,
           exp: data.exp,
           level: data.level,
-          title: data.title,
-          next_level_exp: data.next_level_exp,
-          next_level_title: data.next_level_title,
         }));
 
-        setTasks(prev => prev.filter(t => t.id !== task.id));
+        setTasks(prev => prev.filter(item => item.id !== task.id));
 
         if (data.achievements) setAchievements(data.achievements);
         if (data.history) setHistory(data.history);
-
-        showToast("🗑️ Zadanie usunięte");
       } catch (err) {
         if (err.response?.status === 404) {
           showToast("Zadanie już nie istnieje");
-          setTasks(prev => prev.filter(t => t.id !== task.id));
+          setTasks(prev => prev.filter(item => item.id !== task.id));
         } else {
           showToast(err.response?.data?.detail || "Błąd usuwania – spróbuj ponownie");
         }
